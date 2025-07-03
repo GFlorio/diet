@@ -1,0 +1,84 @@
+[tools]
+# Core runtimes / CLIs
+go = "1.24"
+node = "22"
+"ubi:sqlc-dev/sqlc" = "latest"
+"aqua:pressly/goose" = "latest"
+air = "latest"
+
+# Environment variables (kept minimal here; add more as needed)
+[env]
+GOFLAGS = "-trimpath"
+NODE_ENV = "development"
+_.path = ["{{config_root}}/frontend/node_modules/.bin"]
+
+# Tasks – run with `mise run <task>`
+[tasks]
+
+# ----- Bootstrap -----------------------------------------------------------
+[tasks.bootstrap]
+# Installs Node deps with npm and Go deps / code‑gen
+run = [
+  "npm ci",
+  "mise run sqlc"
+]
+
+# ----- Generate sqlc code --------------------------------------------------
+[tasks.sqlc]
+description = "Generate type-safe Go code from SQL"
+run         = "sqlc generate"
+
+# ----- Database migrations -------------------------------------------------
+[tasks.db-up]
+description = "Apply all migrations (SQLite)"
+run         = '''
+migrate -database "sqlite3://./db/app.db" \
+        -path "./db/migrations" up
+'''
+
+[tasks.db-down]
+description = "Rollback last migration"
+run         = '''
+migrate -database "sqlite3://./db/app.db" \
+        -path "./db/migrations" down 1
+'''
+
+# ----- Front‑end dev server -----------------------------------------------
+[tasks.frontend-dev]
+description = "Start Vite dev server"
+run         = "npm --workspace frontend run dev"
+
+# ----- Go API live‑reload ---------------------------------------------------
+[tasks.backend-dev]
+description = "Start Go API with hot reload"
+run         = "air -c .air.toml"
+
+# ----- Full-stack dev ------------------------------------------------------
+[tasks.dev]
+description = "Run front-end + back-end concurrently"
+run = [
+  "mise run frontend-dev &",
+  "mise run backend-dev"
+]
+
+# ----- Build (production artifacts) ---------------------------------------
+[tasks.build]
+description = "Build front-end & compile static Go binary"
+run = [
+  "npm --workspace frontend run build",
+  "go build -o bin/server ./cmd/server"
+]
+
+# ----- Lint & Type‑check ---------------------------------------------------
+[tasks.lint]
+description = "Run ESLint on all source files"
+run         = "eslint --max-warnings=0 \"frontend/**/*.{js,ts,vue}\""
+
+[tasks.typecheck]
+description = "Run TypeScript compiler (no emit)"
+run         = "tsc -p frontend/tsconfig.json --noEmit"
+
+# ----- Clean ----------------------------------------------------------------
+[tasks.clean]
+description = "Remove build artifacts"
+run         = "rm -rf dist bin"
