@@ -7,28 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint --max-warnings=0 \"src/**/*.{js,ts}\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "postinstall": "workbox copyLibraries dist"
+    "lint": "eslint --max-warnings=0 \"src/**/*.{js,ts}\""
   },
   "dependencies": {
-    "bootstrap": "^5.3.6",
-    "dexie": "^4.0.11",
-    "workbox-background-sync": "^7.3.0",
-    "workbox-cli": "^7.3.0",
-    "workbox-core": "^7.3.0",
-    "workbox-routing": "^7.3.0",
-    "workbox-strategies": "^7.3.0",
-    "workbox-window": "^7.3.0"
+    "zod": "^3.25.73"
   },
   "devDependencies": {
     "@eslint/js": "^9.5.0",
+    "@fullhuman/postcss-purgecss": "^7.0.2",
+    "@tsconfig/strictest": "^2.0.5",
     "eslint": "^9.29.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-unused-imports": "^4.1.4",
-    "sass": "^1.74.0",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.35.1",
     "vite": "^7.0.0"
   }
 }

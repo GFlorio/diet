@@ -1,0 +1,7 @@
+{
+  "name": "diet-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ]
+}

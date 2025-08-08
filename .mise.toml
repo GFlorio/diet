@@ -20,33 +20,12 @@ _.path = ["{{config_root}}/frontend/node_modules/.bin"]
 # Installs Node deps with npm and Go deps / code‑gen
 run = [
   "npm ci",
-  "mise run sqlc"
 ]
-
-# ----- Generate sqlc code --------------------------------------------------
-[tasks.sqlc]
-description = "Generate type-safe Go code from SQL"
-run         = "sqlc generate"
-
-# ----- Database migrations -------------------------------------------------
-[tasks.db-up]
-description = "Apply all migrations (SQLite)"
-run         = '''
-migrate -database "sqlite3://./db/app.db" \
-        -path "./db/migrations" up
-'''
-
-[tasks.db-down]
-description = "Rollback last migration"
-run         = '''
-migrate -database "sqlite3://./db/app.db" \
-        -path "./db/migrations" down 1
-'''
 
 # ----- Front‑end dev server -----------------------------------------------
 [tasks.frontend-dev]
 description = "Start Vite dev server"
-run         = "npm --workspace frontend run dev"
+run         = "cd frontend && npm run dev -- --host"
 
 # ----- Go API live‑reload ---------------------------------------------------
 [tasks.backend-dev]

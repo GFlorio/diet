@@ -4,7 +4,9 @@
         "pwa-node": "/home/gabriel/.local/share/mise/shims/node"
     },
     "go.alternateTools": {
-        "go": "/home/gabriel/.local/share/mise/shims/go"
+        "go": "/home/gabriel/.local/share/mise/shims/go",
+        "dlv": "/home/gabriel/.local/share/mise/shims/dlv",
+        "gopls": "/home/gabriel/.local/share/mise/shims/gopls"
     },
     "eslint.workingDirectories": [
         {
