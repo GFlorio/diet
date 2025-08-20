@@ -3,5 +3,8 @@
   "private": true,
   "workspaces": [
     "frontend"
-  ]
+  ],
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
 }
