@@ -96,7 +96,7 @@ def make_base_icon(size: int = 1024) -> Image.Image:
 
 
 def save_png(im: Image.Image, path: Path, size: int, opaque: bool = False) -> None:
-    img = im if im.size == (size, size) else im.resize((size, size), Image.LANCZOS)
+    img = im if im.size == (size, size) else im.resize((size, size), Image.Resampling.LANCZOS)
     if opaque:
         # Flatten onto solid background for Apple touch icon (no transparency preferred)
         bg = Image.new("RGB", img.size, BRAND_PRIMARY)

@@ -2,9 +2,8 @@
 # Core runtimes / CLIs
 go = "1.24"
 node = "22"
-"ubi:sqlc-dev/sqlc" = "latest"
-"aqua:pressly/goose" = "latest"
 air = "latest"
+uv = "latest"
 
 # Environment variables (kept minimal here; add more as needed)
 [env]
