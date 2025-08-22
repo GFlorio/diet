@@ -12,13 +12,14 @@
     "checkJs": true,
     "allowJs": true,
     "declaration": true,
-    "target": "ES2016",
+    "lib": ["DOM", "ESNext"],
+    "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "node",
     "outDir": "dist"
   },
   "include": [
-    "./frontend/src/*.js"
+    "./frontend/src/**/*.js"
   ],
   "verbose": true
 }
