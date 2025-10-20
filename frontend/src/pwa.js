@@ -1,4 +1,4 @@
-import { $ } from './utils.js';
+import * as $ from './utils.js';
 
 /**
  * @typedef {Event & {
@@ -10,7 +10,7 @@ import { $ } from './utils.js';
 export function setupPWA(){
     /** @type {BeforeInstallPromptEvent|null} */
     let deferredPrompt;
-    const installBtn = $('#installBtn');
+    const installBtn = $.sel('#installBtn');
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = /** @type {BeforeInstallPromptEvent} */ (e);

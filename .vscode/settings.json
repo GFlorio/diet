@@ -1,8 +1,5 @@
 {
     "go.goroot": "/home/gabriel/.local/share/mise/installs/go/1.24.4",
-    "debug.javascript.defaultRuntimeExecutable": {
-        "pwa-node": "/home/gabriel/.local/share/mise/shims/node"
-    },
     "go.alternateTools": {
         "go": "/home/gabriel/.local/share/mise/shims/go",
         "dlv": "/home/gabriel/.local/share/mise/shims/dlv",

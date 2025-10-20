@@ -1,4 +1,5 @@
 import { Foods, Meals } from '../data.js';
+import * as v from '../validation.js';
 import * as $ from '../utils.js';
 
 /**
@@ -21,6 +22,7 @@ export function setupFoods(){
   const foodsList = $.html($.id('foodsList'));
   const foodSearch = $.input($.id('foodSearch'));
   const foodStatus = $.select($.id('foodStatus'));
+  const foodFormMsg = $.html($.id('foodFormMsg'));
 
   resetFoodBtn.addEventListener('click', ()=> setFoodForm());
 
@@ -29,6 +31,8 @@ export function setupFoods(){
     if (!f){
       foodFormTitle.textContent = 'Add food'; foodUpdated.textContent='';
       foodId.value=''; foodName.value=''; foodRefLabel.value=''; foodKcal.value=''; foodProt.value=''; foodCarb.value=''; foodFat.value='';
+  foodFormMsg.textContent = '';
+  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
     } else {
       foodFormTitle.textContent = 'Edit food'; foodUpdated.textContent = `updated ${new Date(f.updatedAt).toLocaleString()}`;
       foodId.value = String(f.id);
@@ -38,6 +42,8 @@ export function setupFoods(){
       foodProt.value=String(f.prot);
       foodCarb.value=String(f.carbs);
       foodFat.value=String(f.fats);
+  foodFormMsg.textContent = '';
+  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
     }
   }
 
@@ -63,7 +69,7 @@ export function setupFoods(){
     const row = $.html($.assertEl(target.closest('.item')));
     if (!row) return;
 
-    const id = Number(row.dataset.id);
+    const id = v.id(row.dataset.id);
     const f = await Foods.byId(id);
     if (target.classList.contains('edit')){ setFoodForm(f); window.scrollTo({top:0, behavior:'smooth'}); return; }
     if (target.classList.contains('archive')){ await Foods.setArchived(id, true); renderFoods(); return; }
@@ -76,12 +82,70 @@ export function setupFoods(){
 
   foodForm.addEventListener('submit', async (/** @type {SubmitEvent} */ e) => {
     e.preventDefault();
-  const payload = { name:foodName.value, refLabel:foodRefLabel.value, kcal:+foodKcal.value, prot:+foodProt.value, carbs:+foodCarb.value, fats:+foodFat.value };
-  if (foodId.value){ await Foods.update(+foodId.value, payload); } else { await Foods.create(payload); }
-    setFoodForm(); renderFoods();
-    const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
-    if (quickListEl) quickListEl.dispatchEvent(new Event('refresh'));
+    // Validate on submit; avoid annoying while typing
+    try {
+      const payload = v.createFoodInput({
+        name: foodName.value,
+        refLabel: foodRefLabel.value,
+        kcal: foodKcal.value,
+        prot: foodProt.value,
+        carbs: foodCarb.value,
+        fats: foodFat.value,
+      });
+      if (foodId.value){ await Foods.update(v.id(foodId.value), payload); } else { await Foods.create(payload); }
+      setFoodForm(); renderFoods();
+      const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
+      if (quickListEl) quickListEl.dispatchEvent(new Event('refresh'));
+    } catch (err) {
+      const e = /** @type {Error & {fields?: string[]}} */ (err);
+      const msg = e?.message || 'Invalid input';
+      foodFormMsg.textContent = msg;
+      [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
+      const map = new Map([
+        ['name', foodName],
+        ['refLabel', foodRefLabel],
+        ['kcal', foodKcal],
+        ['prot', foodProt],
+        ['carbs', foodCarb],
+        ['fats', foodFat],
+        ['string', foodName],
+        ['number', foodKcal],
+      ]);
+      if (Array.isArray(e.fields)){
+        e.fields.forEach(f => { const el = map.get(f); if (el) el.classList.add('error'); });
+      }
+    }
   });
+
+  // Gentle live validation (non-blocking): only mark fields after short pause
+  const liveCheck = $.debounce(()=>{
+    foodFormMsg.textContent = '';
+    [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
+    try {
+      v.createFoodInput({
+        name: foodName.value,
+        refLabel: foodRefLabel.value,
+        kcal: foodKcal.value,
+        prot: foodProt.value,
+        carbs: foodCarb.value,
+        fats: foodFat.value,
+      });
+    } catch (err) {
+      const e = /** @type {Error & {fields?: string[]}} */ (err);
+      const map = new Map([
+        ['name', foodName],
+        ['refLabel', foodRefLabel],
+        ['kcal', foodKcal],
+        ['prot', foodProt],
+        ['carbs', foodCarb],
+        ['fats', foodFat],
+      ]);
+      if (Array.isArray(e.fields)){
+        e.fields.forEach(f => { const el = map.get(f); if (el) el.classList.add('error'); });
+      }
+    }
+  }, 400);
+  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.addEventListener('input', liveCheck));
 
   // Listen to cross-module navigation prefill
   window.addEventListener('go-foods', (/** @type {Event} */ e) => {

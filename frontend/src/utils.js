@@ -161,3 +161,20 @@ export const esc = (s = '') => ('' + s).replace(/[&<>"']/g, c => ({
 	'"': '&quot;',
 	"'": '&#39;'
 }[c] || ''));
+
+/**
+ * Debounce a function; returns a wrapper that delays invocation until after ms have elapsed
+ * since the last call.
+ * @template {any[]} A
+ * @param {(...args: A) => void} fn
+ * @param {number} [ms=300]
+ * @returns {(...args: A) => void}
+ */
+export function debounce(fn, ms = 300){
+    /** @type {number|undefined} */
+    let t;
+    return (...args) => {
+        if (t) window.clearTimeout(t);
+        t = window.setTimeout(() => fn(...args), ms);
+    };
+}

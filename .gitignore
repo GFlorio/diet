@@ -41,5 +41,7 @@ yarn-debug.log*
 pnpm-debug.log*
 .env.local
 .env.*.local
+playwright-report/
+test-results/
 .turbo/
 .parcel-cache/

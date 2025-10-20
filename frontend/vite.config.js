@@ -6,5 +6,13 @@ export default defineConfig({
     rollupOptions: {
       input: 'index.html'
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.{js,ts}'],
+    coverage: {
+      reporter: ['text', 'html'],
+    }
   }
 });

@@ -9,3 +9,4 @@ applyTo: '**/*.js'
 - Leverage modern JavaScript features like optional chaining and nullish coalescing.
 - Avoid using type coercion, the `any` type, or implicit type conversions.
 - Import * from `src/frontend/utils.js` as $.
+- Import * from 'src/frontend/validation.js` as v.

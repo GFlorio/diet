@@ -7,18 +7,23 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint --max-warnings=0 \"src/**/*.{js,ts}\""
-  },
-  "dependencies": {
-    "zod": "^3.25.73"
+    "lint": "eslint --max-warnings=0 \"src/**/*.{js,ts}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "postinstall": "playwright install --with-deps chromium firefox"
   },
   "devDependencies": {
     "@eslint/js": "^9.5.0",
-    "@fullhuman/postcss-purgecss": "^7.0.2",
+    "@playwright/test": "^1.55.0",
     "@tsconfig/strictest": "^2.0.5",
     "eslint": "^9.29.0",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-unused-imports": "^4.1.4",
-    "vite": "^7.0.0"
+    "jsdom": "^26.1.0",
+    "vite": "^7.0.0",
+    "vitest": "^2.1.1"
   }
 }

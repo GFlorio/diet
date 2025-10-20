@@ -1,8 +1,6 @@
 [tools]
 # Core runtimes / CLIs
-go = "1.24"
 node = "22"
-air = "latest"
 uv = "latest"
 
 # Environment variables (kept minimal here; add more as needed)
@@ -19,33 +17,19 @@ _.path = ["{{config_root}}/frontend/node_modules/.bin"]
 # Installs Node deps with npm and Go deps / code‑gen
 run = [
   "npm ci",
+  # Ensure Playwright browsers and system dependencies are installed for E2E
+  "mise run e2e-install"
 ]
-
-# ----- Front‑end dev server -----------------------------------------------
-[tasks.frontend-dev]
-description = "Start Vite dev server"
-run         = "cd frontend && npm run dev -- --host"
-
-# ----- Go API live‑reload ---------------------------------------------------
-[tasks.backend-dev]
-description = "Start Go API with hot reload"
-run         = "air -c .air.toml"
 
 # ----- Full-stack dev ------------------------------------------------------
 [tasks.dev]
 description = "Run front-end + back-end concurrently"
-run = [
-  "mise run frontend-dev &",
-  "mise run backend-dev"
-]
+run         = "cd frontend && npm run dev -- --host"
 
 # ----- Build (production artifacts) ---------------------------------------
 [tasks.build]
-description = "Build front-end & compile static Go binary"
-run = [
-  "npm --workspace frontend run build",
-  "go build -o bin/server ./cmd/server"
-]
+description = "Build front-end"
+run = "npm --workspace frontend run build"
 
 # ----- Lint & Type‑check ---------------------------------------------------
 [tasks.lint]
@@ -60,3 +44,37 @@ run         = "tsc -p frontend/tsconfig.json --noEmit"
 [tasks.clean]
 description = "Remove build artifacts"
 run         = "rm -rf dist bin"
+
+# ----- E2E / Playwright ----------------------------------------------------
+[tasks.e2e-install]
+description = "Install Playwright browsers and system deps (may prompt for sudo on Linux)"
+run         = "cd frontend && npx playwright install --with-deps"
+
+[tasks.e2e]
+description = "Run Playwright E2E tests"
+run         = "npm --workspace frontend run e2e"
+
+[tasks.e2e-ui]
+description = "Run Playwright E2E tests in UI mode"
+run         = "npm --workspace frontend run e2e:ui"
+
+[tasks.e2e-report]
+description = "Open the latest Playwright HTML report"
+run         = "PLAYWRIGHT_HTML_REPORT=1 npm --workspace frontend run e2e"
+
+# ----- Unit tests (Vitest) -------------------------------------------------
+[tasks.test-unit]
+description = "Run unit tests (Vitest)"
+run         = "npm --workspace frontend run test"
+
+[tasks.test-unit-watch]
+description = "Run unit tests in watch mode"
+run         = "npm --workspace frontend run test:watch"
+
+# ----- Unified test entry --------------------------------------------------
+[tasks.test]
+description = "Run unit tests then E2E tests"
+run = [
+  "mise run test-unit",
+  "mise run e2e"
+]

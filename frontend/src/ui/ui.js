@@ -1,12 +1,11 @@
-import { $, $$ } from '../utils.js';
-import { button, html } from './utils.js';
+import * as $ from '../utils.js'
 import { setupMeals } from './meal.js';
 import { setupFoods } from './foods.js';
 import { setupReport } from './report.js';
 
 /** Setup theme button and apply stored theme */
 export function setupTheme(){
-	const themeBtn = button(document.getElementById('themeBtn'));
+	const themeBtn = $.button(document.getElementById('themeBtn'));
 	/** @returns {'auto'|'light'|'dark'} */
 	const getStoredTheme = () => {
 		const v = localStorage.getItem('theme');
@@ -27,11 +26,11 @@ export function setupTheme(){
 }
 
 export function setupNav(){
-	$$('.tab').forEach(tab => html(tab).addEventListener('click', () => {
-		const page = /** @type {'meals'|'foods'|'report'} */ (html(tab).dataset.page);
+	$.arr('.tab').forEach(tab => $.html(tab).addEventListener('click', () => {
+		const page = /** @type {'meals'|'foods'|'report'} */ ($.html(tab).dataset.page);
 		const pages = ['meals','foods','report'];
-		$$('.tab').forEach(t => html(t).classList.toggle('active', html(t).dataset.page === page));
-		pages.forEach(p => html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
+		$.arr('.tab').forEach(t => $.html(t).classList.toggle('active', $.html(t).dataset.page === page));
+		pages.forEach(p => $.html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
 	}));
 }
 

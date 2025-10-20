@@ -1,4 +1,5 @@
 import * as $ from '../utils.js';
+import * as V from '../validation.js';
 import { Foods, Meals } from '../data.js';
 
 /**
@@ -40,7 +41,7 @@ export function setupMeals(){
     if (createLink) { $.html(createLink).addEventListener('click', (e) => { e.preventDefault(); goFoodsWithPrefill(q); }); }
   }
 
-  quickSearch.addEventListener('input', renderQuickList);
+  quickSearch.addEventListener('input', $.debounce(renderQuickList, 200));
   quickSearch.addEventListener('keydown', (/** @type {KeyboardEvent} */ e)=>{
     if (e.key==='Enter'){
       const first = quickList.querySelector('.item');
@@ -53,18 +54,24 @@ export function setupMeals(){
   quickList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = /** @type {HTMLElement} */ (e.target);
   const item = target.closest('.item'); if (!item) return;
-  const itemEl = /** @type {HTMLElement} */ (item);
-  const id = Number(itemEl.dataset.id);
-    const food = await Foods.byId(id); if (!food) return;
-    const qtyEl = $.input(item.querySelector('.qty'));
+    const itemEl = /** @type {HTMLElement} */ (item);
+    const id = V.id(itemEl.dataset.id);
+    const food = await Foods.byId(id); if (!food) {
+      itemEl.classList.add('shake');
+      setTimeout(()=> itemEl.classList.remove('shake'), 500);
+      return;
+    }
+  const qtyEl = $.input(item.querySelector('.qty'));
     if (target.classList.contains('add') || target.classList.contains('add1')) {
-      const qty = Number(qtyEl.value ?? 1);
-      await Meals.create({ food, multiplier: qty, date: mealDate.value });
+      let qty;
+      try { qty = V.number(qtyEl.value ?? 1, { min: 0, max: 100 }); }
+      catch { qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700); return; }
+      await Meals.create(V.mealCreate({ food, multiplier: qty, date: mealDate.value }));
       qtyEl.value = '1';
       renderMeals();
       return;
     }
-    if (target.classList.contains('add05')) { qtyEl.value = String(Number(qtyEl.value ?? 1) + 0.5); return; }
+    if (target.classList.contains('add05')) { qtyEl.value = String(V.number((Number(qtyEl.value ?? 1) + 0.5))); return; }
     if (target.classList.contains('editFood')) { goFoodsWithPrefill(food.name); return; }
   });
 
@@ -97,16 +104,16 @@ export function setupMeals(){
   document.getElementById('mealsList')?.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = /** @type {HTMLElement} */ (e.target);
   const row = target.closest('.item'); if (!row) return;
-  const rowEl = /** @type {HTMLElement} */ (row);
-  const id = Number(rowEl.dataset.id);
+    const rowEl = /** @type {HTMLElement} */ (row);
+    const id = V.id(rowEl.dataset.id);
     const meal = (await Meals.listByDate(mealDate.value)).find(m => m.id === id);
     if (!meal) return;
     if (target.classList.contains('del')) { await Meals.remove(meal.id); renderMeals(); return; }
-    if (target.classList.contains('qtyPlus')) { await Meals.update(meal.id, { multiplier: +(meal.multiplier + 0.5).toFixed(2) }); renderMeals(); return; }
+    if (target.classList.contains('qtyPlus')) { await Meals.update(meal.id, { multiplier: V.number(meal.multiplier + 0.5) }); renderMeals(); return; }
     if (target.classList.contains('qtyMinus')) {
       const v = Math.max(0, meal.multiplier - 0.5);
       if (v === 0) { await Meals.remove(meal.id); }
-      else { await Meals.update(meal.id, { multiplier: +v.toFixed(2) }); }
+      else { await Meals.update(meal.id, { multiplier: V.number(v) }); }
       renderMeals();
       return;
     }
