@@ -14,7 +14,8 @@ applyTo: "**"
 - After generating code, always review it for correctness and completeness.
   - Ignore any warnings unrelated to the generated code.
 - Reduce nesting in generated code.
-- Use javascript for the front-end and Go for the back-end.
+- Prefer using mise tasks for common operations (build, dev, test, lint, etc.) instead of raw npm scripts or direct commands.
+  - If a mise task does not exist for the desired operation, suggest adding one.
 
 
 ## Assistant Interactions

@@ -23,8 +23,12 @@ run = [
 
 # ----- Full-stack dev ------------------------------------------------------
 [tasks.dev]
-description = "Run front-end + back-end concurrently"
+description = "Run front-end"
 run         = "cd frontend && npm run dev -- --host"
+
+[tasks.preview]
+description = "Run front-end production build in preview mode"
+run         = "cd frontend && npm run preview -- --host"
 
 # ----- Build (production artifacts) ---------------------------------------
 [tasks.build]

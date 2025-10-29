@@ -1,58 +1,36 @@
-const CACHE = 'nutri-pwa-v1';
-const ASSETS = [
-  './',
-  './index.html',
-  './sw.js',
-  './manifest.webmanifest'
-];
+import { clientsClaim } from 'workbox-core';
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
+import { BackgroundSyncPlugin } from 'workbox-background-sync';
 
-self.addEventListener('install', (e) => {
-  e.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
-    self.skipWaiting();
-  })());
+precacheAndRoute(self.__WB_MANIFEST);
+
+clientsClaim();
+
+cleanupOutdatedCaches();
+
+// StaleWhileRevalidate for app, NetworkOnly for sync data.
+registerRoute(
+  ({ request, url }) => request.method === 'GET' && url.origin === self.location.origin && !url.pathname.startsWith('/db/'),
+  new StaleWhileRevalidate({ cacheName: 'nutri-app' })
+);
+registerRoute(
+  ({ request, url }) => request.method === 'GET' && url.origin === self.location.origin && url.pathname.startsWith('/db/'),
+  new NetworkOnly()
+);
+const dbMutationQueue = new BackgroundSyncPlugin('db-mutations-queue', {
+  maxRetentionTime: 24 * 60 // Retry for up to 24h.
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
-    await self.clients.claim();
-  })());
-});
+registerRoute(
+  ({ request, url }) => url.origin === self.location.origin && url.pathname.startsWith('/db/') && ['POST','PUT','PATCH','DELETE'].includes(request.method),
+  new NetworkOnly({ plugins: [dbMutationQueue] })
+);
 
-self.addEventListener('fetch', (e) => {
-  const { request } = e;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
 
-  // For navigations (HTML), try network first then cache.
-  if (request.mode === 'navigate'){
-    e.respondWith((async () => {
-      try{
-        const fresh = await fetch(request);
-        const cache = await caches.open(CACHE); cache.put('./index.html', fresh.clone());
-        return fresh;
-      } catch{
-        const cache = await caches.open(CACHE);
-        const cached = await cache.match('./index.html');
-        return cached || new Response('<h1>Offline</h1>', { headers:{'Content-Type':'text/html'} });
-      }
-    })());
-    return;
-  }
-
-  // For static assets: cache-first, then network and update cache.
-  e.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    try{
-      const fresh = await fetch(request);
-      cache.put(request, fresh.clone());
-      return fresh;
-    } catch {
-      return new Response('', { status: 504 });
-    }
-  })());
+// Skip waiting to activate new service worker immediately
+// Minimal message handler to allow manual skipping (used by UI banner when user confirms update).
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });

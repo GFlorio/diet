@@ -1,4 +1,5 @@
 import * as $ from './utils.js';
+import { registerSW } from 'virtual:pwa-register';
 
 /**
  * @typedef {Event & {
@@ -24,7 +25,26 @@ export function setupPWA(){
         deferredPrompt = null;
     });
 
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(console.error));
-    }
+        // Register SW; with registerType 'prompt' we decide when to reload.
+        const updateSW = registerSW({
+            immediate: true,
+            onNeedRefresh() {
+                if (confirm('A new version is available. Reload now?')) {
+                    navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' });
+                }
+            },
+            onOfflineReady() {
+                console.log('App ready to work offline');
+            },
+            onRegisteredSW(swScriptUrl, registration) {
+                console.log('SW registered', swScriptUrl, registration?.scope);
+            }
+        });
+
+        // Visibility regain: when user returns to tab, perform a check for freshness.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                try { updateSW(); } catch {/* ignore */}
+            }
+        });
 }
