@@ -98,11 +98,13 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await page.click('#quickList .item .add');
 
     // Switch to yesterday and add one meal
-    const today = await page.inputValue('#mealDate');
-    const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 1);
-    const yest = d.toISOString().slice(0,10);
-    await page.fill('#mealDate', yest);
-    await page.dispatchEvent('#mealDate', 'change');
+    // Navigate to yesterday via prevDayBox using ISO date attribute (avoid timezone pitfalls)
+    const isoToday = await page.getAttribute('#dayLabel', 'data-iso');
+    expect(isoToday).toMatch(/\d{4}-\d{2}-\d{2}/);
+    await page.click('#prevDayBox');
+    const isoPrev = await page.getAttribute('#dayLabel', 'data-iso');
+    expect(isoPrev).toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(isoPrev).not.toBe(isoToday);
     await page.fill('#quickSearch', 'oat');
     await page.click('#quickList .item .add');
 
@@ -124,7 +126,7 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
 
     // Assert: both days' meals updated snapshots
     await expect(async () => {
-      const mealsAll = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsAll = await getAllFromStore(page, 'nutri-pwa', 'meals');
       expect(mealsAll.length).toBeGreaterThanOrEqual(3);
       expect(mealsAll.every(m => m.foodSnapshot.prot === 10)).toBeTruthy();
     }).toPass({ timeout: 20000 });

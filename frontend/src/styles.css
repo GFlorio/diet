@@ -54,9 +54,41 @@ label{ font-size:12px; color:var(--muted) }
 
 .hidden{ display:none !important }
 
+/* Meals page enhancements */
+/* Subheader with date navigation */
+.subheader{ display:flex; align-items:center; justify-content:center; gap:8px; padding:4px 4px 0; user-select:none }
+.subheader .dayDisplay{ font-size:18px; font-weight:600; letter-spacing:.5px; min-width:110px; text-align:center; padding:6px 14px; border:1px solid var(--border); border-radius:14px; background:var(--card); box-shadow:var(--shadow); position:relative; }
+.dayBox{ font-size:14px; font-weight:500; min-width:80px; text-align:center; padding:4px 10px; border:1px dashed var(--border); border-radius:12px; background:color-mix(in oklab, var(--card) 90%, transparent); opacity:.55; cursor:pointer; transition:opacity .15s, transform .15s; }
+.dayBox:hover{ opacity:.75 }
+.dayBox:active{ transform:translateY(1px) }
+.dayBox.inactive::after{ content:'◁' attr(data-dir); display:none }
+.swipeFlash{ outline:2px solid var(--brand); }
+
+/* Date change animation */
+@keyframes slideLeftFade { 0%{ transform:translateX(30px); opacity:0 } 100%{ transform:translateX(0); opacity:1 } }
+@keyframes slideRightFade { 0%{ transform:translateX(-30px); opacity:0 } 100%{ transform:translateX(0); opacity:1 } }
+.dateSlideLeft{ animation: slideLeftFade .26s ease-out }
+.dateSlideRight{ animation: slideRightFade .26s ease-out }
+
+/* Compact totals card */
+.card.totals{ padding:10px 12px; }
+.totalsWrap{ display:grid; gap:6px; /* Allow boxes to shrink more on narrow screens */
+  grid-template-columns: repeat(auto-fit,minmax(clamp(60px,12vw,88px),1fr));
+}
+.totalBlock{ padding:6px 8px; border:1px solid var(--border); border-radius:10px; display:grid; gap:2px; background:var(--card); box-shadow:none; min-width:0 }
+.totalBlock .label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; white-space:nowrap }
+.totalBlock .value{ font-size:18px; font-weight:600; display:flex; align-items:baseline; gap:2px; color:var(--fg); flex-wrap:wrap }
+.totalBlock .value .unit{ font-size:11px; font-weight:400; color:var(--muted) }
+
 /* Subtle feedback for invalid actions */
 @keyframes shakeX { 0%{transform:translateX(0)} 25%{transform:translateX(-2px)} 50%{transform:translateX(2px)} 75%{transform:translateX(-1px)} 100%{transform:translateX(0)} }
 .shake{ animation: shakeX .4s ease-in-out }
 
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
+
+/* Narrow viewport adjustments */
+@media (max-width: 480px){
+  .totalBlock .value{ font-size:16px }
+  .totalBlock .label{ font-size:10px }
+}

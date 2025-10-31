@@ -9,21 +9,97 @@ import { Foods, Meals } from '../data.js';
 
 /** Initialize meals page UI and handlers. */
 export function setupMeals(){
-  const mealDate = $.input($.id('mealDate'));
   const dayLabel = $.html($.id('dayLabel'));
+  const daysHeader = $.html($.id('mealsSubHeader'));
+  const prevDayBox = $.html($.id('prevDayBox'));
+  const nextDayBox = $.html($.id('nextDayBox'));
   const mealsList = $.html($.id('mealsList'));
   const mealsInfo = $.html($.id('mealsInfo'));
   const quickSearch = $.input($.id('quickSearch'));
   const quickList = $.html($.id('quickList'));
+  const dayTotals = $.html($.id('dayTotals'));
+  const mealsPage = $.html($.id('page-meals'));
+  const subHeader = $.html($.id('mealsSubHeader'));
+  const quickAddCard = $.html($.id('quickAddCard'));
+  const mealsCard = $.html($.id('mealsCard'));
+  // Use entire body as swipe surface so user can swipe even in gutter areas outside .app
+  const swipeSurface = document.body;
 
-  mealDate.value = $.isoToday();
-  dayLabel.textContent = mealDate.value;
-  mealDate.addEventListener('change', ()=>{ dayLabel.textContent = mealDate.value; renderMeals(); });
+  // Swipe detection thresholds (named constants to avoid magic numbers)
+  const SWIPE_MIN_X = 50; // Minimum horizontal delta
+  const SWIPE_MAX_Y = 40; // Maximum vertical delta to still count as horizontal swipe
+  const SWIPE_ANIM_MS = 260; // Duration of the date change animation
+
+  /** @type {string} */
+  let curDate = $.isoToday();
+  /** Format ISO YYYY-MM-DD to human friendly (e.g., Oct 30) */
+  /** Convert ISO date to 'Mon DD' */
+  function fmtHuman(/** @type {string} */ iso){
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+
+  function updateHeader(){
+    dayLabel.dataset.iso = curDate;
+    dayLabel.textContent = fmtHuman(curDate);
+    const d = new Date(curDate + 'T00:00:00');
+    const prev = new Date(d); prev.setDate(d.getDate()-1);
+    const next = new Date(d); next.setDate(d.getDate()+1);
+    const prevISO = $.toISO(prev);
+    const nextISO = $.toISO(next);
+    prevDayBox.textContent = fmtHuman(prevISO);
+    nextDayBox.textContent = fmtHuman(nextISO);
+  }
+  updateHeader();
+
+  /** Shift current date by delta days */
+  function shiftDate(/** @type {number} */ delta){
+    const d = new Date(curDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    curDate = $.toISO(d);
+    updateHeader();
+    renderMeals();
+    // Animate date change (direction aware)
+    const cls = delta > 0 ? 'dateSlideLeft' : 'dateSlideRight';
+    const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
+    animEls.forEach(el => el && el.classList.add(cls));
+    setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
+  }
+  prevDayBox.addEventListener('click', ()=> shiftDate(-1));
+  nextDayBox.addEventListener('click', ()=> shiftDate(1));
+  prevDayBox.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); shiftDate(-1); } });
+  nextDayBox.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); shiftDate(1); } });
+
+  // Swipe handler across entire app area; only triggers when meals page is active and swipe starts below date bar.
+  let touchStartX = 0; let touchStartY = 0; let touchActive = false; let startTargetBelowBar = false;
+  function onTouchStart(/** @type {TouchEvent} */ e){
+    if (e.touches.length!==1) return;
+    // Ignore if meals page hidden
+    if (mealsPage.classList.contains('hidden')) return;
+    touchActive = true;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    const subRect = subHeader.getBoundingClientRect();
+    const y = e.touches[0].clientY;
+    startTargetBelowBar = y > subRect.bottom;
+  }
+  function onTouchEnd(/** @type {TouchEvent} */ e){
+    if (!touchActive) return; touchActive=false;
+    if (!startTargetBelowBar) return; // must start below the date bar
+    const dx = (e.changedTouches[0].clientX - touchStartX);
+    const dy = (e.changedTouches[0].clientY - touchStartY);
+    if (Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y){
+      if (dx < 0) shiftDate(1); else shiftDate(-1);
+    }
+  }
+  swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
+  swipeSurface.addEventListener('touchend', onTouchEnd);
 
   async function renderQuickList(){
     const q = quickSearch.value.trim();
     const foods = await Foods.list({ search: q, status: 'active' });
-    quickList.innerHTML = foods.slice(0, 40).map(f => `
+    // Limit to 3 foods
+    quickList.innerHTML = foods.slice(0, 3).map(f => `
       <div class="item" data-id="${f.id}">
         <div>
           <div><strong>${$.esc(f.name)}</strong></div>
@@ -32,8 +108,8 @@ export function setupMeals(){
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0" value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
           <button class="btn small add">＋ Add</button>
-          <button class="btn small ghost add05">+0.5</button>
-          <button class="btn small ghost add1">+1</button>
+          <button class="btn small ghost add05" title="+0.5">+0.5</button>
+          <button class="btn small ghost add1" title="+1">+1</button>
           <button class="btn small ghost editFood" title="Edit food">✏️</button>
         </div>
       </div>`).join('') || `<div class="muted">No foods yet. Type a name and <a href="#" id="quickNew">create it</a>.</div>`;
@@ -66,7 +142,7 @@ export function setupMeals(){
       let qty;
       try { qty = V.number(qtyEl.value ?? 1, { min: 0, max: 100 }); }
       catch { qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700); return; }
-      await Meals.create(V.mealCreate({ food, multiplier: qty, date: mealDate.value }));
+      await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
       qtyEl.value = '1';
       renderMeals();
       return;
@@ -76,7 +152,7 @@ export function setupMeals(){
   });
 
   async function renderMeals(){
-    const xs = /** @type {Meal[]} */ (await Meals.listByDate(mealDate.value));
+    const xs = /** @type {Meal[]} */ (await Meals.listByDate(curDate));
     const count = xs.length;
     const totals = xs.reduce((a, /** @type {Meal} */ m)=>{
       a.k+=m.foodSnapshot.kcal*m.multiplier;
@@ -86,6 +162,25 @@ export function setupMeals(){
       return a;
     }, {k:0,p:0,c:0,f:0});
     mealsInfo.textContent = count ? `${count} meal${count>1?'s':''} · ${$.fmtNum(totals.k,0)} kcal · P${$.fmtNum(totals.p)} C${$.fmtNum(totals.c)} F${$.fmtNum(totals.f)}` : 'No meals yet';
+    dayTotals.innerHTML = `
+      <div class="totalsWrap">
+        <div class="totalBlock">
+          <div class="label">Calories</div>
+          <div class="value">${$.fmtNum(totals.k,0)}<span class="unit">kcal</span></div>
+        </div>
+        <div class="totalBlock">
+          <div class="label">Protein</div>
+          <div class="value">${$.fmtNum(totals.p)}<span class="unit">g</span></div>
+        </div>
+        <div class="totalBlock">
+          <div class="label">Carbs</div>
+          <div class="value">${$.fmtNum(totals.c)}<span class="unit">g</span></div>
+        </div>
+        <div class="totalBlock">
+          <div class="label">Fat</div>
+          <div class="value">${$.fmtNum(totals.f)}<span class="unit">g</span></div>
+        </div>
+      </div>`;
     mealsList.innerHTML = xs.map(m => `
       <div class="item" data-id="${m.id}">
         <div>
@@ -106,7 +201,7 @@ export function setupMeals(){
   const row = target.closest('.item'); if (!row) return;
     const rowEl = /** @type {HTMLElement} */ (row);
     const id = V.id(rowEl.dataset.id);
-    const meal = (await Meals.listByDate(mealDate.value)).find(m => m.id === id);
+    const meal = (await Meals.listByDate(curDate)).find(m => m.id === id);
     if (!meal) return;
     if (target.classList.contains('del')) { await Meals.remove(meal.id); renderMeals(); return; }
     if (target.classList.contains('qtyPlus')) { await Meals.update(meal.id, { multiplier: V.number(meal.multiplier + 0.5) }); renderMeals(); return; }

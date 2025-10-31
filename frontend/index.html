@@ -31,23 +31,25 @@
   </header>
 
   <main id="page-meals" class="grid">
-    <section class="card">
-      <div class="row nowrap">
-        <div class="field" style="min-width:180px; max-width:220px">
-          <label for="mealDate">Date</label>
-          <input type="date" id="mealDate" />
-        </div>
-        <div class="field grow">
-          <label for="quickSearch">Quick add meal — search foods</label>
-          <input id="quickSearch" placeholder="e.g., chicken breast, rice, apple" autocomplete="off" />
-        </div>
+    <div class="subheader" id="mealsSubHeader">
+      <div class="dayBox inactive" id="prevDayBox" role="button" aria-label="Previous day" tabindex="0"></div>
+      <div class="dayDisplay" id="dayLabel" data-iso=""></div>
+      <div class="dayBox inactive" id="nextDayBox" role="button" aria-label="Next day" tabindex="0"></div>
+    </div>
+
+    <section class="card totals" id="dayTotals" aria-live="polite"></section>
+
+    <section class="card" id="quickAddCard">
+      <div class="field">
+        <label for="quickSearch">Add meal — search foods</label>
+        <input id="quickSearch" placeholder="e.g., chicken breast, rice, apple" autocomplete="off" />
       </div>
       <div id="quickList" class="list" style="margin-top:10px"></div>
     </section>
 
-    <section class="card">
+    <section class="card" id="mealsCard">
       <div class="row">
-        <strong>Meals for <span id="dayLabel"></span></strong>
+        <strong>Meals</strong>
         <span class="muted" id="mealsInfo"></span>
       </div>
       <div id="mealsList" class="list" style="margin-top:8px"></div>
