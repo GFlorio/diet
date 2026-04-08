@@ -1,10 +1,18 @@
 {
   "name": "diet-monorepo",
   "private": true,
+  "type": "module",
   "workspaces": [
     "frontend"
   ],
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-playwright": "^1.6.2",
+    "eslint-plugin-promise": "^6.6.0",
+    "eslint-plugin-unused-imports": "^4.1.4",
+    "globals": "^15.8.0",
     "typescript": "^5.9.2"
   }
 }

@@ -1,49 +1,140 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Unit tests (Vitest)",
-            "type": "shell",
-            "command": "mise",
-            "args": [
-                "run",
-                "test-unit"
-            ],
-            "group": "test",
-            "problemMatcher": []
-        },
-        {
-            "label": "E2E tests (Playwright)",
-            "type": "shell",
-            "command": "mise",
-            "args": [
-                "run",
-                "e2e"
-            ],
-            "group": "test",
-            "problemMatcher": []
-        },
-        {
-            "label": "E2E tests: UI (Playwright)",
-            "type": "shell",
-            "command": "mise",
-            "args": [
-                "run",
-                "e2e-ui"
-            ],
-            "group": "test",
-            "problemMatcher": []
-        },
-        {
-            "label": "Tests: all (unit then e2e)",
-            "type": "shell",
-            "command": "mise",
-            "args": [
-                "run",
-                "test"
-            ],
-            "group": "test",
-            "problemMatcher": []
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Unit tests (Vitest)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"test-unit"
+			],
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "E2E tests (Playwright)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"e2e"
+			],
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "E2E tests: UI (Playwright)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"e2e-ui"
+			],
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Tests: all (unit then e2e)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"test"
+			],
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Lint Fix (mise)",
+			"type": "shell",
+			"command": "mise",
+			"args": [
+				"run",
+				"lint-fix"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "test"
+		}
+	]
 }

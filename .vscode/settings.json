@@ -1,15 +1,14 @@
 {
-    "go.goroot": "/home/gabriel/.local/share/mise/installs/go/1.24.4",
-    "go.alternateTools": {
-        "go": "/home/gabriel/.local/share/mise/shims/go",
-        "dlv": "/home/gabriel/.local/share/mise/shims/dlv",
-        "gopls": "/home/gabriel/.local/share/mise/shims/gopls"
-    },
+    "eslint.useFlatConfig": true,
     "eslint.workingDirectories": [
         {
             "mode": "autoDetectFromPackageJson",
             "changeProcessCWD": true,
             "directory": "./frontend"
         }
-    ]
+    ],
+    // "editor.codeActionsOnSave": {
+    //     "source.fixAll": "explicit",
+    //     "source.fixAll.eslint": "explicit"
+    // }
 }

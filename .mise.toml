@@ -1,6 +1,6 @@
 [tools]
 # Core runtimes / CLIs
-node = "22"
+node = "24"
 uv = "latest"
 
 # Environment variables (kept minimal here; add more as needed)
@@ -38,7 +38,11 @@ run = "npm --workspace frontend run build"
 # ----- Lint & Type‑check ---------------------------------------------------
 [tasks.lint]
 description = "Run ESLint on all source files"
-run         = "eslint --max-warnings=0 \"frontend/**/*.{js,ts,vue}\""
+run         = "eslint --max-warnings=0 ."
+
+[tasks.lint-fix]
+description = "Run ESLint with auto-fix"
+run         = "eslint --fix --max-warnings=0 ."
 
 [tasks.typecheck]
 description = "Run TypeScript compiler (no emit)"
