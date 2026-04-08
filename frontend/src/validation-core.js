@@ -79,7 +79,7 @@ function isObject(v){ return typeof v === 'object' && v !== null; }
 function string(val, opts){
         const { minLen = 1, maxLen = 200, pattern, trim = true } = opts || {};
         assert(typeof val === 'string', 'Expected string');
-        const s = /** @type {string} */ val;
+        const s = /** @type {string} */ (val);
         const out = trim ? s.trim() : s;
         assert(out.length >= minLen, `String too short (min ${minLen})`);
         assert(out.length <= maxLen, `String too long (max ${maxLen})`);

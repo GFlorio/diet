@@ -64,7 +64,7 @@ export const Foods = {
     };
     const id = await put('foods', food);
     food.id = Number(id);
-    return /** @type {Food} */ food;
+    return /** @type {Food} */ (food);
   },
   /**
    * Updates a food entry by id.

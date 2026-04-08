@@ -80,7 +80,7 @@ export const Meals = {
     };
     const id = await put('meals', meal);
     meal.id = Number(id);
-    return /** @type {Meal} */ meal;
+    return /** @type {Meal} */ (meal);
   },
   /**
    * Updates a meal entry by id.

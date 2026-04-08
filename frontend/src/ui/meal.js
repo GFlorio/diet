@@ -77,8 +77,16 @@ export function setupMeals(){
   }
   prevDayBox.addEventListener('click', ()=> shiftDate(-1));
   nextDayBox.addEventListener('click', ()=> shiftDate(1));
-  prevDayBox.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); shiftDate(-1); } });
-  nextDayBox.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); shiftDate(1); } });
+  prevDayBox.addEventListener('keydown', (e)=>{
+    if (e.key==='Enter' || e.key===' ') {
+      e.preventDefault(); shiftDate(-1);
+    }
+  });
+  nextDayBox.addEventListener('keydown', (e)=>{
+    if (e.key==='Enter' || e.key===' ') {
+      e.preventDefault(); shiftDate(1);
+    }
+  });
 
   // Swipe handler across entire app area; only triggers when meals page is active and swipe starts below date bar.
   let touchStartX = 0;
@@ -108,12 +116,14 @@ export function setupMeals(){
     startTargetBelowBar = y > subRect.bottom;
   }
   function onTouchEnd(/** @type {TouchEvent} */ e){
-    if (!touchActive) {return;} touchActive=false;
+    if (!touchActive) { return; }
+    touchActive=false;
     if (!startTargetBelowBar) {return;} // must start below the date bar
     const dx = (e.changedTouches[0].clientX - touchStartX);
     const dy = (e.changedTouches[0].clientY - touchStartY);
     if (!isValidSwipe(dx, dy)) {return;}
-    if (dx < 0) {shiftDate(1);} else {shiftDate(-1);}
+    if (dx < 0) { shiftDate(1); }
+    else { shiftDate(-1); }
   }
   swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
   swipeSurface.addEventListener('touchend', onTouchEnd);
@@ -140,7 +150,11 @@ export function setupMeals(){
         </div>
       </div>`).join('') || `<div class="muted">No foods yet. Type a name and <a href="#" id="quickNew">create it</a>.</div>`;
     const createLink = document.getElementById('quickNew');
-    if (createLink) { $.html(createLink).addEventListener('click', (e) => { e.preventDefault(); goFoodsWithPrefill(q); }); }
+    if (createLink) {
+      $.html(createLink).addEventListener('click', (e) => {
+        e.preventDefault(); goFoodsWithPrefill(q);
+      });
+    }
   }
 
   quickSearch.addEventListener('input', $.debounce(renderQuickList, 200));
@@ -148,14 +162,17 @@ export function setupMeals(){
     if (e.key==='Enter'){
       const first = quickList.querySelector('.item');
       const btn = first?.querySelector('.add');
-      if (btn && btn instanceof HTMLElement){ btn.click(); e.preventDefault(); }
+      if (btn && btn instanceof HTMLElement) {
+        btn.click(); e.preventDefault();
+      }
     }
   });
   quickList.addEventListener('refresh', renderQuickList);
 
   quickList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-  const item = target.closest('.item'); if (!item) {return;}
+  const item = target.closest('.item');
+  if (!item) { return; }
     const itemEl = /** @type {HTMLElement} */ (item);
     const id = V.id(itemEl.dataset.id);
     const food = await Foods.byId(id); if (!food) {
@@ -167,14 +184,21 @@ export function setupMeals(){
     if (target.classList.contains('add') || target.classList.contains('add1')) {
       let qty;
       try { qty = V.number(qtyEl.value ?? 1, { min: 0, max: 100 }); }
-      catch { qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700); return; }
+      catch {
+        qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700);
+        return;
+      }
       await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
       qtyEl.value = '1';
       renderMeals();
       return;
     }
-    if (target.classList.contains('add05')) { qtyEl.value = String(V.number((Number(qtyEl.value ?? 1) + 0.5))); return; }
-    if (target.classList.contains('editFood')) { goFoodsWithPrefill(food.name); return; }
+    if (target.classList.contains('add05')) {
+      qtyEl.value = String(V.number((Number(qtyEl.value ?? 1) + 0.5))); return;
+    }
+    if (target.classList.contains('editFood')) {
+      goFoodsWithPrefill(food.name); return;
+    }
   });
 
   /**

@@ -48,6 +48,13 @@ run         = "eslint --fix --max-warnings=0 ."
 description = "Run TypeScript compiler (no emit)"
 run         = "tsc -p frontend/jsconfig.json --noEmit"
 
+[tasks.full-lint]
+description = "Run ESLint and Typescript lints"
+run = [
+  "mise run lint",
+  "mise run typecheck"
+]
+
 # ----- Clean ----------------------------------------------------------------
 [tasks.clean]
 description = "Remove build artifacts"
