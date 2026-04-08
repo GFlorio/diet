@@ -1,5 +1,6 @@
-import * as $ from './utils.js';
+// eslint-disable-next-line import/no-unresolved
 import { registerSW } from 'virtual:pwa-register';
+import * as $ from './utils.js';
 
 /**
  * @typedef {Event & {
@@ -18,10 +19,10 @@ export function setupPWA(){
       installBtn.classList.remove('hidden');
     });
     installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
+        if (!deferredPrompt) {return;}
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        if (outcome) installBtn.classList.add('hidden');
+        if (outcome) {installBtn.classList.add('hidden');}
         deferredPrompt = null;
     });
 

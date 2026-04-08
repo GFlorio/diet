@@ -29,8 +29,8 @@ export const arr = (sel, root = document) => Array.from(root.querySelectorAll(se
  * @returns {Element}
  */
 export function assertEl(obj) {
-	if (obj === null || obj === undefined) throw new Error(`Object ${obj} is nullish!`);
-    if (!(obj instanceof Element)) throw new Error(`Object ${obj} is not an Element!`);
+	if (obj === null || obj === undefined) {throw new Error(`Object ${obj} is nullish!`);}
+    if (!(obj instanceof Element)) {throw new Error(`Object ${obj} is not an Element!`);}
     return obj;
 }
 
@@ -174,7 +174,7 @@ export function debounce(fn, ms = 300){
     /** @type {number|undefined} */
     let t;
     return (...args) => {
-        if (t) window.clearTimeout(t);
+        if (t) {window.clearTimeout(t);}
         t = window.setTimeout(() => fn(...args), ms);
     };
 }

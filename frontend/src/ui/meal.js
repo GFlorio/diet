@@ -32,13 +32,20 @@ export function setupMeals(){
 
   /** @type {string} */
   let curDate = $.isoToday();
-  /** Format ISO YYYY-MM-DD to human friendly (e.g., Oct 30) */
-  /** Convert ISO date to 'Mon DD' */
+
+  /**
+   * Format ISO date (YYYY-MM-DD) to human-friendly short form (e.g., "Oct 30").
+   * @param {string} iso - ISO date string
+   * @returns {string}
+   */
   function fmtHuman(/** @type {string} */ iso){
     const d = new Date(iso + 'T00:00:00');
     return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
 
+  /**
+   * Update the date header with current, previous, and next day labels.
+   */
   function updateHeader(){
     dayLabel.dataset.iso = curDate;
     dayLabel.textContent = fmtHuman(curDate);
@@ -52,7 +59,10 @@ export function setupMeals(){
   }
   updateHeader();
 
-  /** Shift current date by delta days */
+  /**
+   * Shift current date by delta days and update UI with animation.
+   * @param {number} delta - Number of days to shift (positive or negative)
+   */
   function shiftDate(/** @type {number} */ delta){
     const d = new Date(curDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
@@ -71,11 +81,25 @@ export function setupMeals(){
   nextDayBox.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') { e.preventDefault(); shiftDate(1); } });
 
   // Swipe handler across entire app area; only triggers when meals page is active and swipe starts below date bar.
-  let touchStartX = 0; let touchStartY = 0; let touchActive = false; let startTargetBelowBar = false;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchActive = false;
+  let startTargetBelowBar = false;
+
+  /**
+   * Check if touch movement qualifies as a valid horizontal swipe.
+   * @param {number} dx - Horizontal delta
+   * @param {number} dy - Vertical delta
+   * @returns {boolean}
+   */
+  function isValidSwipe(dx, dy){
+    return Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y;
+  }
+
   function onTouchStart(/** @type {TouchEvent} */ e){
-    if (e.touches.length!==1) return;
+    if (e.touches.length!==1) {return;}
     // Ignore if meals page hidden
-    if (mealsPage.classList.contains('hidden')) return;
+    if (mealsPage.classList.contains('hidden')) {return;}
     touchActive = true;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
@@ -84,17 +108,19 @@ export function setupMeals(){
     startTargetBelowBar = y > subRect.bottom;
   }
   function onTouchEnd(/** @type {TouchEvent} */ e){
-    if (!touchActive) return; touchActive=false;
-    if (!startTargetBelowBar) return; // must start below the date bar
+    if (!touchActive) {return;} touchActive=false;
+    if (!startTargetBelowBar) {return;} // must start below the date bar
     const dx = (e.changedTouches[0].clientX - touchStartX);
     const dy = (e.changedTouches[0].clientY - touchStartY);
-    if (Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y){
-      if (dx < 0) shiftDate(1); else shiftDate(-1);
-    }
+    if (!isValidSwipe(dx, dy)) {return;}
+    if (dx < 0) {shiftDate(1);} else {shiftDate(-1);}
   }
   swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
   swipeSurface.addEventListener('touchend', onTouchEnd);
 
+  /**
+   * Render the quick-add food search results (limited to 3 foods).
+   */
   async function renderQuickList(){
     const q = quickSearch.value.trim();
     const foods = await Foods.list({ search: q, status: 'active' });
@@ -129,7 +155,7 @@ export function setupMeals(){
 
   quickList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-  const item = target.closest('.item'); if (!item) return;
+  const item = target.closest('.item'); if (!item) {return;}
     const itemEl = /** @type {HTMLElement} */ (item);
     const id = V.id(itemEl.dataset.id);
     const food = await Foods.byId(id); if (!food) {
@@ -151,16 +177,28 @@ export function setupMeals(){
     if (target.classList.contains('editFood')) { goFoodsWithPrefill(food.name); return; }
   });
 
-  async function renderMeals(){
-    const xs = /** @type {Meal[]} */ (await Meals.listByDate(curDate));
-    const count = xs.length;
-    const totals = xs.reduce((a, /** @type {Meal} */ m)=>{
+  /**
+   * Compute aggregate nutrition totals from an array of meals.
+   * @param {Meal[]} meals
+   * @returns {{ k: number, p: number, c: number, f: number }}
+   */
+  function computeTotals(meals){
+    return meals.reduce((a, /** @type {Meal} */ m)=>{
       a.k+=m.foodSnapshot.kcal*m.multiplier;
       a.p+=m.foodSnapshot.prot*m.multiplier;
       a.c+=m.foodSnapshot.carbs*m.multiplier;
       a.f+=m.foodSnapshot.fats*m.multiplier;
       return a;
     }, {k:0,p:0,c:0,f:0});
+  }
+
+  /**
+   * Render day header info and macros totals display.
+   * @param {Meal[]} meals
+   * @param {{ k: number, p: number, c: number, f: number }} totals
+   */
+  function renderDayInfo(meals, totals){
+    const count = meals.length;
     mealsInfo.textContent = count ? `${count} meal${count>1?'s':''} · ${$.fmtNum(totals.k,0)} kcal · P${$.fmtNum(totals.p)} C${$.fmtNum(totals.c)} F${$.fmtNum(totals.f)}` : 'No meals yet';
     dayTotals.innerHTML = `
       <div class="totalsWrap">
@@ -181,7 +219,14 @@ export function setupMeals(){
           <div class="value">${$.fmtNum(totals.f)}<span class="unit">g</span></div>
         </div>
       </div>`;
-    mealsList.innerHTML = xs.map(m => `
+  }
+
+  /**
+   * Render the list of meals with action buttons.
+   * @param {Meal[]} meals
+   */
+  function renderMealsList(meals){
+    mealsList.innerHTML = meals.map(/** @param {Meal} m */ m => `
       <div class="item" data-id="${m.id}">
         <div>
           <div><strong>${$.esc(m.foodSnapshot.name)}</strong> <span class="chip">×${$.fmtNum(m.multiplier)}</span></div>
@@ -196,15 +241,33 @@ export function setupMeals(){
       </div>`).join('');
   }
 
+  /**
+   * Fetch meals for current date, compute totals, and render UI.
+   */
+  async function renderMeals(){
+    const xs = /** @type {Meal[]} */ (await Meals.listByDate(curDate));
+    const totals = computeTotals(xs);
+    renderDayInfo(xs, totals);
+    renderMealsList(xs);
+  }
+
   document.getElementById('mealsList')?.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-  const row = target.closest('.item'); if (!row) return;
+    const row = target.closest('.item');
+    if (!row) { return; }
     const rowEl = /** @type {HTMLElement} */ (row);
     const id = V.id(rowEl.dataset.id);
     const meal = (await Meals.listByDate(curDate)).find(m => m.id === id);
-    if (!meal) return;
-    if (target.classList.contains('del')) { await Meals.remove(meal.id); renderMeals(); return; }
-    if (target.classList.contains('qtyPlus')) { await Meals.update(meal.id, { multiplier: V.number(meal.multiplier + 0.5) }); renderMeals(); return; }
+    if (!meal) { return; }
+    if (target.classList.contains('del')) {
+      await Meals.remove(meal.id); renderMeals();
+      return;
+    }
+    if (target.classList.contains('qtyPlus')) {
+      await Meals.update(meal.id, { multiplier: V.number(meal.multiplier + 0.5) });
+      renderMeals();
+      return;
+    }
     if (target.classList.contains('qtyMinus')) {
       const v = Math.max(0, meal.multiplier - 0.5);
       if (v === 0) { await Meals.remove(meal.id); }
@@ -212,7 +275,11 @@ export function setupMeals(){
       renderMeals();
       return;
     }
-    if (target.classList.contains('sync')) { await Meals.syncMealToFood(meal); renderMeals(); return; }
+    if (target.classList.contains('sync')) {
+      await Meals.syncMealToFood(meal);
+      renderMeals();
+      return;
+    }
   });
 
   /** @param {string=} name */

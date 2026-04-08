@@ -24,15 +24,65 @@ export function setupFoods(){
   const foodStatus = $.select($.id('foodStatus'));
   const foodFormMsg = $.html($.id('foodFormMsg'));
 
+  /** Map validation field names to corresponding input elements */
+  const fieldToInput = new Map([
+    ['name', foodName],
+    ['refLabel', foodRefLabel],
+    ['kcal', foodKcal],
+    ['prot', foodProt],
+    ['carbs', foodCarb],
+    ['fats', foodFat],
+    // Fallback keys used by validators
+    ['string', foodName],
+    ['number', foodKcal],
+  ]);
+
+  /**
+   * Remove error styling from all food form input fields.
+   */
+  function clearFieldErrors(){
+    fieldToInput.forEach(el => el.classList.remove('error'));
+  }
+
+  /**
+   * Apply ValidationError field highlights to inputs.
+   * @param {unknown} err - Error object, expected to have optional `fields` array
+   */
+  function applyValidationErrors(err){
+    const e = /** @type {{ fields?: string[] }} */ (err || {});
+    if (!Array.isArray(e.fields)) {return;}
+    e.fields.forEach(f => {
+      const el = fieldToInput.get(f);
+      if (el) {el.classList.add('error');}
+    });
+  }
+
+  /**
+   * Reset the food form to its initial "add new food" state.
+   */
+  function clearFoodForm(){
+    foodFormTitle.textContent = 'Add food';
+    foodUpdated.textContent='';
+    foodId.value='';
+    foodName.value='';
+    foodRefLabel.value='';
+    foodKcal.value='';
+    foodProt.value='';
+    foodCarb.value='';
+    foodFat.value='';
+    foodFormMsg.textContent = '';
+    clearFieldErrors();
+  }
+
   resetFoodBtn.addEventListener('click', ()=> setFoodForm());
 
-  /** @param {Food=} f */
+  /**
+   * Set the food form to either edit an existing food or reset to create a new one.
+   * @param {Food=} f - Food to edit, or undefined/null to reset for new food
+   */
   function setFoodForm(f){
     if (!f){
-      foodFormTitle.textContent = 'Add food'; foodUpdated.textContent='';
-      foodId.value=''; foodName.value=''; foodRefLabel.value=''; foodKcal.value=''; foodProt.value=''; foodCarb.value=''; foodFat.value='';
-  foodFormMsg.textContent = '';
-  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
+      clearFoodForm();
     } else {
       foodFormTitle.textContent = 'Edit food'; foodUpdated.textContent = `updated ${new Date(f.updatedAt).toLocaleString()}`;
       foodId.value = String(f.id);
@@ -42,11 +92,14 @@ export function setupFoods(){
       foodProt.value=String(f.prot);
       foodCarb.value=String(f.carbs);
       foodFat.value=String(f.fats);
-  foodFormMsg.textContent = '';
-  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
+      foodFormMsg.textContent = '';
+      clearFieldErrors();
     }
   }
 
+  /**
+   * Render the foods list based on current search and status filters.
+   */
   async function renderFoods(){
     const status = foodStatus.value === 'archived' ? 'archived' : 'active';
     const xs = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
@@ -67,14 +120,30 @@ export function setupFoods(){
   foodsList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = $.html($.assertEl(e.target));
     const row = $.html($.assertEl(target.closest('.item')));
-    if (!row) return;
+    if (!row) {return;}
 
     const id = v.id(row.dataset.id);
     const f = await Foods.byId(id);
-    if (target.classList.contains('edit')){ setFoodForm(f); window.scrollTo({top:0, behavior:'smooth'}); return; }
-    if (target.classList.contains('archive')){ await Foods.setArchived(id, true); renderFoods(); return; }
-    if (target.classList.contains('unarchive')){ await Foods.setArchived(id, false); renderFoods(); return; }
-    if (target.classList.contains('updateMeals')){ const n = await Meals.syncAllForFood(id); alert(`Updated ${n} meal(s) using this food.`); return; }
+    if (target.classList.contains('edit')){
+      setFoodForm(f);
+      window.scrollTo({top:0, behavior:'smooth'});
+      return;
+    }
+    if (target.classList.contains('archive')){
+      await Foods.setArchived(id, true);
+      renderFoods();
+      return;
+    }
+    if (target.classList.contains('unarchive')){
+      await Foods.setArchived(id, false);
+      renderFoods();
+      return;
+    }
+    if (target.classList.contains('updateMeals')){
+      const n = await Meals.syncAllForFood(id);
+      alert(`Updated ${n} meal(s) using this food.`);
+      return;
+    }
   });
 
   foodSearch.addEventListener('input', renderFoods);
@@ -84,6 +153,7 @@ export function setupFoods(){
     e.preventDefault();
     // Validate on submit; avoid annoying while typing
     try {
+      clearFieldErrors();
       const payload = v.createFoodInput({
         name: foodName.value,
         refLabel: foodRefLabel.value,
@@ -92,35 +162,25 @@ export function setupFoods(){
         carbs: foodCarb.value,
         fats: foodFat.value,
       });
-      if (foodId.value){ await Foods.update(v.id(foodId.value), payload); } else { await Foods.create(payload); }
+      if (foodId.value) {
+        await Foods.update(v.id(foodId.value), payload);
+      } else { await Foods.create(payload); }
       setFoodForm(); renderFoods();
       const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
-      if (quickListEl) quickListEl.dispatchEvent(new Event('refresh'));
+      if (quickListEl) {quickListEl.dispatchEvent(new Event('refresh'));}
     } catch (err) {
       const e = /** @type {Error & {fields?: string[]}} */ (err);
       const msg = e?.message || 'Invalid input';
       foodFormMsg.textContent = msg;
-      [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
-      const map = new Map([
-        ['name', foodName],
-        ['refLabel', foodRefLabel],
-        ['kcal', foodKcal],
-        ['prot', foodProt],
-        ['carbs', foodCarb],
-        ['fats', foodFat],
-        ['string', foodName],
-        ['number', foodKcal],
-      ]);
-      if (Array.isArray(e.fields)){
-        e.fields.forEach(f => { const el = map.get(f); if (el) el.classList.add('error'); });
-      }
+      clearFieldErrors();
+      applyValidationErrors(e);
     }
   });
 
   // Gentle live validation (non-blocking): only mark fields after short pause
   const liveCheck = $.debounce(()=>{
     foodFormMsg.textContent = '';
-    [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.classList.remove('error'));
+    clearFieldErrors();
     try {
       v.createFoodInput({
         name: foodName.value,
@@ -131,18 +191,7 @@ export function setupFoods(){
         fats: foodFat.value,
       });
     } catch (err) {
-      const e = /** @type {Error & {fields?: string[]}} */ (err);
-      const map = new Map([
-        ['name', foodName],
-        ['refLabel', foodRefLabel],
-        ['kcal', foodKcal],
-        ['prot', foodProt],
-        ['carbs', foodCarb],
-        ['fats', foodFat],
-      ]);
-      if (Array.isArray(e.fields)){
-        e.fields.forEach(f => { const el = map.get(f); if (el) el.classList.add('error'); });
-      }
+      applyValidationErrors(err);
     }
   }, 400);
   [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.addEventListener('input', liveCheck));
