@@ -46,7 +46,7 @@ run         = "eslint --fix --max-warnings=0 ."
 
 [tasks.typecheck]
 description = "Run TypeScript compiler (no emit)"
-run         = "tsc -p frontend/tsconfig.json --noEmit"
+run         = "tsc -p frontend/jsconfig.json --noEmit"
 
 # ----- Clean ----------------------------------------------------------------
 [tasks.clean]

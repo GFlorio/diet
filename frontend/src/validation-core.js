@@ -33,8 +33,8 @@ function collectFieldsFromError(err, into, fallbackField){
         if (
             err &&
             typeof err === 'object' &&
-            Array.isArray(/** @type {any} */ err).fields &&
-            /** @type {any} */ err.fields.length
+            Array.isArray((/** @type {any} */ (err)).fields) &&
+            /** @type {any} */ (err).fields.length
         ) { /** @type {{ fields: string[] }} */ (err).fields.forEach((f) => into.add(f)); } else { into.add(fallbackField); }
 }
 

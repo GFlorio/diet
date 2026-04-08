@@ -11,16 +11,11 @@
     "esModuleInterop": true,
     "checkJs": true,
     "allowJs": true,
-    "declaration": true,
+    "noEmit": true,
     "lib": ["DOM", "ESNext"],
-    "types": ["vite/client", "vite-plugin-pwa/client"],
     "target": "ES2023",
-    "module": "node16",
-    "moduleResolution": "node16",
-    "outDir": "dist"
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
-  "include": [
-    "./frontend/src/**/*.js"
-  ],
-  "verbose": true
+  "include": ["src"]
 }
