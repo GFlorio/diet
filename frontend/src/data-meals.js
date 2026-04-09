@@ -74,7 +74,7 @@ export const Meals = {
         fats: food.fats,
         updatedAt: food.updatedAt,
       },
-      multiplier: +multiplier || 1,
+      multiplier: Number.isFinite(+multiplier) ? +multiplier : 1,
       date,
       updatedAt: t,
     };

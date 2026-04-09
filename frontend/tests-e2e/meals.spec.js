@@ -87,6 +87,75 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await expect(page.locator('#mealsList')).toContainText('Greek Yogurt');
   });
 
+  test('quick-add: qty -1 shows error and creates no meal', async ({ page }) => {
+    // Arrange: create a food and open the meals tab
+    await createFood(page, { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs: 0, fats: 3.6 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'chi');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+
+    // Act: set qty to -1 (below min) and attempt to add
+    await page.locator('#quickList .item .qty').fill('-1');
+    await page.locator('#quickList .item .add').click();
+
+    // Assert: qty input is styled as error; no meal was added
+    await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
+    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+  });
+
+  test('quick-add: qty 101 shows error and creates no meal', async ({ page }) => {
+    // Arrange
+    await createFood(page, { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs: 0, fats: 3.6 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'chi');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+
+    // Act: set qty to 101 (above max:100) and attempt to add
+    await page.locator('#quickList .item .qty').fill('101');
+    await page.locator('#quickList .item .add').click();
+
+    // Assert: qty input is styled as error; no meal was added
+    await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
+    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+  });
+
+  test('quick-add: qty 0 should not create a meal', async ({ page }) => {
+    // Arrange
+    await createFood(page, { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs: 0, fats: 3.6 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'chi');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+
+    // Act: set qty to 0 and attempt to add
+    await page.locator('#quickList .item .qty').fill('0');
+    await page.locator('#quickList .item .add').click();
+
+    // Assert: qty input shows error and no meal is created
+    await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
+    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+  });
+
+  test('"create new" link navigates to Foods tab with search term prefilled', async ({ page }) => {
+    // Arrange: create a food so the quick list initially shows results
+    await createFood(page, { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs: 0, fats: 3.6 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    // Confirm quick list starts populated (so the transition to "no results" is detectable)
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+
+    // Act: type a term that matches no food — triggers the "create it" link
+    await page.fill('#quickSearch', 'Dragon Fruit XYZ');
+    // Wait for the debounced re-render: items disappear, link appears
+    await expect(page.locator('#quickNew')).toBeVisible();
+
+    // Act: click "create it"
+    await page.locator('#quickNew').click();
+
+    // Assert: Foods tab is now active (navigation happened)
+    await expect(page.locator('.tab[data-page="foods"]')).toHaveClass(/active/);
+    // Assert: food name field is prefilled with the search term
+    await expect(page.locator('#foodName')).toHaveValue('Dragon Fruit XYZ');
+  });
+
   test('batch update: update all meals of a food from Foods list', async ({ page }) => {
     // Arrange: create food, add meals for 2 days
     await createFood(page, { name:'Oats', refLabel:'50 g', kcal:190, prot:8, carbs:32, fats:3.5 });

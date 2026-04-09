@@ -12,6 +12,7 @@ mise run build         # Build for production
 mise run lint          # ESLint (max-warnings=0)
 mise run lint-fix      # ESLint with --fix
 mise run typecheck     # TypeScript type check via JSDoc (no emit)
+mise run full-lint     # ESLint + Typescript (prefer this)
 mise run test-unit     # Vitest unit tests (one-shot)
 mise run test-unit-watch  # Vitest in watch mode
 mise run e2e           # Playwright E2E tests (headless)

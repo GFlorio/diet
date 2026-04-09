@@ -183,8 +183,10 @@ export function setupMeals(){
   const qtyEl = $.input(item.querySelector('.qty'));
     if (target.classList.contains('add') || target.classList.contains('add1')) {
       let qty;
-      try { qty = V.number(qtyEl.value ?? 1, { min: 0, max: 100 }); }
-      catch {
+      try {
+        qty = V.number(qtyEl.value ?? 1, { min: 0, max: 100 });
+        if (qty <= 0) throw new Error();
+      } catch {
         qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700);
         return;
       }

@@ -1,0 +1,134 @@
+import { describe, test, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../db.js', () => ({
+  getAll: vi.fn(),
+  get: vi.fn(),
+  put: vi.fn(),
+}));
+
+// utils.js has DOM dependencies; mock only what data-foods.js uses
+vi.mock('../utils.js', () => ({
+  now: vi.fn(() => 999),
+}));
+
+import { Foods } from '../data-foods.js';
+import * as db from '../db.js';
+
+/** @returns {import('../db.js').Food} */
+function makeFood(overrides = {}) {
+  return {
+    id: 1,
+    name: 'Apple',
+    refLabel: '100g',
+    kcal: 52,
+    prot: 0.3,
+    carbs: 14,
+    fats: 0.2,
+    archived: false,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('Foods.list — combined search and status filter', () => {
+  test('returns only active foods matching search', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+      makeFood({ id: 2, name: 'Apple Juice', archived: true }),
+      makeFood({ id: 3, name: 'Banana', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'apple', status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(1);
+  });
+
+  test('returns only archived foods matching search', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+      makeFood({ id: 2, name: 'Apple Juice', archived: true }),
+      makeFood({ id: 3, name: 'Banana Chips', archived: true }),
+    ]);
+    const result = await Foods.list({ search: 'apple', status: 'archived' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(2);
+  });
+
+  test('returns all foods when no search term and status is active', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+      makeFood({ id: 2, name: 'Banana', archived: true }),
+    ]);
+    const result = await Foods.list({ status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(1);
+  });
+});
+
+describe('Foods.list — search behavior', () => {
+  test('matches refLabel substring', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', refLabel: '100g', archived: false }),
+      makeFood({ id: 2, name: 'Banana', refLabel: '1 cup', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'cup', status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(2);
+  });
+
+  test('is case-insensitive', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+      makeFood({ id: 2, name: 'Banana', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'APPLE', status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(1);
+  });
+
+  test('trims whitespace from search term', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+    ]);
+    const result = await Foods.list({ search: '  apple  ', status: 'active' });
+    expect(result).toHaveLength(1);
+  });
+});
+
+describe('Foods.byId', () => {
+  test('returns undefined when food does not exist', async () => {
+    vi.mocked(db.get).mockResolvedValue(undefined);
+    const result = await Foods.byId(999);
+    expect(result).toBeUndefined();
+  });
+
+  test('returns the food when found', async () => {
+    const food = makeFood({ id: 5 });
+    vi.mocked(db.get).mockResolvedValue(food);
+    const result = await Foods.byId(5);
+    expect(result).toEqual(food);
+  });
+});
+
+describe('Foods.update', () => {
+  test('returns undefined when food does not exist', async () => {
+    vi.mocked(db.get).mockResolvedValue(undefined);
+    const result = await Foods.update(999, { name: 'New Name' });
+    expect(result).toBeUndefined();
+    expect(db.put).not.toHaveBeenCalled();
+  });
+
+  test('merges patch onto existing food and returns it', async () => {
+    const food = makeFood({ id: 1, name: 'Apple' });
+    vi.mocked(db.get).mockResolvedValue(food);
+    vi.mocked(db.put).mockResolvedValue(1);
+    const result = await Foods.update(1, { name: 'Green Apple' });
+    expect(result?.name).toBe('Green Apple');
+    expect(result?.id).toBe(1);
+    expect(result?.refLabel).toBe('100g'); // unchanged fields preserved
+    expect(db.put).toHaveBeenCalledOnce();
+  });
+});

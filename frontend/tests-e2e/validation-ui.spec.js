@@ -101,4 +101,85 @@ test.describe('Food form validation UI', () => {
 		const foods = await getAllFromStore(page, DB_NAME, 'foods');
 		expect(foods).toHaveLength(0);
 	});
+
+	test('rejects name with characters outside the allowed pattern', async ({ page }) => {
+		// Arrange: name contains characters not in /^[\p{L}\p{N}\s'\-_.()]+$/u
+		await disableNativeValidation(page);
+		await fillFoodForm(page, { name: 'Bad@Name!' });
+
+		// Act
+		await page.locator('#saveFoodBtn').click();
+
+		// Assert: name field flagged, nothing saved
+		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		await expect(page.locator('#foodName')).toHaveClass(/error/);
+		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		expect(foods).toHaveLength(0);
+	});
+
+	test('accepts name with unicode letters and parentheses', async ({ page }) => {
+		// Arrange: name uses characters that are explicitly allowed by the pattern
+		await fillFoodForm(page, { name: 'Café (raw)' });
+
+		// Act
+		await page.locator('#saveFoodBtn').click();
+
+		// Assert: food created successfully
+		await expect(page.locator('#foodsList')).toContainText('Café (raw)');
+		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		expect(foods).toHaveLength(1);
+		expect(foods[0].name).toBe('Café (raw)');
+	});
+
+	test('accepts name at exactly 120 characters (boundary)', async ({ page }) => {
+		// Arrange: 120 chars is the configured maxLen
+		const name = 'a'.repeat(120);
+		await fillFoodForm(page, { name });
+
+		// Act
+		await page.locator('#saveFoodBtn').click();
+
+		// Assert: food saved — boundary value is valid
+		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		expect(foods).toHaveLength(1);
+		expect(foods[0].name).toBe(name);
+	});
+
+	test('rejects name at 121 characters (one over boundary)', async ({ page }) => {
+		// Arrange: 121 chars exceeds maxLen:120
+		await disableNativeValidation(page);
+		const name = 'a'.repeat(121);
+		await fillFoodForm(page, { name });
+
+		// Act
+		await page.locator('#saveFoodBtn').click();
+
+		// Assert: name field flagged, nothing saved
+		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		await expect(page.locator('#foodName')).toHaveClass(/error/);
+		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		expect(foods).toHaveLength(0);
+	});
+
+	test('live debounce: error class applied ~400ms after invalid input, cleared on correction', async ({ page }) => {
+		// Arrange: fill all fields with valid values so the only failure is the one we introduce
+		await fillFoodForm(page);
+
+		// Act: overwrite kcal with an invalid value (triggers the 400ms debounce)
+		await page.fill('#foodKcal', '-999');
+
+		// Assert: error not shown immediately (debounce has not fired yet)
+		// Reading the class synchronously via evaluate avoids Playwright's auto-retry
+		const hasErrorImmediately = await page.locator('#foodKcal').evaluate(
+			el => el.classList.contains('error')
+		);
+		expect(hasErrorImmediately).toBe(false);
+
+		// Assert: error class eventually appears once the debounce fires (≤400ms + render tick)
+		await expect(page.locator('#foodKcal')).toHaveClass(/error/);
+
+		// Act: correct the value — should clear the error after the next debounce cycle
+		await page.fill('#foodKcal', '200');
+		await expect(page.locator('#foodKcal')).not.toHaveClass(/error/);
+	});
 });

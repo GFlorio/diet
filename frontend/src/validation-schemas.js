@@ -9,6 +9,9 @@ import {
     isoDate,
 } from './validation-core.js';
 
+/** @param {unknown} val */ const validateName     = (val) => string(val, { minLen: 1, maxLen: 120, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u });
+/** @param {unknown} val */ const validateRefLabel = (val) => string(val, { minLen: 1, maxLen: 120 });
+
 /**
  * @typedef {import('./data.js').Food} Food
  * @typedef {import('./data.js').Meal} Meal
@@ -52,8 +55,8 @@ function foodSnapshot(v){
     try {
         base = validateAndCollect({
             id: () => number(o.id, { min: 1, integer: true }),
-            name: () => string(o.name, { minLen: 1, maxLen: 120, pattern:/^[\p{L}\p{N}\s'\-_.()]+$/u }),
-            refLabel: () => string(o.refLabel, { minLen: 1, maxLen: 120 }),
+            name: () => validateName(o.name),
+            refLabel: () => validateRefLabel(o.refLabel),
             updatedAt: () => number(o.updatedAt, { min: 0, integer: true }),
         });
     } catch (e) {
@@ -84,8 +87,8 @@ function food(v){
     try {
         base = validateAndCollect({
             id: () => number(o.id, { min: 1, integer: true }),
-            name: () => string(o.name, { minLen: 1, maxLen: 120, pattern:/^[\p{L}\p{N}\s'\-_.()]+$/u }),
-            refLabel: () => string(o.refLabel, { minLen: 1, maxLen: 120 }),
+            name: () => validateName(o.name),
+            refLabel: () => validateRefLabel(o.refLabel),
             updatedAt: () => number(o.updatedAt, { min: 0, integer: true }),
         });
     } catch (e) { collectFieldsFromError(e, bad, 'id'); }
@@ -112,8 +115,8 @@ function createFoodInput(v){
     let base = {};
     try {
         base = validateAndCollect({
-            name: () => string(o.name, { minLen: 1, maxLen: 120, pattern:/^[\p{L}\p{N}\s'\-_.()]+$/u }),
-            refLabel: () => string(o.refLabel, { minLen: 1, maxLen: 120 }),
+            name: () => validateName(o.name),
+            refLabel: () => validateRefLabel(o.refLabel),
         });
     } catch (e) { collectFieldsFromError(e, bad, 'name'); }
     /** @type {Macros|undefined} */
@@ -197,8 +200,8 @@ function foodPatch(patch){
     isObject(patch) || (()=>{ throw new ValidationError('Expected patch object', ['name','refLabel','kcal','prot','carbs','fats','archived']); })();
     const p = /** @type {Record<string, unknown>} */ (patch);
     const validators = /** @type {Record<string, () => any>} */({});
-    if ('name' in p) {validators.name = () => string(p.name, { minLen: 1, maxLen: 120 });}
-    if ('refLabel' in p) {validators.refLabel = () => string(p.refLabel, { minLen: 1, maxLen: 120 });}
+    if ('name' in p) {validators.name = () => validateName(p.name);}
+    if ('refLabel' in p) {validators.refLabel = () => validateRefLabel(p.refLabel);}
     if ('kcal' in p) {validators.kcal = () => Math.round(number(p.kcal, { min: 0, max: 5000 }));}
     if ('prot' in p) {validators.prot = () => number(p.prot, { min: 0, max: 1000 });}
     if ('carbs' in p) {validators.carbs = () => number(p.carbs, { min: 0, max: 1000 });}

@@ -201,6 +201,7 @@ export function setupFoods(){
     const name = /** @type {CustomEvent} */(e).detail?.name || '';
     const foodNameEl = $.input($.id('foodName'));
     const foodFormEl = $.form($.id('foodForm'));
+    $.showPage('foods');
     foodFormEl.reset();
     foodNameEl.value = name;
     foodNameEl.focus();
