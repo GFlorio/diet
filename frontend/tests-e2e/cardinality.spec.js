@@ -11,10 +11,10 @@ const DB_NAME = 'nutri-pwa';
  */
 async function seedFoodsDB(page, count) {
   await page.evaluate(async (count) => {
-    const db = await new Promise((res, rej) => {
+    const db = await new Promise((resolve, reject) => {
       const req = indexedDB.open('nutri-pwa');
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
     });
     const tx = db.transaction(['foods'], 'readwrite');
     const store = tx.objectStore('foods');
@@ -31,9 +31,9 @@ async function seedFoodsDB(page, count) {
         updatedAt: now + i,
       });
     }
-    await new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
     });
   }, count);
 }
@@ -46,14 +46,14 @@ async function seedFoodsDB(page, count) {
  */
 async function seedMealsDB(page, date, mealCount) {
   return page.evaluate(async ({ date, mealCount }) => {
-    const db = await new Promise((res, rej) => {
+    const db = await new Promise((resolve, reject) => {
       const req = indexedDB.open('nutri-pwa');
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
     });
 
     // Create one food and capture its auto-generated id
-    const foodId = await new Promise((res, rej) => {
+    const foodId = await new Promise((resolve, reject) => {
       const tx = db.transaction(['foods'], 'readwrite');
       const req = tx.objectStore('foods').add({
         name: 'Smoke Food',
@@ -65,21 +65,24 @@ async function seedMealsDB(page, date, mealCount) {
         archived: false,
         updatedAt: Date.now(),
       });
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
     });
 
     // Seed meals for the given date
     const now = Date.now();
-    const snapshot = { id: foodId, name: 'Smoke Food', refLabel: '100 g', kcal: 100, prot: 10, carbs: 20, fats: 5, updatedAt: now };
+    const snapshot = {
+      id: foodId, name: 'Smoke Food', refLabel: '100 g',
+      kcal: 100, prot: 10, carbs: 20, fats: 5, updatedAt: now,
+    };
     const tx2 = db.transaction(['meals'], 'readwrite');
     const mStore = tx2.objectStore('meals');
     for (let i = 0; i < mealCount; i++) {
       mStore.add({ foodId, foodSnapshot: snapshot, multiplier: 1, date, updatedAt: now + i });
     }
-    await new Promise((res, rej) => {
-      tx2.oncomplete = res;
-      tx2.onerror = () => rej(tx2.error);
+    await new Promise((resolve, reject) => {
+      tx2.oncomplete = resolve;
+      tx2.onerror = () => reject(tx2.error);
     });
 
     return { kcalPerMeal: 100, protPerMeal: 10, carbsPerMeal: 20, fatsPerMeal: 5 };

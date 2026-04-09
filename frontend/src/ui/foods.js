@@ -32,9 +32,6 @@ export function setupFoods(){
     ['prot', foodProt],
     ['carbs', foodCarb],
     ['fats', foodFat],
-    // Fallback keys used by validators
-    ['string', foodName],
-    ['number', foodKcal],
   ]);
 
   /**
@@ -84,7 +81,8 @@ export function setupFoods(){
     if (!f){
       clearFoodForm();
     } else {
-      foodFormTitle.textContent = 'Edit food'; foodUpdated.textContent = `updated ${new Date(f.updatedAt).toLocaleString()}`;
+      foodFormTitle.textContent = 'Edit food';
+      foodUpdated.textContent = `updated ${new Date(f.updatedAt).toLocaleString()}`;
       foodId.value = String(f.id);
       foodName.value=f.name;
       foodRefLabel.value=f.refLabel;
@@ -103,24 +101,30 @@ export function setupFoods(){
   async function renderFoods(){
     const status = foodStatus.value === 'archived' ? 'archived' : 'active';
     const xs = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
-    foodsList.innerHTML = xs.map((/** @type {Food} */ f)=>`
+    foodsList.innerHTML = xs.map((/** @type {Food} */ f)=>{
+      const archivedChip = f.archived ? '<span class="chip">Archived</span>' : '';
+      const archiveClass = f.archived ? 'unarchive' : 'archive';
+      const archiveLabel = f.archived ? '📦 Unarchive' : '📦 Archive';
+      const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
+      return `
       <div class="item" data-id="${f.id}">
         <div>
-          <div><strong>${$.esc(f.name)}</strong> ${f.archived?'<span class="chip">Archived</span>':''}</div>
-          <div class="meta">${$.esc(f.refLabel)} · ${$.nutrMeta(f.kcal, f.prot, f.carbs, f.fats)}</div>
+          <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
+          <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
         </div>
         <div class="actions">
           <button class="btn small ghost edit">✏️ Edit</button>
-          <button class="btn small ghost ${f.archived?'unarchive':'archive'}">${f.archived?'📦 Unarchive':'📦 Archive'}</button>
-          <button class="btn small ghost updateMeals" title="Update past meals to latest">⟳ Update meals</button>
+          <button class="btn small ghost ${archiveClass}">${archiveLabel}</button>
+          <button class="btn small ghost updateMeals"
+            title="Update past meals to latest">⟳ Update meals</button>
         </div>
-      </div>`).join('') || `<div class="muted">No foods yet.</div>`;
+      </div>`;
+    }).join('') || `<div class="muted">No foods yet.</div>`;
   }
 
   foodsList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
     const target = $.html($.assertEl(e.target));
     const row = $.html($.assertEl(target.closest('.item')));
-    if (!row) {return;}
 
     const id = v.id(row.dataset.id);
     const f = await Foods.byId(id);
@@ -149,19 +153,28 @@ export function setupFoods(){
   foodSearch.addEventListener('input', renderFoods);
   foodStatus.addEventListener('change', renderFoods);
 
+  /**
+   * Read current form field values into a payload object.
+   * @returns {{ name: string, refLabel: string,
+   *   kcal: string, prot: string, carbs: string, fats: string }}
+   */
+  function readFormPayload() {
+    return {
+      name: foodName.value,
+      refLabel: foodRefLabel.value,
+      kcal: foodKcal.value,
+      prot: foodProt.value,
+      carbs: foodCarb.value,
+      fats: foodFat.value,
+    };
+  }
+
   foodForm.addEventListener('submit', async (/** @type {SubmitEvent} */ e) => {
     e.preventDefault();
     // Validate on submit; avoid annoying while typing
     try {
       clearFieldErrors();
-      const payload = v.createFoodInput({
-        name: foodName.value,
-        refLabel: foodRefLabel.value,
-        kcal: foodKcal.value,
-        prot: foodProt.value,
-        carbs: foodCarb.value,
-        fats: foodFat.value,
-      });
+      const payload = v.createFoodInput(readFormPayload());
       if (foodId.value) {
         await Foods.update(v.id(foodId.value), payload);
       } else { await Foods.create(payload); }
@@ -172,7 +185,6 @@ export function setupFoods(){
       const e = /** @type {Error & {fields?: string[]}} */ (err);
       const msg = e?.message || 'Invalid input';
       foodFormMsg.textContent = msg;
-      clearFieldErrors();
       applyValidationErrors(e);
     }
   });
@@ -182,29 +194,21 @@ export function setupFoods(){
     foodFormMsg.textContent = '';
     clearFieldErrors();
     try {
-      v.createFoodInput({
-        name: foodName.value,
-        refLabel: foodRefLabel.value,
-        kcal: foodKcal.value,
-        prot: foodProt.value,
-        carbs: foodCarb.value,
-        fats: foodFat.value,
-      });
+      v.createFoodInput(readFormPayload());
     } catch (err) {
       applyValidationErrors(err);
     }
   }, 400);
-  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat].forEach(el => el.addEventListener('input', liveCheck));
+  [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat]
+    .forEach(el => el.addEventListener('input', liveCheck));
 
   // Listen to cross-module navigation prefill
   window.addEventListener('go-foods', (/** @type {Event} */ e) => {
     const name = /** @type {CustomEvent} */(e).detail?.name || '';
-    const foodNameEl = $.input($.id('foodName'));
-    const foodFormEl = $.form($.id('foodForm'));
     $.showPage('foods');
-    foodFormEl.reset();
-    foodNameEl.value = name;
-    foodNameEl.focus();
+    foodForm.reset();
+    foodName.value = name;
+    foodName.focus();
   });
 
   renderFoods();

@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code
+in this repository.
 
 ## Commands
 
@@ -41,14 +42,18 @@ DB layer        frontend/src/db.js   (IndexedDB wrapper)
 ```
 
 **Key modules:**
-- `db.js` — low-level IndexedDB transactions
+- `db.js` — low-level IndexedDB transactions. All exported functions use `async/await`
+  for the outer `ensureDB()` call; the inner IDB callback is still wrapped in
+  `new Promise` (unavoidable). Do not reintroduce `.then()` chains.
 - `data-foods.js` / `data-meals.js` — CRUD APIs consumed by UI
 - `validation-core.js` — validation framework (assert, collectFields, validateAndCollect)
 - `validation-schemas.js` — declarative rules for Food and Meal fields
-- `utils.js` — DOM helpers (`$.sel`, `$.id`, `$.arr`, `$.html`, `$.input`), formatters (`$.fmtNum`, `$.esc`), page router (`$.showPage`)
+- `utils.js` — DOM helpers (`$.sel`, `$.id`, `$.arr`, `$.html`, `$.input`),
+  formatters (`$.fmtNum`, `$.esc`), page router (`$.showPage`)
 - `pwa.js` — Service Worker registration and offline/update flow
 
-**Meal snapshots:** When a meal is created, food macros are snapshotted into `foodSnapshot`. Later edits to the food do not affect existing meals.
+**Meal snapshots:** When a meal is created, food macros are snapshotted into
+`foodSnapshot`. Later edits to the food do not affect existing meals.
 
 **Import conventions:**
 ```js

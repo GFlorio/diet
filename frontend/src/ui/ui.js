@@ -28,9 +28,7 @@ export function setupTheme(){
 export function setupNav(){
 	$.arr('.tab').forEach(tab => $.html(tab).addEventListener('click', () => {
 		const page = /** @type {'meals'|'foods'|'report'} */ ($.html(tab).dataset.page);
-		const pages = ['meals','foods','report'];
-		$.arr('.tab').forEach(t => $.html(t).classList.toggle('active', $.html(t).dataset.page === page));
-		pages.forEach(p => $.html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
+		$.showPage(page);
 	}));
 }
 

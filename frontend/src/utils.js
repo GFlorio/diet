@@ -41,7 +41,8 @@ export function assertEl(obj) {
 export function showPage(page){
   const pages = ['meals', 'foods', 'report'];
   arr('.tab').forEach(t => html(t).classList.toggle('active', html(t).dataset.page === page));
-  pages.forEach(p => html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
+  pages.forEach(p =>
+    html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
 }
 
 /** Format macro nutrients meta string
@@ -55,64 +56,52 @@ export function nutrMeta(kcal, prot, carbs, fats){
 }
 
 /**
+ * Asserts that an element is an instance of the given constructor.
+ * @template {abstract new (...args: any) => Element} C
+ * @param {Element|null} el
+ * @param {C} Ctor
+ * @param {string} label
+ * @returns {InstanceType<C>}
+ */
+function castEl(el, Ctor, label) {
+    if (el instanceof Ctor) { return /** @type {InstanceType<C>} */ (el); }
+    throw new Error(`Element is not an ${label}`);
+}
+
+/**
  * Returns the element as a HTMLElement.
  * @param {Element|null} el
  * @returns {HTMLElement}
  */
-export function html(el) {
-    if (el instanceof (HTMLElement)) {
-        return el;
-    }
-    throw new Error('Element is not an HTML element');
-}
+export function html(el) { return castEl(el, HTMLElement, 'HTML element'); }
 
 /**
  * Returns the element as a HTMLInputElement.
  * @param {Element|null} el
  * @returns {HTMLInputElement}
  */
-export function input(el) {
-    if (el instanceof HTMLInputElement) {
-        return el;
-    }
-    throw new Error('Element is not an HTML input element');
-}
+export function input(el) { return castEl(el, HTMLInputElement, 'HTML input element'); }
 
 /**
  * Returns the element as a HTMLFormElement.
  * @param {Element|null} el
  * @returns {HTMLFormElement}
  */
-export function form(el) {
-    if (el instanceof HTMLFormElement) {
-        return el;
-    }
-    throw new Error('Element is not an HTML form element');
-}
+export function form(el) { return castEl(el, HTMLFormElement, 'HTML form element'); }
 
 /**
  * Returns the element as a HTMLButtonElement.
  * @param {Element|null} el
  * @returns {HTMLButtonElement}
  */
-export function button(el) {
-    if (el instanceof HTMLButtonElement) {
-        return el;
-    }
-    throw new Error('Element is not an HTML button element');
-}
+export function button(el) { return castEl(el, HTMLButtonElement, 'HTML button element'); }
 
 /**
  * Returns the element as a HTMLSelectElement.
  * @param {Element|null} el
  * @returns {HTMLSelectElement}
  */
-export function select(el) {
-    if (el instanceof HTMLSelectElement) {
-        return el;
-    }
-    throw new Error('Element is not an HTML select element');
-}
+export function select(el) { return castEl(el, HTMLSelectElement, 'HTML select element'); }
 
 
 /**

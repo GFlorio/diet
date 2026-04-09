@@ -46,6 +46,7 @@ label{ font-size:12px; color:var(--muted) }
 
 .list{ display:grid; gap:8px }
 .item{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; border:1px dashed var(--border); border-radius:12px; padding:10px }
+.item.rep-row{ grid-template-columns: 1fr 80px 80px 80px 80px }
 .item .meta{ font-size:12px; color:var(--muted) }
 .chips{ display:flex; gap:6px; flex-wrap:wrap }
 .chip{ font-size:12px; padding:4px 6px; border:1px solid var(--border); border-radius:10px }

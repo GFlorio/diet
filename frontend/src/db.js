@@ -1,5 +1,3 @@
-import { now } from './utils.js';
-
 /**
  * @type {IDBDatabase | undefined}
  */
@@ -92,6 +90,7 @@ export const ensureDB = async () => {
   if (!db) {db = await openDB();}
   return db;
 };
+
 /**
  * Internal: Wraps a transaction for one or more stores.
  * @template T
@@ -100,22 +99,21 @@ export const ensureDB = async () => {
  * @param {(tx: IDBTransaction, store: IDBObjectStore|null) => void} fn
  * @returns {Promise<void>}
  */
-export const txWrap = (stores, mode, fn) => {
-  return ensureDB().then((dbi) => {
-    return new Promise((resolve, reject) => {
-      const tx = dbi.transaction(stores, mode);
-      const store = stores.length === 1 ? tx.objectStore(stores[0]) : null;
-      fn(tx, store);
-      tx.oncomplete = function () {
-        resolve(undefined);
-      };
-      tx.onerror = function () {
-        reject(tx.error);
-      };
-      tx.onabort = function () {
-        reject(tx.error);
-      };
-    });
+export const txWrap = async (stores, mode, fn) => {
+  const dbi = await ensureDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction(stores, mode);
+    const store = stores.length === 1 ? tx.objectStore(stores[0]) : null;
+    fn(tx, store);
+    tx.oncomplete = function () {
+      resolve(undefined);
+    };
+    tx.onerror = function () {
+      reject(tx.error);
+    };
+    tx.onabort = function () {
+      reject(tx.error);
+    };
   });
 };
 
@@ -127,24 +125,19 @@ export const txWrap = (stores, mode, fn) => {
  * @param {*} [query]
  * @returns {Promise<T[]>}
  */
-export const getAll = async (
-  storeName,
-  index,
-  query
-) => {
-  return ensureDB().then((dbi) => {
-    return new Promise((resolve, reject) => {
-      const tx = dbi.transaction([storeName], 'readonly');
-      const store = tx.objectStore(storeName);
-      const src = index ? store.index(index) : store;
-      const req = query ? src.getAll(query) : src.getAll();
-      req.onsuccess = function () {
-        resolve(req.result);
-      };
-      req.onerror = function () {
-        reject(req.error);
-      };
-    });
+export const getAll = async (storeName, index, query) => {
+  const dbi = await ensureDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction([storeName], 'readonly');
+    const store = tx.objectStore(storeName);
+    const src = index ? store.index(index) : store;
+    const req = query ? src.getAll(query) : src.getAll();
+    req.onsuccess = function () {
+      resolve(req.result);
+    };
+    req.onerror = function () {
+      reject(req.error);
+    };
   });
 };
 
@@ -155,30 +148,26 @@ export const getAll = async (
  * @param {(val: T) => boolean} pred
  * @returns {Promise<T[]>}
  */
-export const getWhere = async (
-  storeName,
-  pred
-) => {
-  return ensureDB().then((dbi) => {
-    return new Promise((resolve, reject) => {
-      const tx = dbi.transaction([storeName], 'readonly');
-      const store = tx.objectStore(storeName);
-      const req = store.openCursor();
-      /** @type {any[]} */
-      const out = [];
-      req.onsuccess = function () {
-        const cur = req.result;
-        if (!cur) {
-          resolve(out);
-          return;
-        }
-        if (pred(cur.value)) { out.push(cur.value); }
-        cur.continue();
-      };
-      req.onerror = function () {
-        reject(req.error);
-      };
-    });
+export const getWhere = async (storeName, pred) => {
+  const dbi = await ensureDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction([storeName], 'readonly');
+    const store = tx.objectStore(storeName);
+    const req = store.openCursor();
+    /** @type {any[]} */
+    const out = [];
+    req.onsuccess = function () {
+      const cur = req.result;
+      if (!cur) {
+        resolve(out);
+        return;
+      }
+      if (pred(cur.value)) { out.push(cur.value); }
+      cur.continue();
+    };
+    req.onerror = function () {
+      reject(req.error);
+    };
   });
 };
 
@@ -188,22 +177,18 @@ export const getWhere = async (
  * @param {*} val
  * @returns {Promise<IDBValidKey>} The key/id of the stored value
  */
-export const put = async (
-  storeName,
-  val
-) => {
-  return ensureDB().then((dbi) => {
-    return new Promise((resolve, reject) => {
-      const tx = dbi.transaction([storeName], 'readwrite');
-      const store = tx.objectStore(storeName);
-      const req = store.put(val);
-      req.onsuccess = function () {
-        resolve(req.result);
-      };
-      req.onerror = function () {
-        reject(req.error);
-      };
-    });
+export const put = async (storeName, val) => {
+  const dbi = await ensureDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction([storeName], 'readwrite');
+    const store = tx.objectStore(storeName);
+    const req = store.put(val);
+    req.onsuccess = function () {
+      resolve(req.result);
+    };
+    req.onerror = function () {
+      reject(req.error);
+    };
   });
 };
 
@@ -213,10 +198,7 @@ export const put = async (
  * @param {number|string} key
  * @returns {Promise<void>}
  */
-export const del = (
-  storeName,
-  key
-) => txWrap([storeName], 'readwrite', (tx, s) => {
+export const del = (storeName, key) => txWrap([storeName], 'readwrite', (tx, s) => {
   if (s) { s.delete(key); }
 });
 
@@ -227,23 +209,18 @@ export const del = (
  * @param {number|string} key
  * @returns {Promise<T|undefined>}
  */
-export const get = async (
-  storeName,
-  key
-) => {
-  return ensureDB().then((dbi) => {
-    return new Promise((resolve, reject) => {
-      const tx = dbi.transaction([storeName], 'readonly');
-      const s = tx.objectStore(storeName);
-      const req = s.get(key);
-      req.onsuccess = function () {
-        resolve(req.result ?? undefined);
-      };
-      req.onerror = function () {
-        reject(req.error);
-      };
-    });
+export const get = async (storeName, key) => {
+  const dbi = await ensureDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbi.transaction([storeName], 'readonly');
+    const s = tx.objectStore(storeName);
+    const req = s.get(key);
+    req.onsuccess = function () {
+      resolve(req.result ?? undefined);
+    };
+    req.onerror = function () {
+      reject(req.error);
+    };
   });
 };
 
-export { now };

@@ -6,10 +6,10 @@ import { Meals } from '../data.js';
  * @typedef {import('../data.js').Macros} Macros
  */
 export function setupReport(){
-  const repFrom = /** @type {HTMLInputElement} */ (document.getElementById('repFrom'));
-  const repTo = /** @type {HTMLInputElement} */ (document.getElementById('repTo'));
-  const repRefresh = /** @type {HTMLButtonElement} */ (document.getElementById('repRefresh'));
-  const repTable = /** @type {HTMLElement} */ (document.getElementById('repTable'));
+  const repFrom = $.input($.id('repFrom'));
+  const repTo = $.input($.id('repTo'));
+  const repRefresh = $.button($.id('repRefresh'));
+  const repTable = $.html($.id('repTable'));
   /** @type {(d: string, n: number) => string} */
   const shiftDay = (d, n) => {
     const dt = new Date(d);
@@ -46,26 +46,25 @@ export function setupReport(){
     const rows = Object.keys(days)
       .sort()
       .map((d) => [d, days[d]]);
-    repTable.innerHTML = `
-      <div class="item" style="grid-template-columns: 1fr 80px 80px 80px 80px">
-        <strong>Day</strong><strong class="right">kcal</strong><strong class="right">P</strong><strong class="right">C</strong><strong class="right">F</strong>
-      </div>
-      ${
-        rows.length
-          ? rows
-              .map(
-                ([d, t]) => `
-       <div class="item" style="grid-template-columns: 1fr 80px 80px 80px 80px">
+    const rowsHtml = rows.length
+      ? rows.map(([d, t]) => `
+       <div class="item rep-row">
          <div>${d}</div>
          <div class="right">${$.fmtNum(t.kcal, 0)}</div>
          <div class="right">${$.fmtNum(t.prot)}</div>
          <div class="right">${$.fmtNum(t.carbs)}</div>
          <div class="right">${$.fmtNum(t.fats)}</div>
-       </div>`
-              )
-              .join('')
-          : '<div class="muted">No meals in range.</div>'
-      }
+       </div>`).join('')
+      : '<div class="muted">No meals in range.</div>';
+    repTable.innerHTML = `
+      <div class="item rep-row">
+        <strong>Day</strong>
+        <strong class="right">kcal</strong>
+        <strong class="right">P</strong>
+        <strong class="right">C</strong>
+        <strong class="right">F</strong>
+      </div>
+      ${rowsHtml}
     `;
   }
 

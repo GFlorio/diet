@@ -8,7 +8,8 @@ import { getAll, get, put } from './db.js';
 
 /**
  * Input accepted by Foods.create (only prot/carbs/fats fields)
- * @typedef {{ name: string, refLabel: string, kcal: number, prot: number, carbs: number, fats: number }} CreateFoodInput
+ * @typedef {{ name: string, refLabel: string,
+ *   kcal: number, prot: number, carbs: number, fats: number }} CreateFoodInput
  */
 
 /**
@@ -35,8 +36,8 @@ export const Foods = {
   async list({ search = '', status = 'active' } = {}) {
     const all = /** @type {Food[]} */ (await getAll('foods'));
     let xs = all.sort((a, b) => a.name.localeCompare(b.name));
-  if (status === 'active') { xs = xs.filter((f) => !f.archived); }
-  if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
+    if (status === 'active') { xs = xs.filter((f) => !f.archived); }
+    if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
     if (search) {
       const q = search.trim().toLowerCase();
       xs = xs.filter((f) => (f.name + ' ' + f.refLabel).toLowerCase().includes(q));
@@ -49,16 +50,16 @@ export const Foods = {
    * @returns {Promise<Food>}
    */
   async create(foodIn) {
-    const { name, refLabel, kcal, prot, carbs, fats } = /** @type {CreateFoodInput} */ foodIn;
+    const { name, refLabel, kcal, prot, carbs, fats } = /** @type {CreateFoodInput} */ (foodIn);
     const t = now();
     /** @type {Partial<Food>} */
     const food = {
       name: name.trim(),
       refLabel: refLabel.trim(),
-      kcal: +kcal,
-      prot: +prot,
-      carbs: +carbs,
-      fats: +fats,
+      kcal,
+      prot,
+      carbs,
+      fats,
       archived: false,
       updatedAt: t,
     };
@@ -74,7 +75,7 @@ export const Foods = {
    */
   async update(id, patch) {
     const cur = /** @type {Food|undefined} */ (await get('foods', id));
-  if (!cur) { return; }
+    if (!cur) { return; }
     const next = /** @type {Food} */ ({ ...cur, ...patch, updatedAt: now() });
     await put('foods', next);
     return next;
@@ -94,7 +95,6 @@ export const Foods = {
    * @returns {Promise<Food|undefined>}
    */
   async byId(id) {
-    const f = await get('foods', id);
-    return /** @type {Food|undefined} */ (f || undefined);
+    return /** @type {Food|undefined} */ (get('foods', id));
   },
 };

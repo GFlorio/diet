@@ -9,8 +9,12 @@ import {
     isoDate,
 } from './validation-core.js';
 
-/** @param {unknown} val */ const validateName     = (val) => string(val, { minLen: 1, maxLen: 120, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u });
-/** @param {unknown} val */ const validateRefLabel = (val) => string(val, { minLen: 1, maxLen: 120 });
+/** @param {unknown} val */
+const validateName = (val) => string(val, {
+    minLen: 1, maxLen: 120, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u,
+});
+/** @param {unknown} val */
+const validateRefLabel = (val) => string(val, { minLen: 1, maxLen: 120 });
 
 /**
  * @typedef {import('./data.js').Food} Food
@@ -28,7 +32,9 @@ import {
  * @throws {ValidationError}
  */
 function macros(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected Macros object', ['kcal','prot','carbs','fats']); })();
+    if (!isObject(v)) {
+        throw new ValidationError('Expected Macros object', ['kcal','prot','carbs','fats']);
+    }
     const o = /** @type {Record<string, unknown>} */ (v);
     const res = validateAndCollect({
         kcal: () => Math.round(number(o.kcal, { min: 0, max: 5000 })),
@@ -40,17 +46,18 @@ function macros(v){
 }
 
 /**
- * Validate a FoodSnapshot object.
+ * Shared validation for Food and FoodSnapshot (id + base fields + macros).
  * @param {unknown} v
- * @returns {FoodSnapshot}
- * @throws {ValidationError}
+ * @param {string} typeName
+ * @param {string[]} typeFields
+ * @returns {{ o: Record<string, unknown>, base: Record<string, unknown>, m: Macros }}
  */
-function foodSnapshot(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected FoodSnapshot', ['id','name','refLabel','kcal','prot','carbs','fats','updatedAt']); })();
+function validateFoodLike(v, typeName, typeFields) {
+    if (!isObject(v)) { throw new ValidationError(`Expected ${typeName}`, typeFields); }
     const o = /** @type {Record<string, unknown>} */ (v);
     /** @type {Set<string>} */
     const bad = new Set();
-    /** @type {Partial<FoodSnapshot>} */
+    /** @type {Record<string, unknown>} */
     let base = {};
     try {
         base = validateAndCollect({
@@ -66,8 +73,19 @@ function foodSnapshot(v){
     let m;
     try { m = macros(o); }
     catch (e) { collectFieldsFromError(e, bad, 'kcal'); }
+    if (bad.size) { throw new ValidationError('Invalid fields', Array.from(bad)); }
+    return { o, base, m: /** @type {Macros} */ (m) };
+}
 
-    if (bad.size) {throw new ValidationError('Invalid fields', Array.from(bad));}
+/**
+ * Validate a FoodSnapshot object.
+ * @param {unknown} v
+ * @returns {FoodSnapshot}
+ * @throws {ValidationError}
+ */
+function foodSnapshot(v){
+    const fields = ['id','name','refLabel','kcal','prot','carbs','fats','updatedAt'];
+    const { base, m } = validateFoodLike(v, 'FoodSnapshot', fields);
     return /** @type {FoodSnapshot} */({ ...base, ...m });
 }
 
@@ -78,25 +96,8 @@ function foodSnapshot(v){
  * @throws {ValidationError}
  */
 function food(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected Food', ['id','name','refLabel','kcal','prot','carbs','fats','archived','updatedAt']); })();
-    const o = /** @type {Record<string, unknown>} */ (v);
-    /** @type {Set<string>} */
-    const bad = new Set();
-    /** @type {Partial<Food>} */
-    let base = {};
-    try {
-        base = validateAndCollect({
-            id: () => number(o.id, { min: 1, integer: true }),
-            name: () => validateName(o.name),
-            refLabel: () => validateRefLabel(o.refLabel),
-            updatedAt: () => number(o.updatedAt, { min: 0, integer: true }),
-        });
-    } catch (e) { collectFieldsFromError(e, bad, 'id'); }
-    /** @type {Macros|undefined} */
-    let m;
-    try { m = macros(o); }
-    catch (e) { collectFieldsFromError(e, bad, 'kcal'); }
-    if (bad.size) {throw new ValidationError('Invalid fields', Array.from(bad));}
+    const fields = ['id','name','refLabel','kcal','prot','carbs','fats','archived','updatedAt'];
+    const { o, base, m } = validateFoodLike(v, 'Food', fields);
     return /** @type {Food} */({ ...base, ...m, archived: Boolean(o.archived) });
 }
 
@@ -107,7 +108,10 @@ function food(v){
  * @throws {ValidationError}
  */
 function createFoodInput(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected CreateFoodInput', ['name','refLabel','kcal','prot','carbs','fats']); })();
+    if (!isObject(v)) {
+        throw new ValidationError('Expected CreateFoodInput',
+            ['name','refLabel','kcal','prot','carbs','fats']);
+    }
     const o = /** @type {Record<string, unknown>} */ (v);
     /** @type {Set<string>} */
     const bad = new Set();
@@ -134,7 +138,10 @@ function createFoodInput(v){
  * @throws {ValidationError}
  */
 function meal(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected Meal', ['id','foodId','foodSnapshot','multiplier','date','updatedAt']); })();
+    if (!isObject(v)) {
+        throw new ValidationError('Expected Meal',
+            ['id','foodId','foodSnapshot','multiplier','date','updatedAt']);
+    }
     const o = /** @type {Record<string, unknown>} */ (v);
     /** @type {Set<string>} */
     const bad = new Set();
@@ -169,7 +176,9 @@ function meal(v){
  * @throws {ValidationError}
  */
 function mealCreate(v){
-    isObject(v) || (()=>{ throw new ValidationError('Expected meal create opts', ['food','multiplier','date']); })();
+    if (!isObject(v)) {
+        throw new ValidationError('Expected meal create opts', ['food','multiplier','date']);
+    }
     const o = /** @type {Record<string, unknown>} */ (v);
     /** @type {Set<string>} */
     const bad = new Set();
@@ -197,7 +206,10 @@ function mealCreate(v){
  * @throws {ValidationError}
  */
 function foodPatch(patch){
-    isObject(patch) || (()=>{ throw new ValidationError('Expected patch object', ['name','refLabel','kcal','prot','carbs','fats','archived']); })();
+    if (!isObject(patch)) {
+        throw new ValidationError('Expected patch object',
+            ['name','refLabel','kcal','prot','carbs','fats','archived']);
+    }
     const p = /** @type {Record<string, unknown>} */ (patch);
     const validators = /** @type {Record<string, () => any>} */({});
     if ('name' in p) {validators.name = () => validateName(p.name);}
@@ -218,26 +230,18 @@ function foodPatch(patch){
  * @throws {ValidationError}
  */
 function mealPatch(patch){
-    isObject(patch) || (()=>{ throw new ValidationError('Expected patch object', ['multiplier','date','foodSnapshot']); })();
+    if (!isObject(patch)) {
+        throw new ValidationError('Expected patch object',
+            ['multiplier','date','foodSnapshot']);
+    }
     const p = /** @type {Record<string, unknown>} */ (patch);
-    /** @type {Set<string>} */
-    const bad = new Set();
-    /** @type {Partial<Meal>} */
-    const out = {};
+    const validators = /** @type {Record<string, () => any>} */({});
     if ('multiplier' in p) {
-        try { out.multiplier = number(p.multiplier, { min: 0, max: 100 }); }
-        catch (e) { collectFieldsFromError(e, bad, 'multiplier'); }
+        validators.multiplier = () => number(p.multiplier, { min: 0, max: 100 });
     }
-    if ('date' in p) {
-        try { out.date = isoDate(p.date); }
-        catch (e) { collectFieldsFromError(e, bad, 'date'); }
-    }
-    if ('foodSnapshot' in p) {
-        try { out.foodSnapshot = foodSnapshot(p.foodSnapshot); }
-        catch (e) { collectFieldsFromError(e, bad, 'foodSnapshot'); }
-    }
-    if (bad.size) {throw new ValidationError('Invalid fields', Array.from(bad));}
-    return out;
+    if ('date' in p) {validators.date = () => isoDate(p.date);}
+    if ('foodSnapshot' in p) {validators.foodSnapshot = () => foodSnapshot(p.foodSnapshot);}
+    return /** @type {Partial<Meal>} */ (validateAndCollect(validators, 'Invalid fields'));
 }
 
 /**
