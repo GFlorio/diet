@@ -59,6 +59,7 @@ DB layer        frontend/src/db.js   (IndexedDB wrapper)
 ```js
 import * as $ from '../utils.js';
 import * as v from '../validation.js';
+import * as db from './db.js';
 ```
 
 ## Testing

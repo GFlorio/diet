@@ -1,5 +1,5 @@
-import { now } from './utils.js';
-import { getAll, get, put, del, getWhere } from './db.js';
+import * as $ from './utils.js';
+import * as db from './db.js';
 
 /**
  * @typedef {import('./db.js').Food} Food
@@ -45,11 +45,10 @@ export const Meals = {
    */
   async listByDate(dateISO) {
     try {
-      const xs = /** @type {Meal[]} */ (
-        await getAll('meals', 'by_date', IDBKeyRange.only(dateISO)));
+      const xs = await db.getAll('meals', 'by_date', IDBKeyRange.only(dateISO));
       return xs.sort((a, b) => a.id - b.id);
     } catch {
-      const all = /** @type {Meal[]} */ (await getAll('meals'));
+      const all = await db.getAll('meals');
       return all.filter((m) => m.date === dateISO).sort((a, b) => a.id - b.id);
     }
   },
@@ -63,12 +62,11 @@ export const Meals = {
   async listRange(fromISO, toISO) {
     // Prefer index query when available
     try {
-      const xs = /** @type {Meal[]} */ (
-        await getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO)));
+      const xs = await db.getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO));
       return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
     } catch {
       // Fallback: full scan (older browsers or unexpected failures)
-      const all = /** @type {Meal[]} */ (await getAll('meals'));
+      const all = await db.getAll('meals');
       return all
         .filter((m) => m.date >= fromISO && m.date <= toISO)
         .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
@@ -80,7 +78,7 @@ export const Meals = {
    * @returns {Promise<Meal>}
    */
   async create({ food, multiplier, date }) {
-    const t = now();
+    const t = $.now();
     /** @type {Partial<Meal>} */
     const meal = {
       foodId: food.id,
@@ -89,7 +87,7 @@ export const Meals = {
       date,
       updatedAt: t,
     };
-    const id = await put('meals', meal);
+    const id = await db.put('meals', meal);
     meal.id = Number(id);
     return /** @type {Meal} */ (meal);
   },
@@ -100,10 +98,10 @@ export const Meals = {
    * @returns {Promise<Meal|undefined>}
    */
   async update(id, patch) {
-    const cur = /** @type {Meal|undefined} */ (await get('meals', id));
+    const cur = await db.get('meals', id);
     if (!cur) { return; }
-    const next = /** @type {Meal} */ ({ ...cur, ...patch, updatedAt: now() });
-    await put('meals', next);
+    const next = /** @type {Meal} */ ({ ...cur, ...patch, updatedAt: $.now() });
+    await db.put('meals', next);
     return next;
   },
   /**
@@ -112,7 +110,7 @@ export const Meals = {
    * @returns {Promise<void>}
    */
   async remove(id) {
-    await del('meals', id);
+    await db.del('meals', id);
   },
   /**
    * Syncs a single meal's foodSnapshot to match the current Food.
@@ -120,14 +118,14 @@ export const Meals = {
    * @returns {Promise<Meal>}
    */
   async syncMealToFood(meal) {
-    const food = /** @type {Food|undefined} */ (await get('foods', meal.foodId));
+    const food = await db.get('foods', meal.foodId);
     if (!food) { return meal; }
     const next = /** @type {Meal} */ ({
       ...meal,
       foodSnapshot: snapshotFromFood(food),
-      updatedAt: now(),
+      updatedAt: $.now(),
     });
-    await put('meals', next);
+    await db.put('meals', next);
     return next;
   },
   /**
@@ -136,17 +134,17 @@ export const Meals = {
    * @returns {Promise<number>} Number of meals updated
    */
   async syncAllForFood(foodId) {
-    const food = /** @type {Food|undefined} */ (await get('foods', foodId));
+    const food = await db.get('foods', foodId);
     if (!food) { return 0; }
-    const meals = await getWhere('meals', (/** @type {Meal} */ m) => m.foodId === foodId);
+    const meals = await db.getWhere('meals', (m) => m.foodId === foodId);
     let n = 0;
     for (const meal of meals) {
       const next = /** @type {Meal} */ ({
         ...meal,
         foodSnapshot: snapshotFromFood(food),
-        updatedAt: now(),
+        updatedAt: $.now(),
       });
-      await put('meals', next);
+      await db.put('meals', next);
       n++;
     }
     return n;

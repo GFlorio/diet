@@ -51,6 +51,11 @@ const DB_VER = 1;
  */
 
 /**
+ * Maps every store name to its record type.
+ * @typedef {{ foods: Food, meals: Meal }} StoreMap
+ */
+
+/**
  * Opens the IndexedDB database.
  * @returns {Promise<IDBDatabase>}
  */
@@ -119,11 +124,11 @@ export const txWrap = async (stores, mode, fn) => {
 
 /**
  * Internal: Gets all records from a store or index, optionally filtered by query.
- * @template T
- * @param {string} storeName
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
  * @param {string=} index
  * @param {*} [query]
- * @returns {Promise<T[]>}
+ * @returns {Promise<StoreMap[S][]>}
  */
 export const getAll = async (storeName, index, query) => {
   const dbi = await ensureDB();
@@ -143,10 +148,10 @@ export const getAll = async (storeName, index, query) => {
 
 /**
  * Internal: Gets all records from a store matching a predicate.
- * @template T
- * @param {string} storeName
- * @param {(val: T) => boolean} pred
- * @returns {Promise<T[]>}
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
+ * @param {(val: StoreMap[S]) => boolean} pred
+ * @returns {Promise<StoreMap[S][]>}
  */
 export const getWhere = async (storeName, pred) => {
   const dbi = await ensureDB();
@@ -173,8 +178,9 @@ export const getWhere = async (storeName, pred) => {
 
 /**
  * Internal: Puts a value into a store.
- * @param {string} storeName
- * @param {*} val
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
+ * @param {Partial<StoreMap[S]>} val
  * @returns {Promise<IDBValidKey>} The key/id of the stored value
  */
 export const put = async (storeName, val) => {
@@ -194,7 +200,7 @@ export const put = async (storeName, val) => {
 
 /**
  * Internal: Deletes a record from a store by key.
- * @param {string} storeName
+ * @param {keyof StoreMap} storeName
  * @param {number|string} key
  * @returns {Promise<void>}
  */
@@ -204,10 +210,10 @@ export const del = (storeName, key) => txWrap([storeName], 'readwrite', (tx, s) 
 
 /**
  * Internal: Gets a record from a store by key.
- * @template T
- * @param {string} storeName
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
  * @param {number|string} key
- * @returns {Promise<T|undefined>}
+ * @returns {Promise<StoreMap[S]|undefined>}
  */
 export const get = async (storeName, key) => {
   const dbi = await ensureDB();

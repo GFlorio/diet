@@ -1,5 +1,5 @@
-import { now } from './utils.js';
-import { getAll, get, put } from './db.js';
+import * as $ from './utils.js';
+import * as db from './db.js';
 
 /**
  * @typedef {import('./db.js').Food} Food
@@ -34,7 +34,7 @@ export const Foods = {
    * @returns {Promise<Food[]>}
    */
   async list({ search = '', status = 'active' } = {}) {
-    const all = /** @type {Food[]} */ (await getAll('foods'));
+    const all = await db.getAll('foods');
     let xs = all.sort((a, b) => a.name.localeCompare(b.name));
     if (status === 'active') { xs = xs.filter((f) => !f.archived); }
     if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
@@ -51,7 +51,7 @@ export const Foods = {
    */
   async create(foodIn) {
     const { name, refLabel, kcal, prot, carbs, fats } = /** @type {CreateFoodInput} */ (foodIn);
-    const t = now();
+    const t = $.now();
     /** @type {Partial<Food>} */
     const food = {
       name: name.trim(),
@@ -63,7 +63,7 @@ export const Foods = {
       archived: false,
       updatedAt: t,
     };
-    const id = await put('foods', food);
+    const id = await db.put('foods', food);
     food.id = Number(id);
     return /** @type {Food} */ (food);
   },
@@ -74,10 +74,10 @@ export const Foods = {
    * @returns {Promise<Food|undefined>}
    */
   async update(id, patch) {
-    const cur = /** @type {Food|undefined} */ (await get('foods', id));
+    const cur = await db.get('foods', id);
     if (!cur) { return; }
-    const next = /** @type {Food} */ ({ ...cur, ...patch, updatedAt: now() });
-    await put('foods', next);
+    const next = /** @type {Food} */ ({ ...cur, ...patch, updatedAt: $.now() });
+    await db.put('foods', next);
     return next;
   },
   /**
@@ -95,6 +95,6 @@ export const Foods = {
    * @returns {Promise<Food|undefined>}
    */
   async byId(id) {
-    return /** @type {Food|undefined} */ (get('foods', id));
+    return db.get('foods', id);
   },
 };

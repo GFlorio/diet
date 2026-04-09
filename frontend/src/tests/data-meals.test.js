@@ -105,7 +105,7 @@ describe('Meals.syncAllForFood', () => {
     vi.mocked(db.getWhere).mockResolvedValue([makeMeal({ id: 1 })]);
     vi.mocked(db.put).mockResolvedValue(1);
     await Meals.syncAllForFood(1);
-    const savedMeal = vi.mocked(db.put).mock.calls[0][1];
+    const savedMeal = /** @type {import('../db.js').Meal} */ (vi.mocked(db.put).mock.calls[0][1]);
     expect(savedMeal.foodSnapshot.name).toBe('Brown Rice');
     expect(savedMeal.foodSnapshot.kcal).toBe(216);
   });
