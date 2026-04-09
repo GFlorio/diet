@@ -44,13 +44,8 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listByDate(dateISO) {
-    try {
-      const xs = await db.getAll('meals', 'by_date', IDBKeyRange.only(dateISO));
-      return xs.sort((a, b) => a.id - b.id);
-    } catch {
-      const all = await db.getAll('meals');
-      return all.filter((m) => m.date === dateISO).sort((a, b) => a.id - b.id);
-    }
+    const xs = await db.getAll('meals', 'by_date', IDBKeyRange.only(dateISO));
+    return xs.sort((a, b) => a.id - b.id);
   },
   /**
    * Lists meals within an inclusive date range.
@@ -60,17 +55,8 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listRange(fromISO, toISO) {
-    // Prefer index query when available
-    try {
-      const xs = await db.getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO));
-      return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-    } catch {
-      // Fallback: full scan (older browsers or unexpected failures)
-      const all = await db.getAll('meals');
-      return all
-        .filter((m) => m.date >= fromISO && m.date <= toISO)
-        .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-    }
+    const xs = await db.getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO));
+    return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
   },
   /**
    * Creates a new meal entry.

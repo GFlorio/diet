@@ -29,7 +29,6 @@ export function setupMeals(){
   const SWIPE_MAX_Y = 40; // Maximum vertical delta to still count as horizontal swipe
   const SWIPE_ANIM_MS = 260; // Duration of the date change animation
 
-  /** @type {string} */
   let curDate = $.isoToday();
   /** @type {Meal[]} */
   let currentMeals = [];
@@ -39,7 +38,7 @@ export function setupMeals(){
    * @param {string} iso - ISO date string
    * @returns {string}
    */
-  function fmtHuman(/** @type {string} */ iso){
+  function fmtHuman(iso){
     const d = new Date(iso + 'T00:00:00');
     return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
@@ -64,7 +63,7 @@ export function setupMeals(){
    * Shift current date by delta days and update UI with animation.
    * @param {number} delta - Number of days to shift (positive or negative)
    */
-  function shiftDate(/** @type {number} */ delta){
+  function shiftDate(delta){
     const d = new Date(curDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
     curDate = $.toISO(d);
@@ -165,7 +164,7 @@ export function setupMeals(){
   }
 
   quickSearch.addEventListener('input', $.debounce(renderQuickList, 200));
-  quickSearch.addEventListener('keydown', (/** @type {KeyboardEvent} */ e)=>{
+  quickSearch.addEventListener('keydown', (e)=>{
     if (e.key==='Enter'){
       const first = quickList.querySelector('.item');
       const btn = first?.querySelector('.add');
@@ -176,7 +175,7 @@ export function setupMeals(){
   });
   quickList.addEventListener('refresh', renderQuickList);
 
-  quickList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
+  quickList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
   const item = target.closest('.item');
   if (!item) { return; }
@@ -219,7 +218,7 @@ export function setupMeals(){
    * @returns {import('../data.js').Macros}
    */
   function computeTotals(meals){
-    return meals.reduce((a, /** @type {Meal} */ m)=>{
+    return meals.reduce((a, m)=>{
       a.kcal+=m.foodSnapshot.kcal*m.multiplier;
       a.prot+=m.foodSnapshot.prot*m.multiplier;
       a.carbs+=m.foodSnapshot.carbs*m.multiplier;
@@ -296,7 +295,7 @@ export function setupMeals(){
     renderMealsList(currentMeals);
   }
 
-  mealsList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
+  mealsList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     const row = target.closest('.item');
     if (!row) { return; }

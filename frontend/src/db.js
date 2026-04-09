@@ -2,9 +2,7 @@
  * @type {IDBDatabase | undefined}
  */
 let db;
-/** @type {string} */
 const DB_NAME = 'nutri-pwa';
-/** @type {number} */
 const DB_VER = 1;
 
 /**

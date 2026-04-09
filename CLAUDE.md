@@ -80,4 +80,5 @@ import * as db from './db.js';
 - Assert assumptions early; raise exceptions at boundaries
 - Named constants — no magic numbers
 - Minimal nesting; no "just in case" fallbacks unless asked
+- No silent catch blocks — do not swallow errors with empty or fallback-only catch clauses; let them propagate so failures are visible. The only exception is truly optional background operations (e.g. SW update checks), which should log via `console.warn`.
 - Do not change code outside the scope of the current task without asking first

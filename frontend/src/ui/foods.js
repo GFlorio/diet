@@ -101,7 +101,7 @@ export function setupFoods(){
   async function renderFoods(){
     const status = foodStatus.value === 'archived' ? 'archived' : 'active';
     const xs = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
-    foodsList.innerHTML = xs.map((/** @type {Food} */ f)=>{
+    foodsList.innerHTML = xs.map((f)=>{
       const archivedChip = f.archived ? '<span class="chip">Archived</span>' : '';
       const archiveClass = f.archived ? 'unarchive' : 'archive';
       const archiveLabel = f.archived ? '📦 Unarchive' : '📦 Archive';
@@ -122,7 +122,7 @@ export function setupFoods(){
     }).join('') || `<div class="muted">No foods yet.</div>`;
   }
 
-  foodsList.addEventListener('click', async (/** @type {MouseEvent} */ e) => {
+  foodsList.addEventListener('click', async (e) => {
     const target = $.html($.assertEl(e.target));
     const row = $.html($.assertEl(target.closest('.item')));
 
@@ -169,7 +169,7 @@ export function setupFoods(){
     };
   }
 
-  foodForm.addEventListener('submit', async (/** @type {SubmitEvent} */ e) => {
+  foodForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     // Validate on submit; avoid annoying while typing
     try {
@@ -203,7 +203,7 @@ export function setupFoods(){
     .forEach(el => el.addEventListener('input', liveCheck));
 
   // Listen to cross-module navigation prefill
-  window.addEventListener('go-foods', (/** @type {Event} */ e) => {
+  window.addEventListener('go-foods', (e) => {
     const name = /** @type {CustomEvent} */(e).detail?.name || '';
     $.showPage('foods');
     foodForm.reset();

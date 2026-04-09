@@ -45,7 +45,7 @@ export function setupPWA(){
         // Visibility regain: when user returns to tab, perform a check for freshness.
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                try { updateSW(); } catch {/* ignore */}
+                updateSW().catch((e) => console.warn('SW update check failed', e));
             }
         });
 }
