@@ -30,6 +30,7 @@ function snapshotFromFood(food) {
  * @type {{
  *   listByDate: (dateISO: string) => Promise<Meal[]>,
  *   listRange: (fromISO: string, toISO: string) => Promise<Meal[]>,
+ *   frecencyScores: (sinceISO: string, todayISO: string) => Promise<Map<number, number>>,
  *   create: (opts: {food: Food, multiplier: number, date: string}) => Promise<Meal>,
  *   update: (id: number, patch: Partial<Meal>) => Promise<Meal|undefined>,
  *   remove: (id: number) => Promise<void>,
@@ -62,6 +63,26 @@ export const Meals = {
   async listRange(fromISO, toISO) {
     const xs = await db.getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO));
     return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+  },
+  /**
+   * Computes frecency scores for foods based on meal history in [sinceISO, todayISO].
+   * Score for each meal = 1 / (daysDiff + 1); scores are summed per food.
+   * @param {string} sinceISO
+   * @param {string} todayISO
+   * @returns {Promise<Map<number, number>>}
+   */
+  async frecencyScores(sinceISO, todayISO) {
+    const meals = await db.getAll('meals', 'by_date', IDBKeyRange.bound(sinceISO, todayISO));
+    const MS_PER_DAY = 86400000;
+    const todayMs = Date.parse(todayISO);
+    /** @type {Map<number, number>} */
+    const scores = new Map();
+    for (const meal of meals) {
+      const daysDiff = Math.round((todayMs - Date.parse(meal.date)) / MS_PER_DAY);
+      const score = 1 / (daysDiff + 1);
+      scores.set(meal.foodId, (scores.get(meal.foodId) ?? 0) + score);
+    }
+    return scores;
   },
   /**
    * Creates a new meal entry.

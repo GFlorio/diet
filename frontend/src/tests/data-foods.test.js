@@ -98,6 +98,49 @@ describe('Foods.list — search behavior', () => {
   });
 });
 
+describe('Foods.list — frecency scoring', () => {
+  test('orders foods by score descending when scores map is provided', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Apple', archived: false }),
+      makeFood({ id: 2, name: 'Banana', archived: false }),
+      makeFood({ id: 3, name: 'Carrot', archived: false }),
+    ]);
+    const scores = new Map([[1, 0.5], [3, 2.0]]);
+    const result = await Foods.list({ status: 'active', scores });
+    // Carrot (2.0) > Apple (0.5) > Banana (0.0)
+    expect(result.map(f => f.id)).toEqual([3, 1, 2]);
+  });
+
+  test('falls back to alphabetical for foods with equal scores', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Zucchini', archived: false }),
+      makeFood({ id: 2, name: 'Apple', archived: false }),
+    ]);
+    const result = await Foods.list({ status: 'active', scores: new Map() });
+    expect(result.map(f => f.id)).toEqual([2, 1]);
+  });
+
+  test('applies frecency ordering before search filter', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Chicken breast', archived: false }),
+      makeFood({ id: 2, name: 'Chicken thigh', archived: false }),
+    ]);
+    const scores = new Map([[2, 5.0], [1, 1.0]]);
+    const result = await Foods.list({ search: 'chicken', status: 'active', scores });
+    // Thigh (5.0) before breast (1.0)
+    expect(result.map(f => f.id)).toEqual([2, 1]);
+  });
+
+  test('behaves as alphabetical when no scores provided', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 1, name: 'Zucchini', archived: false }),
+      makeFood({ id: 2, name: 'Apple', archived: false }),
+    ]);
+    const result = await Foods.list({ status: 'active' });
+    expect(result.map(f => f.id)).toEqual([2, 1]);
+  });
+});
+
 describe('Foods.byId', () => {
   test('returns undefined when food does not exist', async () => {
     vi.mocked(db.get).mockResolvedValue(undefined);

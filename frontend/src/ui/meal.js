@@ -129,12 +129,19 @@ export function setupMeals(){
   swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
   swipeSurface.addEventListener('touchend', onTouchEnd);
 
+  const FRECENCY_DAYS = 90;
+
   /**
    * Render the quick-add food search results (limited to 3 foods).
    */
   async function renderQuickList(){
     const q = quickSearch.value.trim();
-    const foods = await Foods.list({ search: q, status: 'active' });
+    const todayISO = $.isoToday();
+    const sinceDate = new Date(todayISO + 'T00:00:00');
+    sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
+    const sinceISO = $.toISO(sinceDate);
+    const scores = await Meals.frecencyScores(sinceISO, todayISO);
+    const foods = await Foods.list({ search: q, status: 'active', scores });
     // Limit to 3 foods
     quickList.innerHTML = foods.slice(0, 3).map(f => {
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
@@ -151,7 +158,7 @@ export function setupMeals(){
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
-    }).join('') || '<div class="muted">No foods yet. '
+    }).join('') || '<div class="muted">No match the filter. '
       + 'Type a name and <a href="#" id="quickNew">create it</a>.</div>';
     const createLink = document.getElementById('quickNew');
     if (createLink) {
@@ -294,7 +301,6 @@ export function setupMeals(){
         <div class="actions">
           <button class="btn small ghost qtyMinus" title="-0.5">−0.5</button>
           <button class="btn small ghost qtyPlus" title="+0.5">+0.5</button>
-          <button class="btn small ghost sync" title="Update to latest food">⟳</button>
           <button class="btn small ghost del" title="Delete">🗑️</button>
         </div>
         <div class="meta">${$.esc(snap.refLabel)} · ${mealMeta}</div>

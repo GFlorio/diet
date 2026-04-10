@@ -20,7 +20,7 @@ import * as db from './db.js';
 /**
  * Foods store API
  * @type {{
- *   list: (opts?: {search?: string, status?: 'active'|'archived'|'all'}) => Promise<Food[]>,
+ *   list: (opts?: {search?: string, status?: 'active'|'archived'|'all', scores?: Map<number,number>}) => Promise<Food[]>,
  *   create: (food: CreateFoodInput) => Promise<Food>,
  *   update: (id: number, patch: UpdateFoodPatch) => Promise<Food|undefined>,
  *   setArchived: (id: number, archived: boolean) => Promise<Food|undefined>,
@@ -32,12 +32,18 @@ import * as db from './db.js';
 export const Foods = {
   /**
    * Lists foods, optionally filtered by search and status.
-   * @param {{search?: string, status?: 'active'|'archived'|'all'}=} opts
+   * When `scores` is provided (a frecency map of foodId → score), foods are
+   * sorted by score descending; ties and unscored foods fall back to alphabetical.
+   * @param {{search?: string, status?: 'active'|'archived'|'all', scores?: Map<number,number>}=} opts
    * @returns {Promise<Food[]>}
    */
-  async list({ search = '', status = 'active' } = {}) {
+  async list({ search = '', status = 'active', scores } = {}) {
     const all = await db.getAll('foods');
-    let xs = all.sort((a, b) => a.name.localeCompare(b.name));
+    let xs = all.sort((a, b) => {
+      const sa = scores?.get(a.id) ?? 0;
+      const sb = scores?.get(b.id) ?? 0;
+      return sb - sa || a.name.localeCompare(b.name);
+    });
     if (status === 'active') { xs = xs.filter((f) => !f.archived); }
     if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
     if (search) {

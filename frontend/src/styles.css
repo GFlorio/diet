@@ -19,14 +19,14 @@ header{ position:sticky; top:0; z-index:50; backdrop-filter:saturate(150%) blur(
 .title svg{ width:22px; height:22px }
 .grow{ flex:1 }
 
-.btn{ display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:12px; cursor:pointer; box-shadow:var(--shadow); user-select:none }
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; min-height:45px; min-width:45px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:12px; cursor:pointer; box-shadow:var(--shadow); user-select:none }
 .btn:active{ transform:translateY(1px) }
 .btn.primary{ background:var(--brand); border-color:var(--brand); color:white }
 .btn.ghost{ background:transparent; box-shadow:none }
-.btn.small{ padding:6px 8px; border-radius:10px; font-size:12px }
+.btn.small{ padding:6px 8px; border-radius:10px; font-size:12px; min-height:45px; min-width:45px }
 
 nav.tabs{ display:flex; gap:8px; padding:8px; border-bottom:1px dashed var(--border) }
-nav.tabs .tab{ flex:1; text-align:center; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--card); cursor:pointer; user-select:none }
+nav.tabs .tab{ flex:1; text-align:center; padding:10px; min-height:45px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:12px; background:var(--card); cursor:pointer; user-select:none }
 nav.tabs .tab.active{ outline:2px solid var(--brand) }
 
 .grid{ display:grid; gap:12px }
@@ -34,6 +34,7 @@ nav.tabs .tab.active{ outline:2px solid var(--brand) }
 .row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap }
 .row.nowrap{ flex-wrap:nowrap }
 .muted{ color:var(--muted) }
+a{ color:var(--brand) }
 .right{ margin-left:auto }
 
 input, select{ width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:transparent; color:inherit }
@@ -60,7 +61,7 @@ label{ font-size:12px; color:var(--muted) }
 /* Subheader with date navigation */
 .subheader{ display:flex; align-items:center; justify-content:center; gap:8px; padding:4px 4px 0; user-select:none }
 .subheader .dayDisplay{ font-size:18px; font-weight:600; letter-spacing:.5px; min-width:110px; text-align:center; padding:6px 14px; border:1px solid var(--border); border-radius:14px; background:var(--card); box-shadow:var(--shadow); position:relative; }
-.dayBox{ font-size:14px; font-weight:500; min-width:80px; text-align:center; padding:4px 10px; border:1px dashed var(--border); border-radius:12px; background:color-mix(in oklab, var(--card) 90%, transparent); opacity:.55; cursor:pointer; transition:opacity .15s, transform .15s; }
+.dayBox{ font-size:14px; font-weight:500; min-width:80px; min-height:45px; text-align:center; padding:4px 10px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--border); border-radius:12px; background:color-mix(in oklab, var(--card) 90%, transparent); opacity:.55; cursor:pointer; transition:opacity .15s, transform .15s; }
 .dayBox:hover{ opacity:.75 }
 .dayBox:active{ transform:translateY(1px) }
 .dayBox.inactive::after{ content:'◁' attr(data-dir); display:none }
@@ -89,7 +90,7 @@ label{ font-size:12px; color:var(--muted) }
 /* Toast notifications */
 .toast{ position:fixed; top:90px; left:50%; transform:translateX(-50%); background:var(--fg); color:var(--bg); border-radius:12px; padding:12px 18px; box-shadow:0 8px 32px rgba(0,0,0,.4); z-index:100; display:flex; align-items:center; gap:10px; width:min(calc(100vw - 24px),480px); font-weight:500; animation:toastIn .2s ease-out; touch-action:pan-y; will-change:transform }
 .toast-msg{ flex:1 }
-.toast-close{ background:none; border:none; cursor:pointer; color:inherit; opacity:.55; padding:4px; margin-left:4px; font-size:15px; line-height:1; flex-shrink:0 }
+.toast-close{ background:none; border:none; cursor:pointer; color:inherit; opacity:.55; padding:4px; margin-left:4px; font-size:15px; line-height:1; flex-shrink:0; min-height:45px; min-width:45px; display:inline-flex; align-items:center; justify-content:center }
 .toast-close:hover{ opacity:1 }
 .toast .btn{ background:var(--bg); color:var(--fg); border-color:transparent; flex-shrink:0 }
 @keyframes toastIn{ from{ opacity:0; transform:translateX(-50%) translateY(-8px) } to{ opacity:1; transform:translateX(-50%) translateY(0) } }

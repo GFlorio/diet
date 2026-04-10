@@ -12,7 +12,7 @@ async function createFood(page, f){
   await page.click('#saveFoodBtn');
 }
 
-test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
+test.describe('Meals: quick add, edit qty, snapshots', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await resetDB(page, 'nutri-pwa');
@@ -50,7 +50,7 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await expect(page.locator('#mealsInfo')).toHaveText('No meals yet');
   });
 
-  test('meals snapshot: foods edit does not change existing meals until sync', async ({ page }) => {
+  test('meals snapshot: foods edit does not change existing meals', async ({ page }) => {
     // Arrange: create one food and add meal
     await createFood(page, { name:'Yogurt', refLabel:'170 g', kcal:100, prot:17, carbs:6, fats:0 });
     await page.locator('.tab', { hasText: 'Meals' }).click();
@@ -76,16 +76,6 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await expect(page.locator('#mealsList')).toContainText('Yogurt');
     const mealsAfter = await getAllFromStore(page, 'nutri-pwa', 'meals');
     expect(mealsAfter[0].foodSnapshot.kcal).toBe(100);
-
-    // Sync single meal using ⟳ button and wait until snapshot updates in DB
-    await page.locator('#mealsList .item .sync').click();
-    await expect(async () => {
-      const synced = await getAllFromStore(page, 'nutri-pwa', 'meals');
-      expect(synced[0].foodSnapshot.kcal).toBe(120);
-    }).toPass({ timeout: 15000 });
-    const synced = await getAllFromStore(page, 'nutri-pwa', 'meals');
-    expect(synced[0].foodSnapshot.kcal).toBe(120);
-    await expect(page.locator('#mealsList')).toContainText('Greek Yogurt');
   });
 
   test('quick-add: qty -1 shows error and creates no meal', async ({ page }) => {
@@ -225,6 +215,40 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
       const meals = await getAllFromStore(page, 'nutri-pwa', 'meals');
       expect(meals).toHaveLength(1);
     }).toPass();
+  });
+
+  test('frecency: most-used food appears first in quick list', async ({ page }) => {
+    // Arrange: create two foods alphabetically ordered (Banana before Zucchini)
+    await createFood(page, { name: 'Banana', refLabel: '100 g', kcal: 89, prot: 1.1, carbs: 23, fats: 0.3 });
+    await createFood(page, { name: 'Zucchini', refLabel: '100 g', kcal: 17, prot: 1.2, carbs: 3.1, fats: 0.3 });
+
+    // Act: add Zucchini as a meal twice (more frequent than Banana which has 0 meals)
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'zuc');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+    await page.click('#quickList .item .add');
+    // Wait for first meal to be committed before adding second
+    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+    await page.fill('#quickSearch', 'zuc');
+    await page.click('#quickList .item .add');
+    await expect(page.locator('#mealsList .item')).toHaveCount(2);
+
+    // Navigate away and back to trigger a fresh frecency render via meals-activate
+    await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+
+    // Wait for the quick list to settle (2 items = both foods visible with no search filter)
+    await expect(page.locator('#quickList .item')).toHaveCount(2);
+
+    // Assert: frecency ordering should put Zucchini first despite "B" < "Z"
+    // Use page.evaluate to read the DOM directly (avoids Playwright visibility filtering quirks)
+    await expect(async () => {
+      const first = await page.evaluate(() => {
+        const strongs = document.querySelectorAll('#quickList .item strong');
+        return strongs[0]?.textContent ?? '';
+      });
+      expect(first).toContain('Zucchini');
+    }).toPass({ timeout: 5000 });
   });
 
   test('quick-add: search field clears after adding a meal', async ({ page }) => {
