@@ -25,7 +25,8 @@ import * as db from './db.js';
  *   update: (id: number, patch: UpdateFoodPatch) => Promise<Food|undefined>,
  *   setArchived: (id: number, archived: boolean) => Promise<Food|undefined>,
  *   byId: (id: number) => Promise<Food|undefined>,
- *   remove: (id: number) => Promise<void>
+ *   remove: (id: number) => Promise<void>,
+ *   restore: (food: Food) => Promise<void>
  * }}
  */
 export const Foods = {
@@ -105,5 +106,13 @@ export const Foods = {
    */
   async remove(id) {
     await db.del('foods', id);
+  },
+  /**
+   * Restores a previously deleted food (re-inserts with original id).
+   * @param {Food} food
+   * @returns {Promise<void>}
+   */
+  async restore(food) {
+    await db.put('foods', food);
   },
 };

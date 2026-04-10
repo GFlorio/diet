@@ -33,6 +33,7 @@ function snapshotFromFood(food) {
  *   create: (opts: {food: Food, multiplier: number, date: string}) => Promise<Meal>,
  *   update: (id: number, patch: Partial<Meal>) => Promise<Meal|undefined>,
  *   remove: (id: number) => Promise<void>,
+ *   restore: (meal: Meal) => Promise<void>,
  *   syncMealToFood: (meal: Meal) => Promise<Meal>,
  *   syncAllForFood: (foodId: number) => Promise<number>,
  *   hasForFood: (foodId: number) => Promise<boolean>
@@ -101,6 +102,14 @@ export const Meals = {
    */
   async remove(id) {
     await db.del('meals', id);
+  },
+  /**
+   * Restores a previously deleted meal (re-inserts with original id).
+   * @param {Meal} meal
+   * @returns {Promise<void>}
+   */
+  async restore(meal) {
+    await db.put('meals', meal);
   },
   /**
    * Syncs a single meal's foodSnapshot to match the current Food.

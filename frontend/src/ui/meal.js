@@ -321,7 +321,15 @@ export function setupMeals(){
     const meal = currentMeals.find(m => m.id === id);
     if (!meal) { return; }
     if (target.classList.contains('del')) {
-      await Meals.remove(meal.id); renderMeals();
+      await Meals.remove(meal.id);
+      renderMeals();
+      $.toast(`"${$.esc(meal.foodSnapshot.name)}" removed`, {
+        duration: 5000,
+        action: {
+          label: 'Undo',
+          callback: () => Meals.restore(meal).then(() => renderMeals()),
+        },
+      });
       return;
     }
     if (target.classList.contains('qtyPlus')) {

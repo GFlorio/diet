@@ -139,7 +139,17 @@ export function setupFoods(){
           duration: 8000,
           action: {
             label: 'Delete',
-            callback: () => Foods.remove(id).then(() => renderFoods()),
+            callback: async () => {
+              await Foods.remove(id);
+              renderFoods();
+              $.toast(`"${$.esc(f.name)}" deleted`, {
+                duration: 5000,
+                action: {
+                  label: 'Undo',
+                  callback: () => Foods.restore(f).then(() => renderFoods()),
+                },
+              });
+            },
           },
         });
       }
