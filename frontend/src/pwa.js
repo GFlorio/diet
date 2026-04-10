@@ -30,9 +30,13 @@ export function setupPWA(){
         const updateSW = registerSW({
             immediate: true,
             onNeedRefresh() {
-                if (confirm('A new version is available. Reload now?')) {
-                    navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' });
-                }
+                $.toast('A new version is available.', {
+                    duration: 10000,
+                    action: {
+                        label: 'Reload',
+                        callback: () => navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' }),
+                    },
+                });
             },
             onOfflineReady() {
                 console.log('App ready to work offline');

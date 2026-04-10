@@ -136,6 +136,16 @@ export function setupFoods(){
     if (target.classList.contains('archive')){
       await Foods.setArchived(id, true);
       renderFoods();
+      const hasMeals = await Meals.hasForFood(id);
+      if (!hasMeals && f) {
+        $.toast(`No meal history for "${$.esc(f.name)}" — delete permanently?`, {
+          duration: 8000,
+          action: {
+            label: 'Delete',
+            callback: () => Foods.remove(id).then(() => renderFoods()),
+          },
+        });
+      }
       return;
     }
     if (target.classList.contains('unarchive')){
@@ -178,6 +188,7 @@ export function setupFoods(){
     try {
       clearFieldErrors();
       const payload = v.createFoodInput(readFormPayload());
+      const isNew = !foodId.value;
       await $.withConfirm(submitBtn, async () => {
         if (foodId.value) {
           await Foods.update(v.id(foodId.value), payload);
@@ -186,6 +197,17 @@ export function setupFoods(){
         const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
         if (quickListEl) {quickListEl.dispatchEvent(new Event('refresh'));}
       }, '✓ Saved');
+      if (isNew) {
+        $.toast(`"${$.esc(payload.name)}" added — log a meal now?`, {
+          duration: 6000,
+          action: {
+            label: 'Add meal',
+            callback: () => window.dispatchEvent(
+              new CustomEvent('go-meals', { detail: { name: payload.name } })
+            ),
+          },
+        });
+      }
     } catch (err) {
       const e = /** @type {Error & {fields?: string[]}} */ (err);
       const msg = e?.message || 'Invalid input';

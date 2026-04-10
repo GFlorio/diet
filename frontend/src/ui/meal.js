@@ -361,6 +361,15 @@ export function setupMeals(){
     window.dispatchEvent(evt);
   }
 
+  // Listen to cross-module navigation prefill
+  window.addEventListener('go-meals', (e) => {
+    const name = /** @type {CustomEvent} */(e).detail?.name || '';
+    $.showPage('meals');
+    quickSearch.value = name;
+    renderQuickList();
+    quickSearch.focus();
+  });
+
   renderQuickList();
   renderMeals();
 }

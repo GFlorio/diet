@@ -34,7 +34,8 @@ function snapshotFromFood(food) {
  *   update: (id: number, patch: Partial<Meal>) => Promise<Meal|undefined>,
  *   remove: (id: number) => Promise<void>,
  *   syncMealToFood: (meal: Meal) => Promise<Meal>,
- *   syncAllForFood: (foodId: number) => Promise<number>
+ *   syncAllForFood: (foodId: number) => Promise<number>,
+ *   hasForFood: (foodId: number) => Promise<boolean>
  * }}
  */
 export const Meals = {
@@ -122,6 +123,15 @@ export const Meals = {
    * @param {number} foodId
    * @returns {Promise<number>} Number of meals updated
    */
+  /**
+   * Returns true if any meal references the given foodId.
+   * @param {number} foodId
+   * @returns {Promise<boolean>}
+   */
+  async hasForFood(foodId) {
+    const xs = await db.getAll('meals', 'by_foodId', IDBKeyRange.only(foodId));
+    return xs.length > 0;
+  },
   async syncAllForFood(foodId) {
     const food = await db.get('foods', foodId);
     if (!food) { return 0; }

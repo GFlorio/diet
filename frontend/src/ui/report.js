@@ -25,7 +25,7 @@ export function setupReport(){
     const to = repTo.value;
     if (!from || !to) { return; }
     if (from > to) {
-      alert('Invalid range'); return;
+      $.toast('Invalid range', { type: 'error' }); return;
     }
     const inRange = /** @type {Meal[]} */ (await Meals.listRange(from, to));
     /** @type {Record<string, Macros>} */

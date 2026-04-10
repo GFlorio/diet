@@ -24,7 +24,8 @@ import * as db from './db.js';
  *   create: (food: CreateFoodInput) => Promise<Food>,
  *   update: (id: number, patch: UpdateFoodPatch) => Promise<Food|undefined>,
  *   setArchived: (id: number, archived: boolean) => Promise<Food|undefined>,
- *   byId: (id: number) => Promise<Food|undefined>
+ *   byId: (id: number) => Promise<Food|undefined>,
+ *   remove: (id: number) => Promise<void>
  * }}
  */
 export const Foods = {
@@ -96,5 +97,13 @@ export const Foods = {
    */
   async byId(id) {
     return db.get('foods', id);
+  },
+  /**
+   * Permanently deletes a food entry by id.
+   * @param {number} id
+   * @returns {Promise<void>}
+   */
+  async remove(id) {
+    await db.del('foods', id);
   },
 };

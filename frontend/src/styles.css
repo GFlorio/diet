@@ -85,6 +85,16 @@ label{ font-size:12px; color:var(--muted) }
 @keyframes shakeX { 0%{transform:translateX(0)} 25%{transform:translateX(-2px)} 50%{transform:translateX(2px)} 75%{transform:translateX(-1px)} 100%{transform:translateX(0)} }
 .shake{ animation: shakeX .4s ease-in-out }
 
+/* Toast notifications */
+.toast{ position:fixed; top:90px; left:50%; transform:translateX(-50%); background:var(--fg); color:var(--bg); border-radius:12px; padding:12px 18px; box-shadow:0 8px 32px rgba(0,0,0,.4); z-index:100; display:flex; align-items:center; gap:10px; width:min(calc(100vw - 24px),480px); font-weight:500; animation:toastIn .2s ease-out; touch-action:pan-y; will-change:transform }
+.toast-msg{ flex:1 }
+.toast-close{ background:none; border:none; cursor:pointer; color:inherit; opacity:.55; padding:4px; margin-left:4px; font-size:15px; line-height:1; flex-shrink:0 }
+.toast-close:hover{ opacity:1 }
+.toast .btn{ background:var(--bg); color:var(--fg); border-color:transparent; flex-shrink:0 }
+@keyframes toastIn{ from{ opacity:0; transform:translateX(-50%) translateY(-8px) } to{ opacity:1; transform:translateX(-50%) translateY(0) } }
+.toast.error{ background:var(--bad); color:#fff }
+.toast.error .btn{ background:rgba(0,0,0,.2); color:#fff; border-color:transparent }
+
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
 

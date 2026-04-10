@@ -152,6 +152,92 @@ export const esc = (s = '') => ('' + s).replace(/[&<>"']/g, c => ({
 }[c] || ''));
 
 /**
+ * @typedef {{ label: string, callback: () => void }} ToastAction
+ */
+
+/**
+ * Show a non-blocking toast message fixed below the header.
+ * Dismissable via X button, swipe, or auto-removal after `duration` ms.
+ * @param {string} msg
+ * @param {{ type?: 'error'|'', duration?: number, action?: ToastAction }} [opts]
+ */
+export function toast(msg, { type = '', duration = 3000, action } = {}) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.setAttribute('role', 'status');
+
+  const text = document.createElement('span');
+  text.className = 'toast-msg';
+  text.textContent = msg;
+  el.appendChild(text);
+
+  if (action) {
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      action.callback();
+      dismiss();
+    });
+    el.appendChild(btn);
+  }
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close';
+  closeBtn.setAttribute('aria-label', 'Dismiss');
+  closeBtn.textContent = '✕';
+  closeBtn.addEventListener('click', dismiss);
+  el.appendChild(closeBtn);
+
+  document.body.appendChild(el);
+
+  let dismissed = false;
+  const timer = setTimeout(dismiss, duration);
+
+  function dismiss() {
+    if (dismissed) { return; }
+    dismissed = true;
+    clearTimeout(timer);
+    el.remove();
+  }
+
+  /** @param {1|-1} dir */
+  function dismissToSide(dir) {
+    if (dismissed) { return; }
+    dismissed = true;
+    clearTimeout(timer);
+    el.style.transition = 'transform .25s ease-in, opacity .25s ease-in';
+    el.style.transform = `translateX(calc(-50% + ${dir * 110}vw))`;
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 270);
+  }
+
+  let startX = 0;
+
+  el.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    el.style.transition = 'none';
+  }, { passive: true });
+
+  el.addEventListener('touchmove', (e) => {
+    const delta = e.touches[0].clientX - startX;
+    el.style.transform = `translateX(calc(-50% + ${delta}px))`;
+    el.style.opacity = String(Math.max(0, 1 - Math.abs(delta) / 200));
+  }, { passive: true });
+
+  el.addEventListener('touchend', (e) => {
+    const delta = e.changedTouches[0].clientX - startX;
+    if (Math.abs(delta) > 80) {
+      dismissToSide(delta > 0 ? 1 : -1);
+    } else {
+      el.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
+      el.style.transform = 'translateX(-50%)';
+      el.style.opacity = '1';
+    }
+  }, { passive: true });
+}
+
+/**
  * Debounce a function; returns a wrapper that delays invocation until after ms have elapsed
  * since the last call.
  * @template {any[]} A
