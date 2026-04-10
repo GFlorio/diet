@@ -58,6 +58,18 @@ test.describe('Report: date range filtering', () => {
     await expect(rows).toHaveCount(3);
   });
 
+  test('shows error toast when date range is invalid (from > to)', async ({ page }) => {
+    // Act: submit a reversed range
+    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.fill('#repFrom', '2024-03-01');
+    await page.fill('#repTo', '2024-01-01');
+    await page.click('#repRefresh');
+
+    // Assert: error toast appears
+    await expect(page.locator('.toast.error')).toBeVisible();
+    await expect(page.locator('.toast.error')).toContainText('Invalid range');
+  });
+
   test('shows empty state when no meals fall within the selected range', async ({ page }) => {
     // Arrange: add a meal for today
     await createFood(page, RICE);

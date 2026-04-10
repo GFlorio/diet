@@ -146,7 +146,7 @@ export function setupFoods(){
                 duration: 5000,
                 action: {
                   label: 'Undo',
-                  callback: () => Foods.restore(f).then(() => renderFoods()),
+                  callback: () => Foods.restore({ ...f, archived: true }).then(() => renderFoods()),
                 },
               });
             },

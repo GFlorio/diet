@@ -187,8 +187,9 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await page.fill('#foodProt', '10');
     await page.click('#saveFoodBtn');
 
-    // Batch update via ⟳ Update meals
-  const updateBtn = page.locator('#foodsList .item .updateMeals').first();
+    // Batch update via "Update meals" toast (shown after saving food edit)
+  const updateBtn = page.getByRole('button', { name: /Update meals/i });
+  await expect(updateBtn).toBeVisible();
   await updateBtn.click();
 
     // Assert: both days' meals updated snapshots
@@ -197,5 +198,46 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
       expect(mealsAll.length).toBeGreaterThanOrEqual(3);
       expect(mealsAll.every(m => m.foodSnapshot.prot === 10)).toBeTruthy();
     }).toPass({ timeout: 20000 });
+  });
+
+  test('delete meal shows undo toast that restores the meal', async ({ page }) => {
+    // Arrange: add one meal (dismiss "log a meal now?" toast from food creation)
+    await createFood(page, { name: 'Tuna', refLabel: '100 g', kcal: 130, prot: 28, carbs: 0, fats: 1 });
+    await page.getByRole('button', { name: 'Dismiss' }).click();
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'tun');
+    await page.click('#quickList .item .add');
+    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+
+    // Act: delete the meal
+    await page.locator('#mealsList .item .del').click();
+
+    // Assert: meal removed from list and "removed" toast appears
+    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('removed');
+
+    // Act: click Undo
+    await page.getByRole('button', { name: 'Undo' }).click();
+
+    // Assert: meal is restored in the list and in IndexedDB
+    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+    await expect(async () => {
+      const meals = await getAllFromStore(page, 'nutri-pwa', 'meals');
+      expect(meals).toHaveLength(1);
+    }).toPass();
+  });
+
+  test('quick-add: search field clears after adding a meal', async ({ page }) => {
+    // Arrange
+    await createFood(page, { name: 'Lentils', refLabel: '100 g', kcal: 116, prot: 9, carbs: 20, fats: 0.4 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+
+    // Act: type a search term and add the food
+    await page.fill('#quickSearch', 'lentil');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+    await page.click('#quickList .item .add');
+
+    // Assert: search field is cleared (empty search shows available foods, not a blank list)
+    await expect(page.locator('#quickSearch')).toHaveValue('');
   });
 });
