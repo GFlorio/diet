@@ -48,29 +48,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('Meals.listRange', () => {
-  test('returns meals within a valid inclusive range', async () => {
-    vi.mocked(db.getAll).mockResolvedValue([
-      makeMeal({ id: 1, date: '2024-02-01' }),
-      makeMeal({ id: 2, date: '2024-02-15' }),
-    ]);
-    const result = await Meals.listRange('2024-02-01', '2024-02-28');
-    expect(result).toHaveLength(2);
-  });
-
-  test('returns empty array when fromISO > toISO (inverted range)', async () => {
-    // IDBKeyRange is not defined in jsdom, so the index path always throws and the
-    // fallback cursor scan runs. The filter (m.date >= fromISO && m.date <= toISO)
-    // never matches when fromISO > toISO, so the result is empty.
-    vi.mocked(db.getAll).mockResolvedValue([
-      makeMeal({ id: 1, date: '2024-02-01' }),
-      makeMeal({ id: 2, date: '2024-02-15' }),
-    ]);
-    const result = await Meals.listRange('2024-03-01', '2024-01-01');
-    expect(result).toEqual([]);
-  });
-});
-
 describe('Meals.syncAllForFood', () => {
   test('returns 0 when the food does not exist', async () => {
     vi.mocked(db.get).mockResolvedValue(undefined);

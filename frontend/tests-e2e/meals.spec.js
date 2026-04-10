@@ -39,11 +39,12 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
     await page.locator('#mealsList .item .qtyPlus').click();
     await expect(page.locator('#mealsList')).toContainText('×2');
 
-    // -0.5 twice -> should remove at 0
+    // -0.5 three times -> 2 -> 1.5 -> 1.0 -> 0.5; qtyMinus blocks at 0 so use del to remove
     await page.locator('#mealsList .item .qtyMinus').click();
     await page.locator('#mealsList .item .qtyMinus').click();
-    await page.locator('#mealsList .item .qtyMinus').click(); // 2 -> 1.5 -> 1.0 -> 0.5 -> remove next
     await page.locator('#mealsList .item .qtyMinus').click();
+    await expect(page.locator('#mealsList')).toContainText('×0.5');
+    await page.locator('#mealsList .item .del').click();
 
     await expect(page.locator('#mealsList .item')).toHaveCount(0);
     await expect(page.locator('#mealsInfo')).toHaveText('No meals yet');
@@ -188,10 +189,7 @@ test.describe('Meals: quick add, edit qty, snapshots and sync', () => {
 
     // Batch update via ⟳ Update meals
   const updateBtn = page.locator('#foodsList .item .updateMeals').first();
-  // Accept alert immediately when it appears
-  const dialogPromise = page.waitForEvent('dialog').then(d => d.accept());
   await updateBtn.click();
-  await dialogPromise.catch(() => {});
 
     // Assert: both days' meals updated snapshots
     await expect(async () => {

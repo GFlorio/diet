@@ -144,8 +144,10 @@ export function setupFoods(){
       return;
     }
     if (target.classList.contains('updateMeals')){
-      const n = await Meals.syncAllForFood(id);
-      alert(`Updated ${n} meal(s) using this food.`);
+      await $.withConfirm($.button(target),
+        () => Meals.syncAllForFood(id),
+        n => `✓ ${n} updated`
+      );
       return;
     }
   });
@@ -171,16 +173,19 @@ export function setupFoods(){
 
   foodForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const submitBtn = $.button(foodForm.querySelector('[type=submit]'));
     // Validate on submit; avoid annoying while typing
     try {
       clearFieldErrors();
       const payload = v.createFoodInput(readFormPayload());
-      if (foodId.value) {
-        await Foods.update(v.id(foodId.value), payload);
-      } else { await Foods.create(payload); }
-      setFoodForm(); renderFoods();
-      const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
-      if (quickListEl) {quickListEl.dispatchEvent(new Event('refresh'));}
+      await $.withConfirm(submitBtn, async () => {
+        if (foodId.value) {
+          await Foods.update(v.id(foodId.value), payload);
+        } else { await Foods.create(payload); }
+        setFoodForm(); renderFoods();
+        const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
+        if (quickListEl) {quickListEl.dispatchEvent(new Event('refresh'));}
+      }, '✓ Saved');
     } catch (err) {
       const e = /** @type {Error & {fields?: string[]}} */ (err);
       const msg = e?.message || 'Invalid input';

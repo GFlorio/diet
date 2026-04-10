@@ -38,6 +38,9 @@ function snapshotFromFood(food) {
  * }}
  */
 export const Meals = {
+  // NOTE: IDBKeyRange isn't available on the unit test harness, so anything that
+  // needs to hit this must be an e2e test.
+
   /**
    * Lists meals by date.
    * @param {string} dateISO

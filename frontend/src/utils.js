@@ -167,3 +167,32 @@ export function debounce(fn, ms = 300){
         t = window.setTimeout(() => fn(...args), ms);
     };
 }
+
+/**
+ * Run an async action with button confirmation feedback.
+ * Disables the button while the action runs, then briefly shows a confirmation
+ * label before restoring the original text. On error, restores immediately and rethrows.
+ * @template T
+ * @param {HTMLButtonElement} btn
+ * @param {() => Promise<T>} action
+ * @param {string | ((r: T) => string)} [doneLabel='✓']
+ * @param {number} [doneMs=1500]
+ * @returns {Promise<T>}
+ */
+export async function withConfirm(btn, action, doneLabel = '✓', doneMs = 1500) {
+  const orig = btn.textContent ?? '';
+  btn.disabled = true;
+  try {
+    const result = await action();
+    btn.textContent = typeof doneLabel === 'function' ? doneLabel(result) : doneLabel;
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }, doneMs);
+    return result;
+  } catch (err) {
+    btn.textContent = orig;
+    btn.disabled = false;
+    throw err;
+  }
+}

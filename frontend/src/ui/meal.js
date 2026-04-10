@@ -196,9 +196,11 @@ export function setupMeals(){
         qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700);
         return;
       }
-      await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
-      qtyEl.value = '1';
-      renderMeals();
+      await $.withConfirm($.button(target), async () => {
+        await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
+        qtyEl.value = '1';
+        renderMeals();
+      }, '✓ Added');
       return;
     }
     if (target.classList.contains('add1')) {
@@ -260,6 +262,22 @@ export function setupMeals(){
   }
 
   /**
+   * Update a single meal row's multiplier chip and macro meta in place.
+   * Avoids a full list re-render when only the quantity changes.
+   * @param {HTMLElement} rowEl
+   * @param {Meal} meal
+   */
+  function patchMealRow(rowEl, meal) {
+    const snap = meal.foodSnapshot;
+    const mul = meal.multiplier;
+    const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
+    const chip = rowEl.querySelector('.chip');
+    const meta = rowEl.querySelector('.meta');
+    if (chip) { $.html(chip).textContent = `×${$.fmtNum(mul)}`; }
+    if (meta) { $.html(meta).textContent = `${snap.refLabel} · ${mealMeta}`; }
+  }
+
+  /**
    * Render the list of meals with action buttons.
    * @param {Meal[]} meals
    */
@@ -308,15 +326,25 @@ export function setupMeals(){
       return;
     }
     if (target.classList.contains('qtyPlus')) {
-      await Meals.update(meal.id, { multiplier: V.number(meal.multiplier + 0.5) });
-      renderMeals();
+      const newMul = V.number(meal.multiplier + 0.5);
+      await Meals.update(meal.id, { multiplier: newMul });
+      meal.multiplier = newMul;
+      patchMealRow(rowEl, meal);
+      renderDayInfo(currentMeals, computeTotals(currentMeals));
       return;
     }
     if (target.classList.contains('qtyMinus')) {
-      const v = Math.max(0, meal.multiplier - 0.5);
-      if (v === 0) { await Meals.remove(meal.id); }
-      else { await Meals.update(meal.id, { multiplier: V.number(v) }); }
-      renderMeals();
+      const btn = $.button(target);
+      if (meal.multiplier - 0.5 <= 0) {
+        btn.classList.add('error');
+        setTimeout(() => btn.classList.remove('error'), 700);
+        return;
+      }
+      const newMul = V.number(meal.multiplier - 0.5);
+      await Meals.update(meal.id, { multiplier: newMul });
+      meal.multiplier = newMul;
+      patchMealRow(rowEl, meal);
+      renderDayInfo(currentMeals, computeTotals(currentMeals));
       return;
     }
     if (target.classList.contains('sync')) {
