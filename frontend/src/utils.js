@@ -52,7 +52,7 @@ export function showPage(page){
  * @param {number} fats
  */
 export function nutrMeta(kcal, prot, carbs, fats){
-  return `${fmtNum(kcal,0)} kcal · P${fmtNum(prot)} C${fmtNum(carbs)} F${fmtNum(fats)}`;
+  return `${fmtNum(kcal,0)} kcal · Prot ${fmtNum(prot)}g · Carbs ${fmtNum(carbs)}g · Fat ${fmtNum(fats)}g`;
 }
 
 /**
@@ -174,12 +174,26 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
   if (action) {
     const btn = document.createElement('button');
     btn.className = 'btn small';
-    btn.textContent = action.label;
+    const isDesktop = window.matchMedia('(hover: hover)').matches;
+    btn.textContent = isDesktop ? `${action.label} (Y)` : action.label;
     btn.addEventListener('click', () => {
       action.callback();
       dismiss();
     });
     el.appendChild(btn);
+
+    function onKey(/** @type {KeyboardEvent} */ e) {
+      if (dismissed) {
+        document.removeEventListener('keydown', onKey); return;
+      }
+      if (e.key !== 'y' && e.key !== 'Y') { return; }
+      const tag = /** @type {HTMLElement} */ (e.target).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { return; }
+      e.preventDefault();
+      document.removeEventListener('keydown', onKey);
+      btn.click();
+    }
+    document.addEventListener('keydown', onKey);
   }
 
   const closeBtn = document.createElement('button');

@@ -140,10 +140,7 @@ export function setupMeals(){
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
       return `
       <div class="item" data-id="${f.id}">
-        <div>
-          <div><strong>${$.esc(f.name)}</strong></div>
-          <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
-        </div>
+        <div><strong>${$.esc(f.name)}</strong></div>
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0"
             value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
@@ -152,6 +149,7 @@ export function setupMeals(){
           <button class="btn small ghost add1" title="+1">+1</button>
           <button class="btn small ghost editFood" title="Edit food">✏️</button>
         </div>
+        <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
     }).join('') || '<div class="muted">No foods yet. '
       + 'Type a name and <a href="#" id="quickNew">create it</a>.</div>';
@@ -174,6 +172,7 @@ export function setupMeals(){
     }
   });
   quickList.addEventListener('refresh', renderQuickList);
+  window.addEventListener('meals-activate', renderQuickList);
 
   quickList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
@@ -199,6 +198,8 @@ export function setupMeals(){
       await $.withConfirm($.button(target), async () => {
         await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
         qtyEl.value = '1';
+        quickSearch.value = '';
+        renderQuickList();
         renderMeals();
       }, '✓ Added');
       return;
@@ -248,15 +249,15 @@ export function setupMeals(){
         </div>
         <div class="totalBlock">
           <div class="label">Protein</div>
-          <div class="value">${$.fmtNum(totals.prot)}<span class="unit">g</span></div>
+          <div class="value">${$.fmtNum(totals.prot,0)}<span class="unit">g</span></div>
         </div>
         <div class="totalBlock">
           <div class="label">Carbs</div>
-          <div class="value">${$.fmtNum(totals.carbs)}<span class="unit">g</span></div>
+          <div class="value">${$.fmtNum(totals.carbs,0)}<span class="unit">g</span></div>
         </div>
         <div class="totalBlock">
           <div class="label">Fat</div>
-          <div class="value">${$.fmtNum(totals.fats)}<span class="unit">g</span></div>
+          <div class="value">${$.fmtNum(totals.fats,0)}<span class="unit">g</span></div>
         </div>
       </div>`;
   }
@@ -288,17 +289,15 @@ export function setupMeals(){
       const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
       return `
       <div class="item" data-id="${m.id}">
-        <div>
-          <div><strong>${$.esc(snap.name)}</strong>
-            <span class="chip">×${$.fmtNum(mul)}</span></div>
-          <div class="meta">${$.esc(snap.refLabel)} · ${mealMeta}</div>
-        </div>
+        <div><strong>${$.esc(snap.name)}</strong>
+          <span class="chip">×${$.fmtNum(mul)}</span></div>
         <div class="actions">
           <button class="btn small ghost qtyMinus" title="-0.5">−0.5</button>
           <button class="btn small ghost qtyPlus" title="+0.5">+0.5</button>
           <button class="btn small ghost sync" title="Update to latest food">⟳</button>
           <button class="btn small ghost del" title="Delete">🗑️</button>
         </div>
+        <div class="meta">${$.esc(snap.refLabel)} · ${mealMeta}</div>
       </div>`;
     }).join('');
   }

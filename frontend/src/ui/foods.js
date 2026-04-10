@@ -99,7 +99,8 @@ export function setupFoods(){
    * Render the foods list based on current search and status filters.
    */
   async function renderFoods(){
-    const status = foodStatus.value === 'archived' ? 'archived' : 'active';
+    const status = foodStatus.value === 'archived' ? 'archived'
+      : foodStatus.value === 'all' ? 'all' : 'active';
     const xs = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
     foodsList.innerHTML = xs.map((f)=>{
       const archivedChip = f.archived ? '<span class="chip">Archived</span>' : '';
@@ -108,16 +109,12 @@ export function setupFoods(){
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
       return `
       <div class="item" data-id="${f.id}">
-        <div>
-          <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
-          <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
-        </div>
+        <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
         <div class="actions">
           <button class="btn small ghost edit">✏️ Edit</button>
           <button class="btn small ghost ${archiveClass}">${archiveLabel}</button>
-          <button class="btn small ghost updateMeals"
-            title="Update past meals to latest">⟳ Update meals</button>
         </div>
+        <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
     }).join('') || `<div class="muted">No foods yet.</div>`;
   }
@@ -153,13 +150,6 @@ export function setupFoods(){
       renderFoods();
       return;
     }
-    if (target.classList.contains('updateMeals')){
-      await $.withConfirm($.button(target),
-        () => Meals.syncAllForFood(id),
-        n => `✓ ${n} updated`
-      );
-      return;
-    }
   });
 
   foodSearch.addEventListener('input', renderFoods);
@@ -189,9 +179,10 @@ export function setupFoods(){
       clearFieldErrors();
       const payload = v.createFoodInput(readFormPayload());
       const isNew = !foodId.value;
+      const editId = isNew ? null : v.id(foodId.value);
       await $.withConfirm(submitBtn, async () => {
-        if (foodId.value) {
-          await Foods.update(v.id(foodId.value), payload);
+        if (editId) {
+          await Foods.update(editId, payload);
         } else { await Foods.create(payload); }
         setFoodForm(); renderFoods();
         const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
@@ -207,6 +198,18 @@ export function setupFoods(){
             ),
           },
         });
+      } else if (editId) {
+        const hasMeals = await Meals.hasForFood(editId);
+        if (hasMeals) {
+          $.toast(`Update past meals to "${$.esc(payload.name)}" latest macros?`, {
+            duration: 8000,
+            action: {
+              label: 'Update meals',
+              callback: () => Meals.syncAllForFood(editId)
+                .then(n => $.toast(`✓ ${n} meal${n === 1 ? '' : 's'} updated`)),
+            },
+          });
+        }
       }
     } catch (err) {
       const e = /** @type {Error & {fields?: string[]}} */ (err);

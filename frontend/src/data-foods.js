@@ -20,7 +20,7 @@ import * as db from './db.js';
 /**
  * Foods store API
  * @type {{
- *   list: (opts?: {search?: string, status?: 'active'|'archived'}) => Promise<Food[]>,
+ *   list: (opts?: {search?: string, status?: 'active'|'archived'|'all'}) => Promise<Food[]>,
  *   create: (food: CreateFoodInput) => Promise<Food>,
  *   update: (id: number, patch: UpdateFoodPatch) => Promise<Food|undefined>,
  *   setArchived: (id: number, archived: boolean) => Promise<Food|undefined>,
@@ -31,7 +31,7 @@ import * as db from './db.js';
 export const Foods = {
   /**
    * Lists foods, optionally filtered by search and status.
-   * @param {{search?: string, status?: 'active'|'archived'}=} opts
+   * @param {{search?: string, status?: 'active'|'archived'|'all'}=} opts
    * @returns {Promise<Food[]>}
    */
   async list({ search = '', status = 'active' } = {}) {
