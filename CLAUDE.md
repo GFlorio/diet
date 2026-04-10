@@ -16,18 +16,11 @@ mise run typecheck     # TypeScript type check via JSDoc (no emit)
 mise run full-lint     # ESLint + Typescript (prefer this)
 mise run test-unit     # Vitest unit tests (one-shot)
 mise run test-unit-watch  # Vitest in watch mode
+mise run test-unit-file src/tests/foo.test.js  # single unit test file
 mise run e2e           # Playwright E2E tests (headless)
 mise run e2e-ui        # Playwright with interactive UI
+mise run e2e-file tests-e2e/foo.spec.js        # single E2E test file
 mise run test          # Unit + E2E sequentially
-```
-
-Run a single test file:
-```bash
-# Unit
-npm --workspace frontend run test -- src/tests/validation.test.js
-
-# E2E
-npm --workspace frontend run e2e -- tests-e2e/meals.spec.js
 ```
 
 ## Architecture

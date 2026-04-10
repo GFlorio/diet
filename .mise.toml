@@ -73,6 +73,10 @@ run         = "npm --workspace frontend run e2e"
 description = "Run Playwright E2E tests in UI mode"
 run         = "npm --workspace frontend run e2e:ui"
 
+[tasks.e2e-file]
+description = "Run a single E2E test file: mise run e2e-file tests-e2e/meals.spec.js"
+run         = "npm --workspace frontend run e2e -- {{arg(name='file')}}"
+
 [tasks.e2e-report]
 description = "Open the latest Playwright HTML report"
 run         = "PLAYWRIGHT_HTML_REPORT=1 npm --workspace frontend run e2e"
@@ -85,6 +89,10 @@ run         = "npm --workspace frontend run test"
 [tasks.test-unit-watch]
 description = "Run unit tests in watch mode"
 run         = "npm --workspace frontend run test:watch"
+
+[tasks.test-unit-file]
+description = "Run a single unit test file: mise run test-unit-file src/tests/foo.test.js"
+run         = "npm --workspace frontend run test -- {{arg(name='file')}}"
 
 # ----- Unified test entry --------------------------------------------------
 [tasks.test]
