@@ -31,16 +31,17 @@ export function setupMeals(){
   const SWIPE_ANIM_MS = 260; // Duration of the date change animation
 
   const mealsUiState = {
-    mode: /** @type {'overview'|'entry'} */ ('overview'),
+    mode: /** @type {'overview'|'entry'|'spacious'} */ ('overview'),
     quickSearchFocused: false,
     /** Set to true when goals feature is implemented */
     goalsEnabled: false,
   };
 
-  /** @param {'overview'|'entry'} mode */
+  /** @param {'overview'|'entry'|'spacious'} mode */
   function setMealsMode(mode){
     mealsPage.classList.toggle('mode-overview', mode === 'overview');
     mealsPage.classList.toggle('mode-entry', mode === 'entry');
+    mealsPage.classList.toggle('mode-spacious', mode === 'spacious');
     mealsUiState.mode = mode;
   }
 
@@ -206,13 +207,13 @@ export function setupMeals(){
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
       return `
       <div class="item" data-id="${f.id}">
-        <div><button class="btn ghost food-link">${$.esc(f.name)}</button></div>
+        <div><button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button></div>
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0"
             value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
-          <button class="btn small add">＋ Add</button>
-          <button class="btn small ghost add05" title="+0.5">+0.5</button>
-          <button class="btn small ghost add1" title="+1">+1</button>
+          <button class="btn small add" tabindex="-1">＋ Add</button>
+          <button class="btn small ghost add05" tabindex="-1" title="+0.5">+0.5</button>
+          <button class="btn small ghost add1" tabindex="-1" title="+1">+1</button>
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
@@ -228,19 +229,31 @@ export function setupMeals(){
 
   quickSearch.addEventListener('focus', () => {
     mealsUiState.quickSearchFocused = true;
-    document.body.classList.add('header-hidden');
-    setMealsMode('entry');
-    // Scroll so the totals summary sits at the top of the viewport (below sticky header)
-    // const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0;
-    const targetY = dayTotals.getBoundingClientRect().top + window.scrollY - 8;
-    if (window.scrollY < targetY) {
-      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    // On touch devices the virtual keyboard hasn't appeared yet at focus time,
+    // so innerHeight is still full-height and the content looks like it fits —
+    // but it won't once the keyboard slides up. Always collapse on coarse-pointer
+    // (touch) devices; only stay expanded when a mouse/trackpad is present.
+    const touchDevice = window.matchMedia('(pointer: coarse)').matches;
+    const quickAddBottom = quickAddCard.getBoundingClientRect().bottom;
+    if (!touchDevice && quickAddBottom <= window.innerHeight) {
+      setMealsMode('spacious');
+    } else {
+      document.body.classList.add('header-hidden');
+      setMealsMode('entry');
+      // Scroll so the dates subheader is fully off-screen (compact summary then sticks at top)
+      const targetY = daysHeader.getBoundingClientRect().bottom + window.scrollY;
+      if (window.scrollY < targetY) {
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      }
     }
   });
   quickSearch.addEventListener('blur', () => {
     mealsUiState.quickSearchFocused = false;
     window.setTimeout(() => {
-      if (!mealsUiState.quickSearchFocused) { setMealsMode('overview'); }
+      if (!mealsUiState.quickSearchFocused && !quickAddCard.contains(document.activeElement)) {
+        setMealsMode('overview');
+        document.body.classList.remove('header-hidden');
+      }
     }, 120);
   });
 
@@ -253,9 +266,50 @@ export function setupMeals(){
         btn.click(); e.preventDefault();
       }
     }
+    if (e.key==='Escape'){
+      quickSearch.blur();
+      e.preventDefault();
+    }
+    if (e.key==='Tab' && !e.shiftKey){
+      const firstQty = /** @type {HTMLInputElement|null} */ (quickList.querySelector('.qty'));
+      if (firstQty) { firstQty.focus(); firstQty.select(); e.preventDefault(); }
+    }
+  });
+
+  quickList.addEventListener('keydown', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (!target.classList.contains('qty')) { return; }
+    if (e.key === 'Enter') {
+      const addBtn = /** @type {HTMLElement|null} */ (target.closest('.item')?.querySelector('.add'));
+      if (addBtn) { addBtn.click(); e.preventDefault(); }
+    }
+    if (e.key === 'Tab') {
+      const qtys = /** @type {NodeListOf<HTMLElement>} */ (quickList.querySelectorAll('.qty'));
+      const idx = Array.prototype.indexOf.call(qtys, target);
+      if (!e.shiftKey && idx < qtys.length - 1) {
+        qtys[idx + 1].focus(); qtys[idx + 1].select(); e.preventDefault();
+      } else if (!e.shiftKey && idx === qtys.length - 1) {
+        // Tab past the last item — collapse the list and let focus leave normally
+        setMealsMode('overview');
+        document.body.classList.remove('header-hidden');
+      } else if (e.shiftKey && idx > 0) {
+        qtys[idx - 1].focus(); qtys[idx - 1].select(); e.preventDefault();
+      } else if (e.shiftKey && idx === 0) {
+        quickSearch.focus(); e.preventDefault();
+      }
+    }
   });
   quickList.addEventListener('refresh', renderQuickList);
   window.addEventListener('meals-activate', renderQuickList);
+
+  window.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) { return; }
+    if (mealsPage.classList.contains('hidden')) { return; }
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) { return; }
+    e.preventDefault();
+    shiftDate(e.key === 'ArrowRight' ? 1 : -1);
+  });
 
   quickList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);

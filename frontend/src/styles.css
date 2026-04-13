@@ -138,6 +138,10 @@ label{ font-size:12px; color:var(--muted) }
 #page-meals.mode-entry .day-summary-compact{ display:flex }
 #page-meals.mode-overview #quickList{ display:none }
 #page-meals.mode-entry #quickList{ display:block }
+/* Spacious mode: viewport tall enough to show expanded summary + quick list together */
+#page-meals.mode-spacious .day-summary-expanded{ display:grid }
+#page-meals.mode-spacious .day-summary-compact{ display:none }
+#page-meals.mode-spacious #quickList{ display:block }
 
 /* Hero calories */
 .summary-hero{ display:grid; gap:4px; text-align:center }
