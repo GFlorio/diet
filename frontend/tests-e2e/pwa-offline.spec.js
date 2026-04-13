@@ -33,13 +33,13 @@ test.describe('PWA and offline persistence', () => {
   // While offline: add another meal (IDB-only path)
     await page.fill('#quickSearch', 'ban');
     await page.click('#quickList .item .add');
-    await expect(page.locator('#mealsList .item')).toHaveCount(2);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(2);
     const mealsOffline = await getAllFromStore(page, 'nutri-pwa', 'meals');
     expect(mealsOffline.length).toBe(2);
 
     // Come back online, app remains stable
     await context.setOffline(false);
   await page.reload();
-    await expect(page.locator('#mealsList .item')).toHaveCount(2);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(2);
   });
 });

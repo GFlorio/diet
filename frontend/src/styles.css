@@ -1,11 +1,23 @@
 /* Core theme variables and base styles extracted from index.html */
 :root{
   --bg: #0b1220; --fg: #e6edf3; --muted:#9fb3c8; --card:#0f172a; --brand:#0ea5e9; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --border:#22304a; --shadow: 0 10px 20px rgba(0,0,0,.25);
+
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --surface-1: var(--card);
+  --surface-2: color-mix(in oklab, var(--card) 92%, var(--bg));
+  --shadow-soft: 0 6px 16px rgba(0,0,0,.14);
+
+  --ok-bg: color-mix(in oklab, var(--ok) 16%, transparent);
+  --warn-bg: color-mix(in oklab, var(--warn) 16%, transparent);
+  --bad-bg: color-mix(in oklab, var(--bad) 16%, transparent);
 }
 @media (prefers-color-scheme: light){
-  :root{ --bg:#f7fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --border:#e2e8f0; --shadow:0 10px 20px rgba(2,6,23,.06); }
+  :root{ --bg:#f7fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --border:#e2e8f0; --shadow:0 10px 20px rgba(2,6,23,.06); --shadow-soft:0 4px 12px rgba(2,6,23,.08); }
 }
-[data-theme="light"]:root{ --bg:#f7fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --border:#e2e8f0; --shadow:0 10px 20px rgba(2,6,23,.06); }
+[data-theme="light"]:root{ --bg:#f7fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --border:#e2e8f0; --shadow:0 10px 20px rgba(2,6,23,.06); --shadow-soft:0 4px 12px rgba(2,6,23,.08); }
 [data-theme="dark"]:root{ --bg:#0b1220; --fg:#e6edf3; --muted:#9fb3c8; --card:#0f172a; --border:#22304a; --shadow:0 10px 20px rgba(0,0,0,.25); }
 
 *{ box-sizing:border-box }
@@ -13,7 +25,8 @@ html,body{ height:100% }
 body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:var(--bg); color:var(--fg) }
 .app{ max-width:960px; margin:0 auto; padding: 8px 12px 64px }
 
-header{ position:sticky; top:0; z-index:50; backdrop-filter:saturate(150%) blur(8px); background: color-mix(in oklab, var(--bg) 80%, transparent); border-bottom:1px solid var(--border); }
+header{ position:sticky; top:0; z-index:50; backdrop-filter:saturate(150%) blur(8px); background: color-mix(in oklab, var(--bg) 80%, transparent); border-bottom:1px solid var(--border); transition:transform .28s ease; }
+.header-hidden header{ transform:translateY(-100%) }
 .bar{ display:flex; align-items:center; gap:8px; padding:10px 8px; }
 .title{ font-size:18px; font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px }
 .title svg{ width:22px; height:22px }
@@ -60,12 +73,16 @@ label{ font-size:12px; color:var(--muted) }
 /* Meals page enhancements */
 /* Subheader with date navigation */
 .subheader{ display:flex; align-items:center; justify-content:center; gap:8px; padding:4px 4px 0; user-select:none }
-.subheader .dayDisplay{ font-size:18px; font-weight:600; letter-spacing:.5px; min-width:110px; text-align:center; padding:6px 14px; border:1px solid var(--border); border-radius:14px; background:var(--card); box-shadow:var(--shadow); position:relative; }
-.dayBox{ font-size:14px; font-weight:500; min-width:80px; min-height:45px; text-align:center; padding:4px 10px; display:flex; align-items:center; justify-content:center; border:1px dashed var(--border); border-radius:12px; background:color-mix(in oklab, var(--card) 90%, transparent); opacity:.55; cursor:pointer; transition:opacity .15s, transform .15s; }
+.subheader .dayDisplay{ font-size:18px; font-weight:600; letter-spacing:.5px; min-width:110px; text-align:center; padding:6px 14px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--card); box-shadow:none; position:relative; }
+.dayBox{ font-size:14px; font-weight:500; min-width:80px; min-height:45px; text-align:center; padding:4px 10px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:var(--radius-md); background:transparent; opacity:.72; cursor:pointer; transition:opacity .15s, transform .15s; }
 .dayBox:hover{ opacity:.75 }
 .dayBox:active{ transform:translateY(1px) }
 .dayBox.inactive::after{ content:'◁' attr(data-dir); display:none }
 .swipeFlash{ outline:2px solid var(--brand); }
+
+/* Clickable food name in quick-add list */
+.food-link{ font-size:inherit; font-weight:600; padding:0; min-height:unset; min-width:unset; border:none; text-align:left; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .15s }
+.food-link:hover{ text-decoration-color:currentColor }
 
 /* Date change animation */
 @keyframes slideLeftFade { 0%{ transform:translateX(30px); opacity:0 } 100%{ transform:translateX(0); opacity:1 } }
@@ -73,15 +90,97 @@ label{ font-size:12px; color:var(--muted) }
 .dateSlideLeft{ animation: slideLeftFade .26s ease-out }
 .dateSlideRight{ animation: slideRightFade .26s ease-out }
 
-/* Compact totals card */
-.card.totals{ padding:10px 12px; }
-.totalsWrap{ display:grid; gap:6px; /* Allow boxes to shrink more on narrow screens */
-  grid-template-columns: repeat(auto-fit,minmax(clamp(60px,12vw,88px),1fr));
+/* Totals — legacy selectors kept temporarily during migration */
+.totals{ padding:0 }
+.totals-row{ display:flex; flex-direction:row; align-items:center }
+.totalBlock{ flex:1 1 0; min-width:0; text-align:center; padding:6px 4px }
+.totalBlock + .totalBlock{ border-left:1px solid var(--border) }
+.totalBlock .label{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; white-space:nowrap }
+.totalBlock .value{ display:flex; align-items:baseline; justify-content:center; gap:2px; font-size:15px; font-weight:600; color:var(--fg); margin-top:1px }
+.totalBlock .value .unit{ font-size:10px; font-weight:400 }
+.totalBlock:first-child .value{ font-size:20px; font-weight:700; color:var(--fg) }
+.totalBlock:first-child .value .unit{ font-size:11px; color:var(--muted) }
+
+/* Day summary — two-variant responsive summary component */
+.day-summary{
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  background:var(--surface-1);
 }
-.totalBlock{ padding:6px 8px; border:1px solid var(--border); border-radius:10px; display:grid; gap:2px; background:var(--card); box-shadow:none; min-width:0 }
-.totalBlock .label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; white-space:nowrap }
-.totalBlock .value{ font-size:18px; font-weight:600; display:flex; align-items:baseline; gap:2px; color:var(--fg); flex-wrap:wrap }
-.totalBlock .value .unit{ font-size:11px; font-weight:400; color:var(--muted) }
+
+.day-summary-expanded{
+  padding:16px;
+  box-shadow:var(--shadow-soft);
+  display:grid;
+  gap:14px;
+}
+
+.day-summary-compact{
+  padding:10px 16px;
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  position:sticky;
+  top:calc(56px + 8px);
+  z-index:20;
+  background:color-mix(in oklab, var(--card) 94%, var(--bg));
+  box-shadow:var(--shadow-soft);
+  border-radius:var(--radius-md);
+  transition:top .28s ease;
+}
+.header-hidden .day-summary-compact{ top:8px }
+
+/* Mode switching */
+#page-meals.mode-overview .day-summary-expanded{ display:grid }
+#page-meals.mode-overview .day-summary-compact{ display:none }
+#page-meals.mode-entry .day-summary-expanded{ display:none }
+#page-meals.mode-entry .day-summary-compact{ display:flex }
+#page-meals.mode-overview #quickList{ display:none }
+#page-meals.mode-entry #quickList{ display:block }
+
+/* Hero calories */
+.summary-hero{ display:grid; gap:4px; text-align:center }
+.summary-hero-label{ font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-weight:600 }
+.summary-hero-value{ display:flex; align-items:baseline; justify-content:center; gap:6px }
+.summary-hero-value .num{ font-size:36px; line-height:1; font-weight:800 }
+.summary-hero-value .unit{ font-size:13px; color:var(--muted); font-weight:500 }
+.summary-hero-subtext{ font-size:12px; color:var(--muted) }
+
+/* Macro cards grid */
+.summary-macros{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px }
+.macro-card{ border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-2); padding:10px; display:grid; gap:6px }
+.macro-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600 }
+.macro-value{ font-size:18px; font-weight:700; line-height:1.1 }
+.macro-value .unit{ font-size:11px; color:var(--muted); font-weight:500; margin-left:2px }
+.macro-subtext{ font-size:11px; color:var(--muted) }
+.macro-bar{ height:6px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden }
+.macro-bar-fill{ width:0%; height:100%; border-radius:999px; background:var(--brand) }
+
+/* Compact summary text */
+.compact-primary{ font-size:16px; font-weight:700 }
+.compact-secondary{ font-size:12px; color:var(--muted) }
+
+/* Status color system — activated only when goals feature is implemented */
+.status-ok{ color:var(--ok) }
+.status-warn{ color:var(--warn) }
+.status-bad{ color:var(--bad) }
+.macro-card.status-ok{ background:var(--ok-bg) }
+.macro-card.status-warn{ background:var(--warn-bg) }
+.macro-card.status-bad{ background:var(--bad-bg) }
+.macro-card.status-ok .macro-bar-fill{ background:var(--ok) }
+.macro-card.status-warn .macro-bar-fill{ background:var(--warn) }
+.macro-card.status-bad .macro-bar-fill{ background:var(--bad) }
+
+/* Meals logged list — lighter than the food search results */
+.meals-list{ display:grid }
+.meal-row{ display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--border) }
+.meal-row:last-child{ border-bottom:none }
+.meal-row-body{ flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px }
+.meal-name{ font-weight:600 }
+.meal-row-meta{ font-size:12px; color:var(--muted) }
+@keyframes mealRowIn{ from{ opacity:0; transform:translateY(-6px) } to{ opacity:1; transform:translateY(0) } }
+.meal-row-added{ animation: mealRowIn .22s ease-out }
 
 /* Subtle feedback for invalid actions */
 @keyframes shakeX { 0%{transform:translateX(0)} 25%{transform:translateX(-2px)} 50%{transform:translateX(2px)} 75%{transform:translateX(-1px)} 100%{transform:translateX(0)} }
@@ -97,12 +196,15 @@ label{ font-size:12px; color:var(--muted) }
 .toast.error{ background:var(--bad); color:#fff }
 .toast.error .btn{ background:rgba(0,0,0,.2); color:#fff; border-color:transparent }
 
+/* De-emphasize quick-add card — summary is the visual focal point */
+#quickAddCard{ box-shadow:none }
+
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
 
-/* Narrow viewport adjustments */
-@media (max-width: 480px){
-  .totalBlock .value{ font-size:16px }
-  .totalBlock .label{ font-size:10px }
+@media (max-width: 640px){
+  .summary-macros{ grid-template-columns:1fr }
+  .summary-hero-value .num{ font-size:32px }
 }
+

@@ -243,12 +243,18 @@ export function setupFoods(){
     .forEach(el => el.addEventListener('input', liveCheck));
 
   // Listen to cross-module navigation prefill
-  window.addEventListener('go-foods', (e) => {
-    const name = /** @type {CustomEvent} */(e).detail?.name || '';
+  window.addEventListener('go-foods', async (e) => {
+    const detail = /** @type {CustomEvent} */(e).detail;
     $.showPage('foods');
-    foodForm.reset();
-    foodName.value = name;
-    foodName.focus();
+    if (detail?.id) {
+      const f = await Foods.byId(detail.id);
+      if (f) { setFoodForm(f); }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      foodForm.reset();
+      foodName.value = detail?.name || '';
+      foodName.focus();
+    }
   });
 
   renderFoods();

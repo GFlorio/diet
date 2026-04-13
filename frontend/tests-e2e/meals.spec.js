@@ -19,7 +19,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await page.reload();
   });
 
-  test('quick add from search with keyboard enter, adjust qty, delete', async ({ page }) => {
+  test('quick add from search with keyboard enter, delete', async ({ page }) => {
     // Arrange: add two foods
     await createFood(page, { name:'Chicken', refLabel:'100 g', kcal:165, prot:31, carbs:0, fats:3.6 });
     await createFood(page, { name:'Rice', refLabel:'100 g', kcal:130, prot:2.7, carbs:28.2, fats:0.3 });
@@ -30,24 +30,11 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await page.keyboard.press('Enter'); // adds first
 
     // Assert: meal list shows one
-    await expect(page.locator('#mealsList .item')).toHaveCount(1);
-    await expect(page.locator('#mealsInfo')).toContainText('1 meal');
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
     await expect(page.locator('#mealsList')).toContainText('Chicken');
+    await page.locator('#mealsList .meal-row .del').click();
 
-    // Adjust qty +0.5 twice
-    await page.locator('#mealsList .item .qtyPlus').click();
-    await page.locator('#mealsList .item .qtyPlus').click();
-    await expect(page.locator('#mealsList')).toContainText('×2');
-
-    // -0.5 three times -> 2 -> 1.5 -> 1.0 -> 0.5; qtyMinus blocks at 0 so use del to remove
-    await page.locator('#mealsList .item .qtyMinus').click();
-    await page.locator('#mealsList .item .qtyMinus').click();
-    await page.locator('#mealsList .item .qtyMinus').click();
-    await expect(page.locator('#mealsList')).toContainText('×0.5');
-    await page.locator('#mealsList .item .del').click();
-
-    await expect(page.locator('#mealsList .item')).toHaveCount(0);
-    await expect(page.locator('#mealsInfo')).toHaveText('No meals yet');
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
   });
 
   test('meals snapshot: foods edit does not change existing meals', async ({ page }) => {
@@ -78,6 +65,22 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     expect(mealsAfter[0].foodSnapshot.kcal).toBe(100);
   });
 
+  test('quick-add: clicking food name navigates to edit food form', async ({ page }) => {
+    // Arrange: create a food and go to meals
+    await createFood(page, { name: 'Salmon', refLabel: '100 g', kcal: 208, prot: 20, carbs: 0, fats: 13 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'sal');
+    await expect(page.locator('#quickList .item')).toHaveCount(1);
+
+    // Act: click the food name link
+    await page.locator('#quickList .item .food-link').click();
+
+    // Assert: foods page is shown with the edit form populated for that food
+    await expect(page.locator('#page-foods')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#foodName')).toHaveValue('Salmon');
+    await expect(page.locator('#foodKcal')).toHaveValue('208');
+  });
+
   test('quick-add: qty -1 shows error and creates no meal', async ({ page }) => {
     // Arrange: create a food and open the meals tab
     await createFood(page, { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs: 0, fats: 3.6 });
@@ -91,7 +94,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
 
     // Assert: qty input is styled as error; no meal was added
     await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
-    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
   });
 
   test('quick-add: qty 101 shows error and creates no meal', async ({ page }) => {
@@ -107,7 +110,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
 
     // Assert: qty input is styled as error; no meal was added
     await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
-    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
   });
 
   test('quick-add: qty 0 should not create a meal', async ({ page }) => {
@@ -123,7 +126,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
 
     // Assert: qty input shows error and no meal is created
     await expect(page.locator('#quickList .item .qty')).toHaveClass(/error/);
-    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
   });
 
   test('"create new" link navigates to Foods tab with search term prefilled', async ({ page }) => {
@@ -197,20 +200,20 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'tun');
     await page.click('#quickList .item .add');
-    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
 
     // Act: delete the meal
-    await page.locator('#mealsList .item .del').click();
+    await page.locator('#mealsList .meal-row .del').click();
 
     // Assert: meal removed from list and "removed" toast appears
-    await expect(page.locator('#mealsList .item')).toHaveCount(0);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
     await expect(page.locator('.toast')).toContainText('removed');
 
     // Act: click Undo
     await page.getByRole('button', { name: 'Undo' }).click();
 
     // Assert: meal is restored in the list and in IndexedDB
-    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
     await expect(async () => {
       const meals = await getAllFromStore(page, 'nutri-pwa', 'meals');
       expect(meals).toHaveLength(1);
@@ -228,10 +231,10 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await expect(page.locator('#quickList .item')).toHaveCount(1);
     await page.click('#quickList .item .add');
     // Wait for first meal to be committed before adding second
-    await expect(page.locator('#mealsList .item')).toHaveCount(1);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
     await page.fill('#quickSearch', 'zuc');
     await page.click('#quickList .item .add');
-    await expect(page.locator('#mealsList .item')).toHaveCount(2);
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(2);
 
     // Navigate away and back to trigger a fresh frecency render via meals-activate
     await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -244,8 +247,8 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     // Use page.evaluate to read the DOM directly (avoids Playwright visibility filtering quirks)
     await expect(async () => {
       const first = await page.evaluate(() => {
-        const strongs = document.querySelectorAll('#quickList .item strong');
-        return strongs[0]?.textContent ?? '';
+        const names = document.querySelectorAll('#quickList .item .food-link');
+        return names[0]?.textContent ?? '';
       });
       expect(first).toContain('Zucchini');
     }).toPass({ timeout: 5000 });

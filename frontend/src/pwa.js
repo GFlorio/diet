@@ -39,7 +39,7 @@ export function setupPWA(){
                 });
             },
             onOfflineReady() {
-                $.toast('App ready to work offline.');
+                console.log('App ready to work offline.');
             },
             onRegisteredSW(swScriptUrl, registration) {
                 console.log('SW registered', swScriptUrl, registration?.scope);

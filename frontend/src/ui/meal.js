@@ -5,6 +5,8 @@ import { Foods, Meals } from '../data.js';
 /**
  * @typedef {import('../data.js').Food} Food
  * @typedef {import('../data.js').Meal} Meal
+ * @typedef {import('../data.js').Macros} Macros
+ * @typedef {{ consumed: number, target: number|null, remaining: number|null, status: 'none'|'ok'|'warn'|'bad' }} MacroVM
  */
 
 /** Initialize meals page UI and handlers. */
@@ -14,7 +16,6 @@ export function setupMeals(){
   const prevDayBox = $.html($.id('prevDayBox'));
   const nextDayBox = $.html($.id('nextDayBox'));
   const mealsList = $.html($.id('mealsList'));
-  const mealsInfo = $.html($.id('mealsInfo'));
   const quickSearch = $.input($.id('quickSearch'));
   const quickList = $.html($.id('quickList'));
   const dayTotals = $.html($.id('dayTotals'));
@@ -28,6 +29,20 @@ export function setupMeals(){
   const SWIPE_MIN_X = 50; // Minimum horizontal delta
   const SWIPE_MAX_Y = 40; // Maximum vertical delta to still count as horizontal swipe
   const SWIPE_ANIM_MS = 260; // Duration of the date change animation
+
+  const mealsUiState = {
+    mode: /** @type {'overview'|'entry'} */ ('overview'),
+    quickSearchFocused: false,
+    /** Set to true when goals feature is implemented */
+    goalsEnabled: false,
+  };
+
+  /** @param {'overview'|'entry'} mode */
+  function setMealsMode(mode){
+    mealsPage.classList.toggle('mode-overview', mode === 'overview');
+    mealsPage.classList.toggle('mode-entry', mode === 'entry');
+    mealsUiState.mode = mode;
+  }
 
   let curDate = $.isoToday();
   /** @type {Meal[]} */
@@ -112,6 +127,7 @@ export function setupMeals(){
   }
 
   /** Apply translateX to all drag elements (no transition). */
+  /** @param {number} x */
   function setDragTranslate(x){
     const val = x === 0 ? '' : `translateX(${x}px)`;
     dragEls.forEach(el => el && (el.style.transform = val));
@@ -120,7 +136,7 @@ export function setupMeals(){
   /** Animate drag elements back to rest position. */
   function snapBack(){
     dragEls.forEach(el => {
-      if (!el) return;
+      if (!el) { return; }
       el.style.transition = `transform ${SWIPE_SNAP_MS}ms ease-out`;
       el.style.transform = '';
       el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
@@ -149,10 +165,14 @@ export function setupMeals(){
   function onTouchEnd(/** @type {TouchEvent} */ e){
     if (!touchActive) { return; }
     touchActive=false;
-    if (!startTargetBelowBar) { snapBack(); return; }
+    if (!startTargetBelowBar) {
+      snapBack(); return;
+    }
     const dx = (e.changedTouches[0].clientX - touchStartX);
     const dy = (e.changedTouches[0].clientY - touchStartY);
-    if (!isValidSwipe(dx, dy)) { snapBack(); return; }
+    if (!isValidSwipe(dx, dy)) {
+      snapBack(); return;
+    }
     // Valid swipe — clear drag transform immediately so the slide animation is clean
     setDragTranslate(0);
     if (dx < 0) { shiftDate(1); }
@@ -186,14 +206,13 @@ export function setupMeals(){
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
       return `
       <div class="item" data-id="${f.id}">
-        <div><strong>${$.esc(f.name)}</strong></div>
+        <div><button class="btn ghost food-link">${$.esc(f.name)}</button></div>
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0"
             value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
           <button class="btn small add">＋ Add</button>
           <button class="btn small ghost add05" title="+0.5">+0.5</button>
           <button class="btn small ghost add1" title="+1">+1</button>
-          <button class="btn small ghost editFood" title="Edit food">✏️</button>
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
@@ -206,6 +225,24 @@ export function setupMeals(){
       });
     }
   }
+
+  quickSearch.addEventListener('focus', () => {
+    mealsUiState.quickSearchFocused = true;
+    document.body.classList.add('header-hidden');
+    setMealsMode('entry');
+    // Scroll so the totals summary sits at the top of the viewport (below sticky header)
+    // const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0;
+    const targetY = dayTotals.getBoundingClientRect().top + window.scrollY - 8;
+    if (window.scrollY < targetY) {
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    }
+  });
+  quickSearch.addEventListener('blur', () => {
+    mealsUiState.quickSearchFocused = false;
+    window.setTimeout(() => {
+      if (!mealsUiState.quickSearchFocused) { setMealsMode('overview'); }
+    }, 120);
+  });
 
   quickSearch.addEventListener('input', $.debounce(renderQuickList, 200));
   quickSearch.addEventListener('keydown', (e)=>{
@@ -245,19 +282,22 @@ export function setupMeals(){
         await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
         qtyEl.value = '1';
         quickSearch.value = '';
+        renderMeals(true);
         renderQuickList();
-        renderMeals();
+        quickSearch.focus();
       }, '✓ Added');
       return;
     }
     if (target.classList.contains('add1')) {
-      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 1))); return;
+      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 1)));
+      quickSearch.focus(); return;
     }
     if (target.classList.contains('add05')) {
-      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 0.5))); return;
+      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 0.5)));
+      quickSearch.focus(); return;
     }
-    if (target.classList.contains('editFood')) {
-      goFoodsWithPrefill(food.name); return;
+    if (target.classList.contains('food-link')) {
+      window.dispatchEvent(new CustomEvent('go-foods', { detail: { id: food.id } })); return;
     }
   });
 
@@ -277,89 +317,104 @@ export function setupMeals(){
   }
 
   /**
-   * Render day header info and macros totals display.
-   * @param {Meal[]} meals
-   * @param {import('../data.js').Macros} totals
+   * Build a normalized totals view model.
+   * Targets/remaining/status are stubbed until goals feature exists.
+   * @param {Macros} totals
+   * @returns {{ calories: MacroVM, protein: MacroVM, carbs: MacroVM, fat: MacroVM }}
    */
-  function renderDayInfo(meals, totals){
-    const count = meals.length;
-    const nutrStr = $.nutrMeta(totals.kcal, totals.prot, totals.carbs, totals.fats);
-    mealsInfo.textContent = count
-      ? `${count} meal${count>1?'s':''} · ${nutrStr}`
-      : 'No meals yet';
-    dayTotals.innerHTML = `
-      <div class="totalsWrap">
-        <div class="totalBlock">
-          <div class="label">Calories</div>
-          <div class="value">${$.fmtNum(totals.kcal,0)}<span class="unit">kcal</span></div>
-        </div>
-        <div class="totalBlock">
-          <div class="label">Protein</div>
-          <div class="value">${$.fmtNum(totals.prot,0)}<span class="unit">g</span></div>
-        </div>
-        <div class="totalBlock">
-          <div class="label">Carbs</div>
-          <div class="value">${$.fmtNum(totals.carbs,0)}<span class="unit">g</span></div>
-        </div>
-        <div class="totalBlock">
-          <div class="label">Fat</div>
-          <div class="value">${$.fmtNum(totals.fats,0)}<span class="unit">g</span></div>
-        </div>
-      </div>`;
+  function buildTotalsViewModel(totals){
+    /** @param {number} consumed @returns {MacroVM} */
+    const stub = (consumed) => ({ consumed, target: null, remaining: null, status: 'none' });
+    return {
+      calories: stub(totals.kcal),
+      protein:  stub(totals.prot),
+      carbs:    stub(totals.carbs),
+      fat:      stub(totals.fats),
+    };
   }
 
   /**
-   * Update a single meal row's multiplier chip and macro meta in place.
-   * Avoids a full list re-render when only the quantity changes.
-   * @param {HTMLElement} rowEl
-   * @param {Meal} meal
+   * Render macros totals display — expanded (overview) + compact (entry) variants.
+   * @param {import('../data.js').Macros} totals
    */
-  function patchMealRow(rowEl, meal) {
-    const snap = meal.foodSnapshot;
-    const mul = meal.multiplier;
-    const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
-    const chip = rowEl.querySelector('.chip');
-    const meta = rowEl.querySelector('.meta');
-    if (chip) { $.html(chip).textContent = `×${$.fmtNum(mul)}`; }
-    if (meta) { $.html(meta).textContent = `${snap.refLabel} · ${mealMeta}`; }
+  function renderDayInfo(totals){
+    const vm = buildTotalsViewModel(totals);
+    dayTotals.innerHTML = `
+      <div class="day-summary day-summary-expanded">
+        <div class="summary-hero">
+          <div class="summary-hero-label">Calories</div>
+          <div class="summary-hero-value">
+            <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
+            <span class="unit">kcal</span>
+          </div>
+        </div>
+        <div class="summary-macros">
+          <div class="macro-card macro-protein">
+            <div class="macro-label">Protein</div>
+            <div class="macro-value">${$.fmtNum(vm.protein.consumed, 0)}<span class="unit">g</span></div>
+          </div>
+          <div class="macro-card macro-carbs">
+            <div class="macro-label">Carbs</div>
+            <div class="macro-value">${$.fmtNum(vm.carbs.consumed, 0)}<span class="unit">g</span></div>
+          </div>
+          <div class="macro-card macro-fat">
+            <div class="macro-label">Fat</div>
+            <div class="macro-value">${$.fmtNum(vm.fat.consumed, 0)}<span class="unit">g</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="day-summary day-summary-compact">
+        <div class="compact-primary">${$.fmtNum(vm.calories.consumed, 0)} kcal</div>
+        <div class="compact-secondary">P ${$.fmtNum(vm.protein.consumed, 0)}g · C ${$.fmtNum(vm.carbs.consumed, 0)}g · F ${$.fmtNum(vm.fat.consumed, 0)}g</div>
+      </div>`;
   }
 
   /**
    * Render the list of meals with action buttons.
    * @param {Meal[]} meals
    */
-  function renderMealsList(meals){
-    mealsList.innerHTML = meals.map(/** @param {Meal} m */ m => {
+  /**
+   * @param {Meal[]} meals
+   * @param {boolean} [animateFirst]
+   */
+  function renderMealsList(meals, animateFirst = false){
+    mealsList.innerHTML = [...meals].reverse().map(/** @param {Meal} m */ m => {
       const snap = m.foodSnapshot;
       const mul = m.multiplier;
       const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
       return `
-      <div class="item" data-id="${m.id}">
-        <div><strong>${$.esc(snap.name)}</strong>
-          <span class="chip">×${$.fmtNum(mul)}</span></div>
-        <div class="actions">
-          <button class="btn small ghost qtyMinus" title="-0.5">−0.5</button>
-          <button class="btn small ghost qtyPlus" title="+0.5">+0.5</button>
-          <button class="btn small ghost del" title="Delete">🗑️</button>
+      <div class="meal-row" data-id="${m.id}">
+        <div class="meal-row-body">
+          <span class="meal-name">${$.esc(snap.name)}</span>
+          <span class="chip">×${$.fmtNum(mul)}</span>
+          <span class="meal-row-meta">${$.esc(snap.refLabel)} · ${mealMeta}</span>
         </div>
-        <div class="meta">${$.esc(snap.refLabel)} · ${mealMeta}</div>
+        <button class="btn small ghost del" title="Delete">🗑️</button>
       </div>`;
     }).join('');
+    if (animateFirst) {
+      const first = /** @type {HTMLElement|null} */ (mealsList.querySelector('.meal-row'));
+      if (first) {
+        first.classList.add('meal-row-added');
+        first.addEventListener('animationend', () => first.classList.remove('meal-row-added'), { once: true });
+      }
+    }
   }
 
   /**
    * Fetch meals for current date, compute totals, and render UI.
+   * @param {boolean} [animateFirst]
    */
-  async function renderMeals(){
+  async function renderMeals(animateFirst = false){
     currentMeals = /** @type {Meal[]} */ (await Meals.listByDate(curDate));
     const totals = computeTotals(currentMeals);
-    renderDayInfo(currentMeals, totals);
-    renderMealsList(currentMeals);
+    renderDayInfo(totals);
+    renderMealsList(currentMeals, animateFirst);
   }
 
   mealsList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-    const row = target.closest('.item');
+    const row = target.closest('.meal-row');
     if (!row) { return; }
     const rowEl = /** @type {HTMLElement} */ (row);
     const id = V.id(rowEl.dataset.id);
@@ -375,33 +430,6 @@ export function setupMeals(){
           callback: () => Meals.restore(meal).then(() => renderMeals()),
         },
       });
-      return;
-    }
-    if (target.classList.contains('qtyPlus')) {
-      const newMul = V.number(meal.multiplier + 0.5);
-      await Meals.update(meal.id, { multiplier: newMul });
-      meal.multiplier = newMul;
-      patchMealRow(rowEl, meal);
-      renderDayInfo(currentMeals, computeTotals(currentMeals));
-      return;
-    }
-    if (target.classList.contains('qtyMinus')) {
-      const btn = $.button(target);
-      if (meal.multiplier - 0.5 <= 0) {
-        btn.classList.add('error');
-        setTimeout(() => btn.classList.remove('error'), 700);
-        return;
-      }
-      const newMul = V.number(meal.multiplier - 0.5);
-      await Meals.update(meal.id, { multiplier: newMul });
-      meal.multiplier = newMul;
-      patchMealRow(rowEl, meal);
-      renderDayInfo(currentMeals, computeTotals(currentMeals));
-      return;
-    }
-    if (target.classList.contains('sync')) {
-      await Meals.syncMealToFood(meal);
-      renderMeals();
       return;
     }
   });

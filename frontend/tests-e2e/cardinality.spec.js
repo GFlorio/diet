@@ -128,12 +128,11 @@ test.describe('Cardinality smoke tests: large datasets', () => {
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
     // Assert: 50 meal rows rendered without error
-    await expect(page.locator('#mealsList .item')).toHaveCount(50, { timeout: 15_000 });
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(50, { timeout: 15_000 });
 
-    // Assert: summary line shows the correct count and kcal total
+    // Assert: totals card shows the correct kcal sum
     const expectedKcal = macros.kcalPerMeal * 50; // 5000
-    await expect(page.locator('#mealsInfo')).toContainText('50 meals');
-    await expect(page.locator('#mealsInfo')).toContainText(String(expectedKcal));
+    await expect(page.locator('#dayTotals')).toContainText(String(expectedKcal));
 
     // Sanity: DB contains 50 meal records
     const meals = await getAllFromStore(page, DB_NAME, 'meals');
