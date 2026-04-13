@@ -90,10 +90,16 @@ export function setupMeals(){
 
   // Swipe handler across entire app area; only triggers when meals page is active
   // and swipe starts below date bar.
+  const SWIPE_DAMPING = 0.35;       // Fraction of drag distance applied as translate
+  const SWIPE_MAX_TRANSLATE = 55;   // Max px of translate during drag
+  const SWIPE_SNAP_MS = 200;        // Snap-back transition duration (ms)
+
   let touchStartX = 0;
   let touchStartY = 0;
   let touchActive = false;
   let startTargetBelowBar = false;
+  // Elements that follow the user's drag (same set that gets the slide animation)
+  const dragEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
 
   /**
    * Check if touch movement qualifies as a valid horizontal swipe.
@@ -103,6 +109,22 @@ export function setupMeals(){
    */
   function isValidSwipe(dx, dy){
     return Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y;
+  }
+
+  /** Apply translateX to all drag elements (no transition). */
+  function setDragTranslate(x){
+    const val = x === 0 ? '' : `translateX(${x}px)`;
+    dragEls.forEach(el => el && (el.style.transform = val));
+  }
+
+  /** Animate drag elements back to rest position. */
+  function snapBack(){
+    dragEls.forEach(el => {
+      if (!el) return;
+      el.style.transition = `transform ${SWIPE_SNAP_MS}ms ease-out`;
+      el.style.transform = '';
+      el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+    });
   }
 
   function onTouchStart(/** @type {TouchEvent} */ e){
@@ -116,18 +138,35 @@ export function setupMeals(){
     const y = e.touches[0].clientY;
     startTargetBelowBar = y > subRect.bottom;
   }
+  function onTouchMove(/** @type {TouchEvent} */ e){
+    if (!touchActive || !startTargetBelowBar || e.touches.length !== 1) {return;}
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dy) > SWIPE_MAX_Y) {return;} // likely a scroll, don't translate
+    const clamped = Math.max(-SWIPE_MAX_TRANSLATE, Math.min(SWIPE_MAX_TRANSLATE, dx * SWIPE_DAMPING));
+    setDragTranslate(clamped);
+  }
   function onTouchEnd(/** @type {TouchEvent} */ e){
     if (!touchActive) { return; }
     touchActive=false;
-    if (!startTargetBelowBar) {return;} // must start below the date bar
+    if (!startTargetBelowBar) { snapBack(); return; }
     const dx = (e.changedTouches[0].clientX - touchStartX);
     const dy = (e.changedTouches[0].clientY - touchStartY);
-    if (!isValidSwipe(dx, dy)) {return;}
+    if (!isValidSwipe(dx, dy)) { snapBack(); return; }
+    // Valid swipe — clear drag transform immediately so the slide animation is clean
+    setDragTranslate(0);
     if (dx < 0) { shiftDate(1); }
     else { shiftDate(-1); }
   }
+  function onTouchCancel(){
+    if (!touchActive) {return;}
+    touchActive = false;
+    snapBack();
+  }
   swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
+  swipeSurface.addEventListener('touchmove', onTouchMove, { passive:true });
   swipeSurface.addEventListener('touchend', onTouchEnd);
+  swipeSurface.addEventListener('touchcancel', onTouchCancel);
 
   const FRECENCY_DAYS = 90;
 
@@ -158,7 +197,7 @@ export function setupMeals(){
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
       </div>`;
-    }).join('') || '<div class="muted">No match the filter. '
+    }).join('') || '<div class="muted">No Foods match the filter. '
       + 'Type a name and <a href="#" id="quickNew">create it</a>.</div>';
     const createLink = document.getElementById('quickNew');
     if (createLink) {
