@@ -78,7 +78,10 @@ label{ font-size:12px; color:var(--muted) }
 .dayBox:hover{ opacity:.75 }
 .dayBox:active{ transform:translateY(1px) }
 .dayBox.inactive::after{ content:'◁' attr(data-dir); display:none }
-.swipeFlash{ outline:2px solid var(--brand); }
+
+/* "Today" floating action button */
+.today-fab{ position:sticky; bottom:24px; justify-self:end; z-index:40; font-size:14px; font-weight:600; padding:0 20px; border-radius:var(--radius-lg); box-shadow:var(--shadow); display:none; min-height:45px; min-width:45px }
+.today-fab--visible{ display:inline-flex }
 
 /* Clickable food name in quick-add list */
 .food-link{ font-size:inherit; font-weight:600; padding:0; min-height:unset; min-width:unset; border:none; text-align:left; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .15s }

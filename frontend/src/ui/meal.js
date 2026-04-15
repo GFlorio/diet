@@ -25,10 +25,6 @@ export function setupMeals(){
   const mealsPage   = $.html($.id('page-meals'));
   const quickAddCard = $.html($.id('quickAddCard'));
   const mealsCard   = $.html($.id('mealsCard'));
-  const swipeSurface = document.body;
-
-  const SWIPE_MIN_X  = 50;
-  const SWIPE_MAX_Y  = 40;
   const SWIPE_ANIM_MS = 260;
 
   const mealsUiState = {
@@ -78,16 +74,21 @@ export function setupMeals(){
   /**
    * @param {number} delta
    */
+  /** @param {'dateSlideLeft'|'dateSlideRight'} cls */
+  function animateDateChange(cls){
+    const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
+    animEls.forEach(el => el && el.classList.add(cls));
+    setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
+  }
+
   function shiftDate(delta){
     const d = new Date(curDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
     curDate = $.toISO(d);
     updateHeader();
     renderMeals();
-    const cls   = delta > 0 ? 'dateSlideLeft' : 'dateSlideRight';
-    const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
-    animEls.forEach(el => el && el.classList.add(cls));
-    setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
+    updateTodayBtn();
+    animateDateChange(delta > 0 ? 'dateSlideLeft' : 'dateSlideRight');
   }
   prevDayBox.addEventListener('click', ()=> shiftDate(-1));
   nextDayBox.addEventListener('click', ()=> shiftDate(1));
@@ -102,77 +103,33 @@ export function setupMeals(){
     }
   });
 
-  const SWIPE_DAMPING      = 0.35;
-  const SWIPE_MAX_TRANSLATE = 55;
-  const SWIPE_SNAP_MS      = 200;
+  // Floating "Today" button — appears when viewing a past/future date
+  const todayFab = document.createElement('button');
+  todayFab.className = 'btn primary today-fab';
+  todayFab.setAttribute('aria-label', 'Go to today');
+  todayFab.textContent = 'Today';
+  mealsPage.appendChild(todayFab);
 
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchActive = false;
-  let startTargetBelowBar = false;
-  const dragEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
-
-  /** @param {number} dx @param {number} dy @returns {boolean} */
-  function isValidSwipe(dx, dy){
-    return Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y;
+  function updateTodayBtn(){
+    const onMeals = !mealsPage.classList.contains('hidden');
+    const isToday = curDate === $.isoToday();
+    todayFab.classList.toggle('today-fab--visible', onMeals && !isToday);
   }
 
-  /** @param {number} x */
-  function setDragTranslate(x){
-    const val = x === 0 ? '' : `translateX(${x}px)`;
-    dragEls.forEach(el => el && (el.style.transform = val));
-  }
+  todayFab.addEventListener('click', () => {
+    const today = $.isoToday();
+    const cls = curDate < today ? 'dateSlideLeft' : 'dateSlideRight';
+    curDate = today;
+    updateHeader();
+    renderMeals();
+    updateTodayBtn();
+    animateDateChange(cls);
+  });
 
-  function snapBack(){
-    dragEls.forEach(el => {
-      if (!el) { return; }
-      el.style.transition = `transform ${SWIPE_SNAP_MS}ms ease-out`;
-      el.style.transform  = '';
-      el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
-    });
-  }
-
-  function onTouchStart(/** @type {TouchEvent} */ e){
-    if (e.touches.length!==1) { return; }
-    if (mealsPage.classList.contains('hidden')) { return; }
-    touchActive       = true;
-    touchStartX       = e.touches[0].clientX;
-    touchStartY       = e.touches[0].clientY;
-    const subRect     = daysHeader.getBoundingClientRect();
-    startTargetBelowBar = e.touches[0].clientY > subRect.bottom;
-  }
-  function onTouchMove(/** @type {TouchEvent} */ e){
-    if (!touchActive || !startTargetBelowBar || e.touches.length !== 1) { return; }
-    const dx      = e.touches[0].clientX - touchStartX;
-    const dy      = e.touches[0].clientY - touchStartY;
-    if (Math.abs(dy) > SWIPE_MAX_Y) { return; }
-    const clamped = Math.max(-SWIPE_MAX_TRANSLATE, Math.min(SWIPE_MAX_TRANSLATE, dx * SWIPE_DAMPING));
-    setDragTranslate(clamped);
-  }
-  function onTouchEnd(/** @type {TouchEvent} */ e){
-    if (!touchActive) { return; }
-    touchActive = false;
-    if (!startTargetBelowBar) {
-      snapBack(); return;
-    }
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = e.changedTouches[0].clientY - touchStartY;
-    if (!isValidSwipe(dx, dy)) {
-      snapBack(); return;
-    }
-    setDragTranslate(0);
-    if (dx < 0) { shiftDate(1); }
-    else { shiftDate(-1); }
-  }
-  function onTouchCancel(){
-    if (!touchActive) { return; }
-    touchActive = false;
-    snapBack();
-  }
-  swipeSurface.addEventListener('touchstart',  onTouchStart,  { passive:true });
-  swipeSurface.addEventListener('touchmove',   onTouchMove,   { passive:true });
-  swipeSurface.addEventListener('touchend',    onTouchEnd);
-  swipeSurface.addEventListener('touchcancel', onTouchCancel);
+  new MutationObserver(updateTodayBtn).observe(mealsPage, { attributeFilter: ['class'] });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') { updateTodayBtn(); }
+  });
 
   const FRECENCY_DAYS = 90;
 
