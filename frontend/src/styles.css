@@ -172,6 +172,9 @@ label{ font-size:12px; color:var(--muted) }
 .status-ok{ color:var(--ok) }
 .status-warn{ color:var(--warn) }
 .status-bad{ color:var(--bad) }
+.summary-hero-value.status-ok .num  { color:var(--ok) }
+.summary-hero-value.status-warn .num{ color:var(--warn) }
+.summary-hero-value.status-bad .num { color:var(--bad) }
 .macro-card.status-ok{ background:var(--ok-bg) }
 .macro-card.status-warn{ background:var(--warn-bg) }
 .macro-card.status-bad{ background:var(--bad-bg) }
@@ -212,15 +215,6 @@ label{ font-size:12px; color:var(--muted) }
 .summary-hero-bar-fill.ok  { background:var(--ok) }
 .summary-hero-bar-fill.warn{ background:var(--warn) }
 .summary-hero-bar-fill.bad { background:var(--bad) }
-
-/* Status dot (used in window card) */
-.status-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--muted); flex-shrink:0 }
-.status-dot.ok  { background:var(--ok) }
-.status-dot.warn{ background:var(--warn) }
-.status-dot.bad { background:var(--bad) }
-
-/* 7-day window badge (meals page, inside expanded summary) */
-.window-badge{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); padding-top:4px }
 
 /* Goals — read view */
 .goals-view-header{ display:flex; align-items:center; margin-bottom:16px }
@@ -282,9 +276,9 @@ label{ font-size:12px; color:var(--muted) }
 .cal-month-row { display: flex; gap: 2px; align-items: flex-end; padding-bottom: 2px; }
 .cal-dlabel-spacer { width: 14px; flex-shrink: 0; }
 .cal-month-cell { width: 17px; flex-shrink: 0; font-size: 9px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: visible; line-height: 1; }
-.cal-day-row { display: flex; gap: 1px; align-items: center; }
+.cal-day-row { display: flex; gap: 3px; align-items: center; }
 .cal-dlabel { width: 14px; flex-shrink: 0; font-size: 9px; color: var(--muted); font-weight: 600; text-align: right; line-height: 1; }
-.cal-day { width: 17px; height: 17px; border-radius: 1px; background: color-mix(in oklab, var(--border) 60%, transparent); cursor: pointer; flex-shrink: 0; }
+.cal-day { width: 15px; height: 15px; border-radius: 3px; background: color-mix(in oklab, var(--border) 60%, transparent); cursor: pointer; flex-shrink: 0; }
 .cal-day-empty  { background: color-mix(in oklab, var(--border) 60%, transparent); cursor: default; }
 .cal-day-future { background: color-mix(in oklab, var(--border) 30%, transparent); cursor: default; }
 .cal-day-logged { background: var(--brand); opacity: .6; }
@@ -313,7 +307,10 @@ label{ font-size:12px; color:var(--muted) }
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
 
 @media (max-width: 640px){
-  .summary-macros{ grid-template-columns:1fr }
-  .summary-hero-value .num{ font-size:32px }
+  .summary-hero-value .num{ font-size:28px }
+  .day-summary-expanded{ padding:10px; gap:8px }
+  .summary-macros{ gap:6px }
+  .macro-card{ padding:6px 8px; gap:3px }
+  .macro-value{ font-size:16px }
 }
 

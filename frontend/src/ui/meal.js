@@ -81,7 +81,7 @@ export function setupMeals(){
     setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
   }
 
-  function shiftDate(delta){
+  function shiftDate(/** @type {number} */ delta){
     const d = new Date(curDate + 'T00:00:00');
     d.setDate(d.getDate() + delta);
     curDate = $.toISO(d);
@@ -288,7 +288,8 @@ export function setupMeals(){
         qty = V.number(qtyEl.value || '0', { min: 0, max: 100 });
         if (qty <= 0) { throw new Error(); }
       } catch {
-        qtyEl.classList.add('error'); setTimeout(()=>qtyEl.classList.remove('error'), 700);
+        qtyEl.classList.add('error');
+        qtyEl.addEventListener('input', () => qtyEl.classList.remove('error'), { once: true });
         return;
       }
       await $.withConfirm($.button(target), async () => {
@@ -365,95 +366,155 @@ export function setupMeals(){
    * @param {Macros} totals
    */
   function renderDayInfo(totals){
-    const vm    = buildTotalsViewModel(totals);
-    const goals = currentGoals;
+    const vm   = buildTotalsViewModel(totals);
+    const wvm  = currentWindowVM;
 
-    /** @param {MacroVM} mvm @param {'kcal'|'g'} unit @returns {string} */
-    const subtextStr = (mvm, unit) => {
-      if (mvm.remaining === null) { return ''; }
-      const abs = Math.abs(mvm.remaining);
-      return mvm.remaining >= 0
-        ? `${$.fmtNum(abs, 0)} ${unit} left`
-        : `${$.fmtNum(abs, 0)} ${unit} over`;
-    };
+    const STATUS_LABEL = /** @type {Record<string, string>} */ ({ ok: 'on track', warn: 'drifting', bad: 'off track', none: '' });
 
-    /** @param {MacroVM} mvm @returns {number} */
-    const barPct = (mvm) =>
-      mvm.target ? Math.min(100, Math.round((mvm.consumed / mvm.target) * 100)) : 0;
+    /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
+    const deltaStr = (delta, unit) => delta >= 0
+      ? `${$.fmtNum(delta, 0)} ${unit} left today`
+      : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over today`;
 
-    // Hero extras (only when goals set)
-    const heroExtras = goals ? `
-      <div class="summary-hero-subtext status-${vm.calories.status}">${subtextStr(vm.calories, 'kcal')}</div>
-      <div class="summary-hero-bar">
-        <div class="summary-hero-bar-fill ${vm.calories.status}" style="width:${barPct(vm.calories)}%"></div>
-      </div>` : '';
+    // --- Hero section ---
+    let heroValueHtml;
+    let heroExtras = '';
 
-    /** @param {MacroVM} mvm @returns {string} */
-    const macroExtras = (mvm) => goals ? `
-      <div class="macro-subtext status-${mvm.status}">${subtextStr(mvm, 'g')}</div>
-      <div class="macro-bar"><div class="macro-bar-fill" style="width:${barPct(mvm)}%"></div></div>` : '';
+    if (wvm) {
+      // Primary mode: 7-day avg is the signal, delta guides today's eating
+      const st       = wvm.calories.status;
+      const calDelta = wvm.calories.idealToday - vm.calories.consumed;
+      const todayPct = Math.min(100, Math.round((vm.calories.consumed / wvm.calories.idealToday) * 100));
+      const dataHint = wvm.dataWarning ? ` · ${wvm.windowDays}/7 days` : '';
 
-    // 7-day window badge (only when goals set and window data available)
-    let windowBadgeHtml = '';
-    if (goals && currentWindowVM) {
-      const statuses   = [currentWindowVM.calories, currentWindowVM.protein, currentWindowVM.carbs, currentWindowVM.fat].map(m => m.status);
-      const order      = { none: 0, ok: 1, warn: 2, bad: 3 };
-      const worstStatus = statuses.reduce((a, b) => order[a] >= order[b] ? a : b, /** @type {'none'|'ok'|'warn'|'bad'} */ ('none'));
-      const statusLabel = { ok: 'on track', warn: 'drifting', bad: 'off track', none: '' };
-      const dataHint    = currentWindowVM.dataWarning ? ` (${currentWindowVM.windowDays} / 7 days)` : '';
-      windowBadgeHtml   = `
-        <div class="window-badge" data-testid="windowBadge">
-          <span>7-day avg: ${$.fmtNum(currentWindowVM.calories.avgConsumed, 0)} kcal</span>
-          <span class="status-dot ${worstStatus}"></span>
-          <span>${statusLabel[worstStatus]}${dataHint}</span>
+      heroValueHtml = `
+        <div class="summary-hero-value status-${st}">
+          <span class="num">${$.fmtNum(wvm.calories.avgConsumed, 0)}</span>
+          <span class="unit">kcal avg</span>
+        </div>`;
+      heroExtras = `
+        <div class="summary-hero-subtext status-${st}">${STATUS_LABEL[st]} · 7-day avg${dataHint}</div>
+        <div class="summary-hero-subtext">${deltaStr(calDelta, 'kcal')}</div>
+        <div class="summary-hero-bar">
+          <div class="summary-hero-bar-fill ${st}" style="width:${todayPct}%"></div>
+        </div>`;
+    } else if (currentGoals) {
+      // Fallback: goals set but no window data yet (brand-new user)
+      const remaining = vm.calories.remaining;
+      const subtext   = remaining !== null
+        ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)} kcal left` : `${$.fmtNum(Math.abs(remaining), 0)} kcal over`)
+        : '';
+      const barPct = vm.calories.target
+        ? Math.min(100, Math.round((vm.calories.consumed / vm.calories.target) * 100))
+        : 0;
+
+      heroValueHtml = `
+        <div class="summary-hero-value">
+          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
+          <span class="unit">kcal</span>
+        </div>`;
+      heroExtras = `
+        <div class="summary-hero-subtext status-${vm.calories.status}">${subtext}</div>
+        <div class="summary-hero-bar">
+          <div class="summary-hero-bar-fill ${vm.calories.status}" style="width:${barPct}%"></div>
+        </div>`;
+    } else {
+      heroValueHtml = `
+        <div class="summary-hero-value">
+          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
+          <span class="unit">kcal</span>
         </div>`;
     }
 
-    // Compact summary
-    let compactLine1 = `${$.fmtNum(vm.calories.consumed, 0)} kcal`;
-    if (goals && vm.calories.remaining !== null) {
-      const calSubtext = subtextStr(vm.calories, 'kcal');
-      if (calSubtext) { compactLine1 += ` — ${calSubtext}`; }
-    }
-
-    /** @param {string} label @param {MacroVM} mvm @returns {string} */
-    const compactMacro = (label, mvm) => {
-      if (goals && mvm.remaining !== null) {
-        const s = subtextStr(mvm, 'g');
-        return `${label} ${s}`;
+    // --- Macro cards ---
+    /**
+     * @param {string} label
+     * @param {MacroVM} macroVM
+     * @param {import('../data-goals.js').MacroWindow | undefined} macroWin
+     * @param {string} cls
+     * @returns {string}
+     */
+    const macroCard = (label, macroVM, macroWin, cls) => {
+      if (wvm && macroWin) {
+        const d      = macroWin.idealToday - macroVM.consumed;
+        const barPct = Math.min(100, Math.round((macroVM.consumed / macroWin.idealToday) * 100));
+        return `
+          <div class="macro-card ${cls} status-${macroWin.status}">
+            <div class="macro-label">${label}</div>
+            <div class="macro-value">${$.fmtNum(macroWin.avgConsumed, 0)}<span class="unit">g avg</span></div>
+            <div class="macro-subtext">${deltaStr(d, 'g')}</div>
+            <div class="macro-bar"><div class="macro-bar-fill" style="width:${barPct}%"></div></div>
+          </div>`;
       }
-      return `${label} ${$.fmtNum(mvm.consumed, 0)}g`;
+      if (currentGoals) {
+        const remaining = macroVM.remaining;
+        const subtext   = remaining !== null
+          ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)}g left` : `${$.fmtNum(Math.abs(remaining), 0)}g over`)
+          : '';
+        const barPct = macroVM.target
+          ? Math.min(100, Math.round((macroVM.consumed / macroVM.target) * 100))
+          : 0;
+        return `
+          <div class="macro-card ${cls} status-${macroVM.status}">
+            <div class="macro-label">${label}</div>
+            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+            <div class="macro-subtext status-${macroVM.status}">${subtext}</div>
+            <div class="macro-bar"><div class="macro-bar-fill" style="width:${barPct}%"></div></div>
+          </div>`;
+      }
+      return `
+        <div class="macro-card ${cls}">
+          <div class="macro-label">${label}</div>
+          <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+        </div>`;
     };
-    const compactLine2 = `${compactMacro('P', vm.protein)} · ${compactMacro('C', vm.carbs)} · ${compactMacro('F', vm.fat)}`;
+
+    // --- Compact summary ---
+    let compactLine1;
+    let compactLine2;
+
+    if (wvm) {
+      const calDelta = wvm.calories.idealToday - vm.calories.consumed;
+      compactLine1   = deltaStr(calDelta, 'kcal');
+
+      /** @param {string} lbl @param {MacroVM} macroVM @param {import('../data-goals.js').MacroWindow} macroWin @returns {string} */
+      const compactMacroDelta = (lbl, macroVM, macroWin) => {
+        const d = macroWin.idealToday - macroVM.consumed;
+        return d >= 0
+          ? `${lbl} ${$.fmtNum(d, 0)}g left`
+          : `${lbl} ${$.fmtNum(Math.abs(d), 0)}g over`;
+      };
+      compactLine2 = `${compactMacroDelta('P', vm.protein, wvm.protein)} · ${compactMacroDelta('C', vm.carbs, wvm.carbs)} · ${compactMacroDelta('F', vm.fat, wvm.fat)}`;
+    } else {
+      compactLine1 = `${$.fmtNum(vm.calories.consumed, 0)} kcal`;
+      if (currentGoals && vm.calories.remaining !== null) {
+        const r = vm.calories.remaining;
+        const s = r >= 0 ? `${$.fmtNum(r, 0)} kcal left` : `${$.fmtNum(Math.abs(r), 0)} kcal over`;
+        compactLine1 += ` — ${s}`;
+      }
+      /** @param {string} lbl @param {MacroVM} mvm @returns {string} */
+      const compactMacro = (lbl, mvm) => {
+        if (currentGoals && mvm.remaining !== null) {
+          const r = mvm.remaining;
+          return `${lbl} ${r >= 0 ? `${$.fmtNum(r, 0)}g left` : `${$.fmtNum(Math.abs(r), 0)}g over`}`;
+        }
+        return `${lbl} ${$.fmtNum(mvm.consumed, 0)}g`;
+      };
+      compactLine2 = `${compactMacro('P', vm.protein)} · ${compactMacro('C', vm.carbs)} · ${compactMacro('F', vm.fat)}`;
+    }
 
     dayTotals.innerHTML = `
       <div class="day-summary day-summary-expanded">
         <div class="summary-hero">
           <div class="summary-hero-label">Calories</div>
-          <div class="summary-hero-value">
-            <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
-            <span class="unit">kcal</span>
-          </div>
+          ${heroValueHtml}
           ${heroExtras}
         </div>
         <div class="summary-macros">
-          <div class="macro-card macro-protein${goals ? ' status-' + vm.protein.status : ''}">
-            <div class="macro-label">Protein</div>
-            <div class="macro-value">${$.fmtNum(vm.protein.consumed, 0)}<span class="unit">g</span></div>
-            ${macroExtras(vm.protein)}
-          </div>
-          <div class="macro-card macro-carbs${goals ? ' status-' + vm.carbs.status : ''}">
-            <div class="macro-label">Carbs</div>
-            <div class="macro-value">${$.fmtNum(vm.carbs.consumed, 0)}<span class="unit">g</span></div>
-            ${macroExtras(vm.carbs)}
-          </div>
-          <div class="macro-card macro-fat${goals ? ' status-' + vm.fat.status : ''}">
-            <div class="macro-label">Fat</div>
-            <div class="macro-value">${$.fmtNum(vm.fat.consumed, 0)}<span class="unit">g</span></div>
-            ${macroExtras(vm.fat)}
-          </div>
+          ${macroCard('Protein', vm.protein, wvm?.protein, 'macro-protein')}
+          ${macroCard('Carbs',   vm.carbs,   wvm?.carbs,   'macro-carbs')}
+          ${macroCard('Fat',     vm.fat,     wvm?.fat,     'macro-fat')}
         </div>
-        ${windowBadgeHtml}
       </div>
       <div class="day-summary day-summary-compact">
         <div class="compact-primary">${compactLine1}</div>

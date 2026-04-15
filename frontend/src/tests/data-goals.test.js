@@ -168,7 +168,8 @@ describe('computeWindowVM', () => {
     expect(result).toBeNull();
   });
 
-  test('computes average over days with meals', async () => {
+  test('computes average over 7-day calendar window', async () => {
+    // 2 days with 2000 kcal each → total 4000 over a 7-day window → avg ≈ 571
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06', 2000, 150, 225, 56),
       makeMeal('2024-02-07', 2000, 150, 225, 56),
@@ -176,8 +177,10 @@ describe('computeWindowVM', () => {
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result).not.toBeNull();
     expect(result?.windowDays).toBe(2);
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000);
-    expect(result?.calories.status).toBe('ok');
+    expect(result?.calories.avgConsumed).toBeCloseTo(4000 / 7);
+    expect(result?.calories.status).toBe('bad');
+    // idealToday: 7*2000 - prevSum(2000) = 12000, clamped to goal*1.15 = 2300
+    expect(result?.calories.idealToday).toBeCloseTo(2300);
   });
 
   test('dataWarning is true when fewer than 4 days have meals', async () => {
@@ -204,12 +207,15 @@ describe('computeWindowVM', () => {
   });
 
   test('multiple meals on the same day are summed, not double-counted', async () => {
+    // 2 meals totalling 2000 kcal on today → avg = 2000/7 ≈ 285.7
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-07', 1000, 75, 112, 28),
       makeMeal('2024-02-07', 1000, 75, 113, 28),
     ]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.windowDays).toBe(1);  // only 1 day
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000); // 1000 + 1000
+    expect(result?.calories.avgConsumed).toBeCloseTo(2000 / 7); // 2000 over 7 days
+    // idealToday: 7*2000 - prevSum(0) = 14000, clamped to goal*1.15 = 2300
+    expect(result?.calories.idealToday).toBeCloseTo(2300);
   });
 });

@@ -19,6 +19,7 @@ import { Meals } from './data-meals.js';
  *   target:      number | null,
  *   status:      'none'|'ok'|'warn'|'bad',
  *   pctOff:      number | null,
+ *   idealToday:  number,
  * }} MacroWindow
  */
 
@@ -105,21 +106,34 @@ export async function computeWindowVM(todayISO, goals) {
   const windowDays = dayKeys.length;
   if (windowDays === 0) { return null; }
 
-  const sum = dayKeys.reduce(
-    (a, k) => ({
-      kcal:  a.kcal  + byDay[k].kcal,
-      prot:  a.prot  + byDay[k].prot,
-      carbs: a.carbs + byDay[k].carbs,
-      fats:  a.fats  + byDay[k].fats,
-    }),
-    { kcal: 0, prot: 0, carbs: 0, fats: 0 },
-  );
+  // Separate today's intake from the previous 6 days.
+  // prevSum uses 0 for any prior day with no meals logged.
+  const todayMacros = byDay[todayISO] ?? { kcal: 0, prot: 0, carbs: 0, fats: 0 };
+  const prevSum = dayKeys
+    .filter(k => k !== todayISO)
+    .reduce(
+      (a, k) => ({
+        kcal:  a.kcal  + byDay[k].kcal,
+        prot:  a.prot  + byDay[k].prot,
+        carbs: a.carbs + byDay[k].carbs,
+        fats:  a.fats  + byDay[k].fats,
+      }),
+      { kcal: 0, prot: 0, carbs: 0, fats: 0 },
+    );
 
+  // Average always uses 7 as the denominator (full calendar week).
+  const WINDOW_SIZE = 7;
+  const totalSum = {
+    kcal:  prevSum.kcal  + todayMacros.kcal,
+    prot:  prevSum.prot  + todayMacros.prot,
+    carbs: prevSum.carbs + todayMacros.carbs,
+    fats:  prevSum.fats  + todayMacros.fats,
+  };
   const avg = {
-    kcal:  sum.kcal  / windowDays,
-    prot:  sum.prot  / windowDays,
-    carbs: sum.carbs / windowDays,
-    fats:  sum.fats  / windowDays,
+    kcal:  totalSum.kcal  / WINDOW_SIZE,
+    prot:  totalSum.prot  / WINDOW_SIZE,
+    carbs: totalSum.carbs / WINDOW_SIZE,
+    fats:  totalSum.fats  / WINDOW_SIZE,
   };
 
   const g = derivedGrams(goals);
@@ -128,12 +142,21 @@ export async function computeWindowVM(todayISO, goals) {
   const pctOff = (consumed, target) =>
     target > 0 ? Math.abs(consumed - target) / target : null;
 
+  // How much to eat today to bring the 7-day average back to target,
+  // clamped to ±15% of the daily target so the suggestion stays reasonable.
+  const CLAMP = 0.15;
+  /** @param {number} prevSumVal @param {number} target @returns {number} */
+  const idealToday = (prevSumVal, target) => {
+    const ideal = WINDOW_SIZE * target - prevSumVal;
+    return Math.max(target * (1 - CLAMP), Math.min(target * (1 + CLAMP), ideal));
+  };
+
   return {
     windowDays,
     dataWarning: windowDays < 4,
-    calories: { avgConsumed: avg.kcal,  target: goals.kcal, status: computeStatus(avg.kcal,  goals.kcal), pctOff: pctOff(avg.kcal,  goals.kcal) },
-    protein:  { avgConsumed: avg.prot,  target: g.protG,    status: computeStatus(avg.prot,  g.protG),    pctOff: pctOff(avg.prot,  g.protG)    },
-    carbs:    { avgConsumed: avg.carbs, target: g.carbsG,   status: computeStatus(avg.carbs, g.carbsG),   pctOff: pctOff(avg.carbs, g.carbsG)   },
-    fat:      { avgConsumed: avg.fats,  target: g.fatG,     status: computeStatus(avg.fats,  g.fatG),     pctOff: pctOff(avg.fats,  g.fatG)     },
+    calories: { avgConsumed: avg.kcal,  target: goals.kcal, status: computeStatus(avg.kcal,  goals.kcal), pctOff: pctOff(avg.kcal,  goals.kcal), idealToday: idealToday(prevSum.kcal,  goals.kcal)  },
+    protein:  { avgConsumed: avg.prot,  target: g.protG,    status: computeStatus(avg.prot,  g.protG),    pctOff: pctOff(avg.prot,  g.protG),    idealToday: idealToday(prevSum.prot,  g.protG)    },
+    carbs:    { avgConsumed: avg.carbs, target: g.carbsG,   status: computeStatus(avg.carbs, g.carbsG),   pctOff: pctOff(avg.carbs, g.carbsG),   idealToday: idealToday(prevSum.carbs, g.carbsG)   },
+    fat:      { avgConsumed: avg.fats,  target: g.fatG,     status: computeStatus(avg.fats,  g.fatG),     pctOff: pctOff(avg.fats,  g.fatG),     idealToday: idealToday(prevSum.fats,  g.fatG)     },
   };
 }

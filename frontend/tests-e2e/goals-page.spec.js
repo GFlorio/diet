@@ -13,7 +13,7 @@ async function createFood(page, f) {
 }
 
 /** @param {import('@playwright/test').Page} page */
-async function setGoals(page, { kcal, prot, carbs, fat }) {
+async function setGoals(page, { kcal, prot, carbs, fat: _fat }) {
   await page.locator('.tab', { hasText: 'Goals' }).click();
   await page.click('[data-testid="goalsEditBtn"]');
   const maintenanceKcal = kcal; // treat kcal as maintenance, use 0 magnitude

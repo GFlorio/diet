@@ -265,24 +265,44 @@ test.describe('Goals: 7-day window', () => {
     await page.reload();
   });
 
-  test('window badge absent from meals page when no goals set', async ({ page }) => {
+  test('hero shows plain today kcal when no goals set', async ({ page }) => {
+    // Arrange
     await page.locator('.tab', { hasText: 'Meals' }).click();
-    await expect(page.locator('[data-testid="windowBadge"]')).toHaveCount(0);
+
+    // Assert: hero unit is "kcal" (not "kcal avg"), no status label present
+    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal');
+    await expect(page.locator('.summary-hero-subtext')).toHaveCount(0);
   });
 
-  test('window badge appears on meals page after goals are set and meals logged', async ({ page }) => {
-    // Arrange: create food, set goals
+  test('hero shows 7-day avg and delta after goals are set and a meal is logged', async ({ page }) => {
+    // Arrange: create food, set goals, log a meal
     await createFood(page, CHICKEN);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-
-    // Act: log a meal and go to meals page
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Assert: window badge visible
-    await expect(page.locator('[data-testid="windowBadge"]')).toBeVisible();
-    await expect(page.locator('[data-testid="windowBadge"]')).toContainText('7-day avg');
+    // Assert: hero shows avg label and a status line
+    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('7-day avg');
+
+    // Assert: second subtext line shows today's delta guidance
+    const deltaLine = page.locator('.summary-hero-subtext').nth(1);
+    await expect(deltaLine).toContainText(/kcal (left|over) today/);
+  });
+
+  test('macro cards show avg value and delta after goals are set and a meal is logged', async ({ page }) => {
+    // Arrange
+    await createFood(page, CHICKEN);
+    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
+    await page.locator('.tab', { hasText: 'Meals' }).click();
+    await page.fill('#quickSearch', 'chi');
+    await page.click('#quickList .item .add');
+
+    // Assert: macro cards show "g avg" unit and per-macro delta subtext
+    const proteinCard = page.locator('.macro-protein');
+    await expect(proteinCard.locator('.macro-value .unit')).toHaveText('g avg');
+    await expect(proteinCard.locator('.macro-subtext')).toContainText(/g (left|over) today/);
   });
 
 });
