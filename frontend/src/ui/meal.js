@@ -541,7 +541,7 @@ export function setupMeals(){
   });
 
   // Re-render meals (and quick list) when the user navigates back to this tab,
-  // ensuring goals changes made on the report page are reflected immediately.
+  // ensuring goals changes made on the goals page are reflected immediately.
   window.addEventListener('meals-activate', async () => {
     await renderMeals();
     renderQuickList();

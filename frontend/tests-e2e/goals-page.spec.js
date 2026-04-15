@@ -14,7 +14,7 @@ async function createFood(page, f) {
 
 const RICE = { name: 'Rice', refLabel: '100g', kcal: 130, prot: 2.4, carbs: 28, fats: 0.3 };
 
-test.describe('Report: date range filtering', () => {
+test.describe('Goals: date range filtering', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await resetDB(page, 'nutri-pwa');
@@ -28,8 +28,8 @@ test.describe('Report: date range filtering', () => {
     await page.fill('#quickSearch', 'ric');
     await page.click('#quickList .item .add');
 
-    // Act: open report and refresh (default range is last 7 days, covers today)
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    // Act: open goals and refresh (default range is last 7 days, covers today)
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.click('#repRefresh');
 
     // Assert: header row + one data row for today
@@ -50,7 +50,7 @@ test.describe('Report: date range filtering', () => {
     await page.click('#quickList .item .add');
 
     // Act
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.click('#repRefresh');
 
     // Assert: header + today + yesterday = 3 rows
@@ -60,7 +60,7 @@ test.describe('Report: date range filtering', () => {
 
   test('shows error toast when date range is invalid (from > to)', async ({ page }) => {
     // Act: submit a reversed range
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.fill('#repFrom', '2024-03-01');
     await page.fill('#repTo', '2024-01-01');
     await page.click('#repRefresh');
@@ -78,7 +78,7 @@ test.describe('Report: date range filtering', () => {
     await page.click('#quickList .item .add');
 
     // Act: narrow the range to a past window that excludes today
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.fill('#repFrom', '2020-01-01');
     await page.fill('#repTo', '2020-01-07');
     await page.click('#repRefresh');

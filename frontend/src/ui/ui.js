@@ -1,7 +1,7 @@
 import * as $ from '../utils.js'
 import { setupMeals } from './meal.js';
 import { setupFoods } from './foods.js';
-import { setupReport } from './report.js';
+import { setupGoals } from './goals.js';
 
 /** Setup theme button and apply stored theme */
 export function setupTheme(){
@@ -27,10 +27,10 @@ export function setupTheme(){
 
 export function setupNav(){
 	$.arr('.tab').forEach(tab => $.html(tab).addEventListener('click', () => {
-		const page = /** @type {'meals'|'foods'|'report'} */ ($.html(tab).dataset.page);
+		const page = /** @type {'meals'|'foods'|'goals'} */ ($.html(tab).dataset.page);
 		$.showPage(page);
 		if (page === 'meals')  { window.dispatchEvent(new Event('meals-activate')); }
-		if (page === 'report') { window.dispatchEvent(new Event('report-activate')); }
+		if (page === 'goals') { window.dispatchEvent(new Event('goals-activate')); }
 	}));
 }
 
@@ -64,7 +64,7 @@ export function setupUI(){
 export function populateViews(){
 	setupMeals();
 	setupFoods();
-	setupReport();
+	setupGoals();
 }
 
-export { setupMeals, setupFoods, setupReport };
+export { setupMeals, setupFoods, setupGoals };

@@ -18,7 +18,7 @@ async function createFood(page, f) {
  * Uses 'stepper-set' custom events on hidden state inputs for precise programmatic control.
  */
 async function setGoals(page, { kcal, prot, carbs, fat: _fat }) {
-  await page.locator('.tab', { hasText: 'Report' }).click();
+  await page.locator('.tab', { hasText: 'Goals' }).click();
   await page.click('[data-testid="goalsEditBtn"]');
   await page.fill('[data-testid="goalsMaintenanceKcal"]', String(kcal));
   // Set magnitude to 0 so target = maintenance
@@ -50,7 +50,7 @@ test.describe('Goals: settings UI', () => {
 
   test('shows "no targets" prompt when no goals are set', async ({ page }) => {
     // Arrange / Act
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
 
     // Assert
     await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No daily targets set yet');
@@ -89,7 +89,7 @@ test.describe('Goals: settings UI', () => {
 
   test('Save is disabled when maintenance calories is empty', async ({ page }) => {
     // Arrange
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.click('[data-testid="goalsEditBtn"]');
 
     // Assert: no maintenance filled → save disabled
@@ -98,7 +98,7 @@ test.describe('Goals: settings UI', () => {
 
   test('Save is enabled once valid maintenance calories is entered', async ({ page }) => {
     // Arrange
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.click('[data-testid="goalsEditBtn"]');
 
     // Act
@@ -110,7 +110,7 @@ test.describe('Goals: settings UI', () => {
 
   test('macro split bar always sums to 100%', async ({ page }) => {
     // Arrange
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.click('[data-testid="goalsEditBtn"]');
 
     // Act: set protein to 35% via stepper-set (carbs/fat auto-adjust proportionally)
@@ -293,14 +293,14 @@ test.describe('Goals: 7-day window', () => {
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Act: open report
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    // Act: open goals
+    await page.locator('.tab', { hasText: 'Goals' }).click();
 
     // Assert: sparse data notice appears
     await expect(page.locator('[data-testid="windowCard"]')).toContainText('log more meals for a meaningful average');
   });
 
-  test('window card shows average on report page', async ({ page }) => {
+  test('window card shows average on goals page', async ({ page }) => {
     // Arrange
     await createFood(page, CHICKEN);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
@@ -309,7 +309,7 @@ test.describe('Goals: 7-day window', () => {
     await page.click('#quickList .item .add');
 
     // Act
-    await page.locator('.tab', { hasText: 'Report' }).click();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
 
     // Assert: window card shows 1 of 7 days and calorie average
     await expect(page.locator('[data-testid="windowCard"]')).toContainText('1 of 7 days');

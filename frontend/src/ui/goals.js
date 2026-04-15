@@ -6,7 +6,7 @@ import * as Goals from '../data-goals.js';
  * @typedef {import('../data-goals.js').Goals} GoalsType
  */
 
-export function setupReport() {
+export function setupGoals() {
   const goalsCard    = $.html($.id('goalsCard'));
   const heatmapCard  = $.html($.id('heatmapCard'));
 
@@ -520,7 +520,7 @@ export function setupReport() {
     });
   }
 
-  window.addEventListener('report-activate', () => {
+  window.addEventListener('goals-activate', () => {
     refreshGoals();
     renderHeatmap();
   });

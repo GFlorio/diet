@@ -36,10 +36,10 @@ export function assertEl(obj) {
 
 /**
  * Show a given page and toggle tabs.
- * @param {'meals'|'foods'|'report'} page
+ * @param {'meals'|'foods'|'goals'} page
  */
 export function showPage(page){
-  const pages = ['meals', 'foods', 'report'];
+  const pages = ['meals', 'foods', 'goals'];
   arr('.tab').forEach(t => html(t).classList.toggle('active', html(t).dataset.page === page));
   pages.forEach(p =>
     html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
