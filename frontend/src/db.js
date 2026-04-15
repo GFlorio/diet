@@ -3,7 +3,7 @@
  */
 let db;
 const DB_NAME = 'nutri-pwa';
-const DB_VER = 1;
+const DB_VER = 3;
 
 /**
  * Macro nutrient fields.
@@ -49,8 +49,23 @@ const DB_VER = 1;
  */
 
 /**
+ * User nutrition goals (singleton record, id always 1).
+ * @typedef {{
+ *   id: 1,
+ *   kcal: number,
+ *   maintenanceKcal: number,
+ *   calMode: 'surplus' | 'deficit',
+ *   calMagnitude: number,
+ *   protPct: number,
+ *   carbsPct: number,
+ *   fatPct: number,
+ *   updatedAt: number
+ * }} Goals
+ */
+
+/**
  * Maps every store name to its record type.
- * @typedef {{ foods: Food, meals: Meal }} StoreMap
+ * @typedef {{ foods: Food, meals: Meal, goals: Goals }} StoreMap
  */
 
 /**
@@ -75,6 +90,9 @@ export const openDB = () => new Promise((resolve, reject) => {
       s.createIndex('by_date', 'date', { unique: false });
       s.createIndex('by_foodId', 'foodId', { unique: false });
       s.createIndex('by_updatedAt', 'updatedAt', { unique: false });
+    }
+    if (!db.objectStoreNames.contains('goals')) {
+      db.createObjectStore('goals', { keyPath: 'id' });
     }
   };
   req.onsuccess = function () {

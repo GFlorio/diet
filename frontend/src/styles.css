@@ -60,7 +60,7 @@ label{ font-size:12px; color:var(--muted) }
 
 .list{ display:grid; gap:8px }
 .item{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; border:1px dashed var(--border); border-radius:12px; padding:10px }
-.item.rep-row{ grid-template-columns: 1fr 80px 80px 80px 80px }
+.item.rep-row{ grid-template-columns: 1fr 52px 52px 52px 52px }
 .item .meta{ font-size:12px; color:var(--muted) }
 .item > .meta{ grid-column: 1 / -1 }
 .chips{ display:flex; gap:6px; flex-wrap:wrap }
@@ -202,6 +202,72 @@ label{ font-size:12px; color:var(--muted) }
 
 /* De-emphasize quick-add card — summary is the visual focal point */
 #quickAddCard{ box-shadow:none }
+
+/* Hero progress bar */
+.summary-hero-bar{ height:8px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; margin-top:6px }
+.summary-hero-bar-fill{ height:100%; border-radius:999px; background:var(--brand) }
+.summary-hero-bar-fill.ok  { background:var(--ok) }
+.summary-hero-bar-fill.warn{ background:var(--warn) }
+.summary-hero-bar-fill.bad { background:var(--bad) }
+
+/* Status dot (used in window card) */
+.status-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--muted); flex-shrink:0 }
+.status-dot.ok  { background:var(--ok) }
+.status-dot.warn{ background:var(--warn) }
+.status-dot.bad { background:var(--bad) }
+
+/* 7-day window badge (meals page, inside expanded summary) */
+.window-badge{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); padding-top:4px }
+
+/* Goals — read view */
+.goals-view-header{ display:flex; align-items:center; margin-bottom:16px }
+.goals-view-title{ font-size:16px; font-weight:700 }
+.goals-view-hero{ text-align:center; padding:12px 0 16px; border-bottom:1px solid var(--border); margin-bottom:16px }
+.goals-view-hero-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; margin-bottom:6px }
+.goals-view-hero-num{ font-size:40px; font-weight:800; line-height:1 }
+.goals-view-hero-unit{ font-size:15px; color:var(--muted); font-weight:500; margin-left:4px }
+.goals-macros-row{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; text-align:center }
+.goals-macro-pill{ padding:10px 8px; border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border) }
+.goals-macro-pill-name{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600 }
+.goals-macro-pill-g{ font-size:18px; font-weight:700; margin-top:4px; line-height:1 }
+.goals-macro-pill-pct{ font-size:11px; color:var(--muted); margin-top:2px }
+
+/* Goals — edit form section labels (with rule line) */
+.goals-section-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-bottom:8px; display:flex; align-items:center; gap:10px }
+.goals-section-label::after{ content:''; flex:1; height:1px; background:var(--border) }
+
+/* Goals — edit form target result hero */
+.goals-target-result{ margin-top:12px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md); text-align:center }
+.goals-target-result-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; margin-bottom:6px }
+.goals-target-result-num{ font-size:36px; font-weight:800; line-height:1 }
+.goals-target-result-unit{ font-size:14px; color:var(--muted); font-weight:500; margin-left:4px }
+
+/* Goals macro slider row */
+.goals-macro{ margin-top:12px }
+.goals-macro:first-of-type{ margin-top:0 }
+
+/* Goals magnitude numeric box (next to range slider) */
+.goals-magnitude-num{ width:72px; text-align:right; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); font-size:14px }
+
+/* Goals calorie mode toggle */
+.goals-mode-toggle{ display:flex; gap:2px; border:1px solid var(--border); border-radius:10px; overflow:hidden; padding:2px; background:var(--surface-2) }
+.goals-mode-btn{ flex:1; padding:6px 12px; border:none; border-radius:8px; cursor:pointer; font-size:13px; background:transparent; color:var(--muted); transition:background .15s, color .15s }
+.goals-mode-btn.active{ background:var(--brand); color:white }
+
+/* Goals — edit form action buttons */
+.goals-actions{ display:flex; gap:8px; margin-top:20px }
+.goals-actions .btn.primary{ flex:1 }
+.goals-remove-action{ margin-top:8px; text-align:center }
+
+/* Goals range sliders */
+input[type="range"]{ width:100%; accent-color:var(--brand); cursor:pointer; margin-top:4px }
+
+/* Impact preview in quick-add list */
+.food-result-delta{ font-size:12px; color:var(--muted); margin-top:2px }
+.food-result-after{ font-size:12px; margin-top:1px; color:var(--muted) }
+.food-result-after.ok  { color:var(--ok) }
+.food-result-after.warn{ color:var(--warn) }
+.food-result-after.bad { color:var(--bad) }
 
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }

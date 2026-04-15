@@ -1,46 +1,47 @@
 import * as $ from '../utils.js';
 import * as V from '../validation.js';
 import { Foods, Meals } from '../data.js';
+import * as Goals from '../data-goals.js';
 
 /**
  * @typedef {import('../data.js').Food} Food
  * @typedef {import('../data.js').Meal} Meal
  * @typedef {import('../data.js').Macros} Macros
+ * @typedef {import('../data-goals.js').Goals} GoalsType
+ * @typedef {import('../data-goals.js').WindowVM} WindowVM
  * @typedef {{ consumed: number, target: number|null, remaining: number|null, status: 'none'|'ok'|'warn'|'bad' }} MacroVM
  */
 
 /** Initialize meals page UI and handlers. */
 export function setupMeals(){
-  const dayLabel = $.html($.id('dayLabel'));
-  const daysHeader = $.html($.id('mealsSubHeader'));
-  const prevDayBox = $.html($.id('prevDayBox'));
-  const nextDayBox = $.html($.id('nextDayBox'));
-  const mealsList = $.html($.id('mealsList'));
+  const dayLabel    = $.html($.id('dayLabel'));
+  const daysHeader  = $.html($.id('mealsSubHeader'));
+  const prevDayBox  = $.html($.id('prevDayBox'));
+  const nextDayBox  = $.html($.id('nextDayBox'));
+  const mealsList   = $.html($.id('mealsList'));
   const quickSearch = $.input($.id('quickSearch'));
-  const quickList = $.html($.id('quickList'));
-  const dayTotals = $.html($.id('dayTotals'));
-  const mealsPage = $.html($.id('page-meals'));
+  const quickList   = $.html($.id('quickList'));
+  const dayTotals   = $.html($.id('dayTotals'));
+  const mealsPage   = $.html($.id('page-meals'));
   const quickAddCard = $.html($.id('quickAddCard'));
-  const mealsCard = $.html($.id('mealsCard'));
-  // Use entire body as swipe surface so user can swipe even in gutter areas outside .app
+  const mealsCard   = $.html($.id('mealsCard'));
   const swipeSurface = document.body;
 
-  // Swipe detection thresholds (named constants to avoid magic numbers)
-  const SWIPE_MIN_X = 50; // Minimum horizontal delta
-  const SWIPE_MAX_Y = 40; // Maximum vertical delta to still count as horizontal swipe
-  const SWIPE_ANIM_MS = 260; // Duration of the date change animation
+  const SWIPE_MIN_X  = 50;
+  const SWIPE_MAX_Y  = 40;
+  const SWIPE_ANIM_MS = 260;
 
   const mealsUiState = {
     mode: /** @type {'overview'|'entry'|'spacious'} */ ('overview'),
     quickSearchFocused: false,
-    /** Set to true when goals feature is implemented */
+    /** Set to true when goals are loaded */
     goalsEnabled: false,
   };
 
   /** @param {'overview'|'entry'|'spacious'} mode */
   function setMealsMode(mode){
     mealsPage.classList.toggle('mode-overview', mode === 'overview');
-    mealsPage.classList.toggle('mode-entry', mode === 'entry');
+    mealsPage.classList.toggle('mode-entry',    mode === 'entry');
     mealsPage.classList.toggle('mode-spacious', mode === 'spacious');
     mealsUiState.mode = mode;
   }
@@ -48,10 +49,14 @@ export function setupMeals(){
   let curDate = $.isoToday();
   /** @type {Meal[]} */
   let currentMeals = [];
+  /** @type {GoalsType | null} */
+  let currentGoals = null;
+  /** @type {WindowVM | null} */
+  let currentWindowVM = null;
 
   /**
    * Format ISO date (YYYY-MM-DD) to human-friendly short form (e.g., "Oct 30").
-   * @param {string} iso - ISO date string
+   * @param {string} iso
    * @returns {string}
    */
   function fmtHuman(iso){
@@ -59,25 +64,19 @@ export function setupMeals(){
     return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
 
-  /**
-   * Update the date header with current, previous, and next day labels.
-   */
   function updateHeader(){
-    dayLabel.dataset.iso = curDate;
-    dayLabel.textContent = fmtHuman(curDate);
-    const d = new Date(curDate + 'T00:00:00');
+    dayLabel.dataset.iso  = curDate;
+    dayLabel.textContent  = fmtHuman(curDate);
+    const d    = new Date(curDate + 'T00:00:00');
     const prev = new Date(d); prev.setDate(d.getDate()-1);
     const next = new Date(d); next.setDate(d.getDate()+1);
-    const prevISO = $.toISO(prev);
-    const nextISO = $.toISO(next);
-    prevDayBox.textContent = fmtHuman(prevISO);
-    nextDayBox.textContent = fmtHuman(nextISO);
+    prevDayBox.textContent = fmtHuman($.toISO(prev));
+    nextDayBox.textContent = fmtHuman($.toISO(next));
   }
   updateHeader();
 
   /**
-   * Shift current date by delta days and update UI with animation.
-   * @param {number} delta - Number of days to shift (positive or negative)
+   * @param {number} delta
    */
   function shiftDate(delta){
     const d = new Date(curDate + 'T00:00:00');
@@ -85,8 +84,7 @@ export function setupMeals(){
     curDate = $.toISO(d);
     updateHeader();
     renderMeals();
-    // Animate date change (direction aware)
-    const cls = delta > 0 ? 'dateSlideLeft' : 'dateSlideRight';
+    const cls   = delta > 0 ? 'dateSlideLeft' : 'dateSlideRight';
     const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
     animEls.forEach(el => el && el.classList.add(cls));
     setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
@@ -104,89 +102,76 @@ export function setupMeals(){
     }
   });
 
-  // Swipe handler across entire app area; only triggers when meals page is active
-  // and swipe starts below date bar.
-  const SWIPE_DAMPING = 0.35;       // Fraction of drag distance applied as translate
-  const SWIPE_MAX_TRANSLATE = 55;   // Max px of translate during drag
-  const SWIPE_SNAP_MS = 200;        // Snap-back transition duration (ms)
+  const SWIPE_DAMPING      = 0.35;
+  const SWIPE_MAX_TRANSLATE = 55;
+  const SWIPE_SNAP_MS      = 200;
 
   let touchStartX = 0;
   let touchStartY = 0;
   let touchActive = false;
   let startTargetBelowBar = false;
-  // Elements that follow the user's drag (same set that gets the slide animation)
   const dragEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
 
-  /**
-   * Check if touch movement qualifies as a valid horizontal swipe.
-   * @param {number} dx - Horizontal delta
-   * @param {number} dy - Vertical delta
-   * @returns {boolean}
-   */
+  /** @param {number} dx @param {number} dy @returns {boolean} */
   function isValidSwipe(dx, dy){
     return Math.abs(dx) >= SWIPE_MIN_X && Math.abs(dy) <= SWIPE_MAX_Y;
   }
 
-  /** Apply translateX to all drag elements (no transition). */
   /** @param {number} x */
   function setDragTranslate(x){
     const val = x === 0 ? '' : `translateX(${x}px)`;
     dragEls.forEach(el => el && (el.style.transform = val));
   }
 
-  /** Animate drag elements back to rest position. */
   function snapBack(){
     dragEls.forEach(el => {
       if (!el) { return; }
       el.style.transition = `transform ${SWIPE_SNAP_MS}ms ease-out`;
-      el.style.transform = '';
+      el.style.transform  = '';
       el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
     });
   }
 
   function onTouchStart(/** @type {TouchEvent} */ e){
-    if (e.touches.length!==1) {return;}
-    // Ignore if meals page hidden
-    if (mealsPage.classList.contains('hidden')) {return;}
-    touchActive = true;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    const subRect = daysHeader.getBoundingClientRect();
-    const y = e.touches[0].clientY;
-    startTargetBelowBar = y > subRect.bottom;
+    if (e.touches.length!==1) { return; }
+    if (mealsPage.classList.contains('hidden')) { return; }
+    touchActive       = true;
+    touchStartX       = e.touches[0].clientX;
+    touchStartY       = e.touches[0].clientY;
+    const subRect     = daysHeader.getBoundingClientRect();
+    startTargetBelowBar = e.touches[0].clientY > subRect.bottom;
   }
   function onTouchMove(/** @type {TouchEvent} */ e){
-    if (!touchActive || !startTargetBelowBar || e.touches.length !== 1) {return;}
-    const dx = e.touches[0].clientX - touchStartX;
-    const dy = e.touches[0].clientY - touchStartY;
-    if (Math.abs(dy) > SWIPE_MAX_Y) {return;} // likely a scroll, don't translate
+    if (!touchActive || !startTargetBelowBar || e.touches.length !== 1) { return; }
+    const dx      = e.touches[0].clientX - touchStartX;
+    const dy      = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dy) > SWIPE_MAX_Y) { return; }
     const clamped = Math.max(-SWIPE_MAX_TRANSLATE, Math.min(SWIPE_MAX_TRANSLATE, dx * SWIPE_DAMPING));
     setDragTranslate(clamped);
   }
   function onTouchEnd(/** @type {TouchEvent} */ e){
     if (!touchActive) { return; }
-    touchActive=false;
+    touchActive = false;
     if (!startTargetBelowBar) {
       snapBack(); return;
     }
-    const dx = (e.changedTouches[0].clientX - touchStartX);
-    const dy = (e.changedTouches[0].clientY - touchStartY);
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
     if (!isValidSwipe(dx, dy)) {
       snapBack(); return;
     }
-    // Valid swipe — clear drag transform immediately so the slide animation is clean
     setDragTranslate(0);
     if (dx < 0) { shiftDate(1); }
     else { shiftDate(-1); }
   }
   function onTouchCancel(){
-    if (!touchActive) {return;}
+    if (!touchActive) { return; }
     touchActive = false;
     snapBack();
   }
-  swipeSurface.addEventListener('touchstart', onTouchStart, { passive:true });
-  swipeSurface.addEventListener('touchmove', onTouchMove, { passive:true });
-  swipeSurface.addEventListener('touchend', onTouchEnd);
+  swipeSurface.addEventListener('touchstart',  onTouchStart,  { passive:true });
+  swipeSurface.addEventListener('touchmove',   onTouchMove,   { passive:true });
+  swipeSurface.addEventListener('touchend',    onTouchEnd);
   swipeSurface.addEventListener('touchcancel', onTouchCancel);
 
   const FRECENCY_DAYS = 90;
@@ -195,30 +180,50 @@ export function setupMeals(){
    * Render the quick-add food search results (limited to 3 foods).
    */
   async function renderQuickList(){
-    const q = quickSearch.value.trim();
+    const q        = quickSearch.value.trim();
     const todayISO = $.isoToday();
     const sinceDate = new Date(todayISO + 'T00:00:00');
     sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
     const sinceISO = $.toISO(sinceDate);
-    const scores = await Meals.frecencyScores(sinceISO, todayISO);
-    const foods = await Foods.list({ search: q, status: 'active', scores });
-    // Limit to 3 foods
+    const scores   = await Meals.frecencyScores(sinceISO, todayISO);
+    const foods    = await Foods.list({ search: q, status: 'active', scores });
+    const totals   = computeTotals(currentMeals);
+
     quickList.innerHTML = foods.slice(0, 3).map(f => {
-      const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
+      // Impact preview — 1x serving
+      const deltaKcal  = f.kcal;
+      const deltaLine  = `+${$.fmtNum(deltaKcal, 0)} kcal · P ${$.fmtNum(f.prot, 0)}g · C ${$.fmtNum(f.carbs, 0)}g · F ${$.fmtNum(f.fats, 0)}g`;
+
+      let afterHtml = '';
+      if (currentGoals) {
+        const afterKcal  = totals.kcal + deltaKcal;
+        const status     = Goals.computeStatus(afterKcal, currentGoals.kcal);
+        const diff       = afterKcal - currentGoals.kcal;
+        const afterLabel = diff <= 0
+          ? `After: ${$.fmtNum(afterKcal, 0)} kcal (${$.fmtNum(-diff, 0)} left)`
+          : `After: ${$.fmtNum(afterKcal, 0)} kcal (${$.fmtNum(diff, 0)} over)`;
+        afterHtml = `<div class="food-result-after ${status}">${afterLabel}</div>`;
+      }
+
       return `
       <div class="item" data-id="${f.id}">
-        <div><button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button></div>
+        <div>
+          <button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button>
+          <div class="food-result-delta">${deltaLine}</div>
+          ${afterHtml}
+        </div>
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0"
             value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
           <button class="btn small add" tabindex="-1">＋ Add</button>
           <button class="btn small ghost add05" tabindex="-1" title="+0.5">+0.5</button>
-          <button class="btn small ghost add1" tabindex="-1" title="+1">+1</button>
+          <button class="btn small ghost add1"  tabindex="-1" title="+1">+1</button>
         </div>
-        <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
+        <div class="meta">${$.esc(f.refLabel)}</div>
       </div>`;
     }).join('') || '<div class="muted">No Foods match the filter. '
       + 'Type a name and <a href="#" id="quickNew">create it</a>.</div>';
+
     const createLink = document.getElementById('quickNew');
     if (createLink) {
       $.html(createLink).addEventListener('click', (e) => {
@@ -229,18 +234,13 @@ export function setupMeals(){
 
   quickSearch.addEventListener('focus', () => {
     mealsUiState.quickSearchFocused = true;
-    // On touch devices the virtual keyboard hasn't appeared yet at focus time,
-    // so innerHeight is still full-height and the content looks like it fits —
-    // but it won't once the keyboard slides up. Always collapse on coarse-pointer
-    // (touch) devices; only stay expanded when a mouse/trackpad is present.
-    const touchDevice = window.matchMedia('(pointer: coarse)').matches;
+    const touchDevice    = window.matchMedia('(pointer: coarse)').matches;
     const quickAddBottom = quickAddCard.getBoundingClientRect().bottom;
     if (!touchDevice && quickAddBottom <= window.innerHeight) {
       setMealsMode('spacious');
     } else {
       document.body.classList.add('header-hidden');
       setMealsMode('entry');
-      // Scroll so the dates subheader is fully off-screen (compact summary then sticks at top)
       const targetY = daysHeader.getBoundingClientRect().bottom + window.scrollY;
       if (window.scrollY < targetY) {
         window.scrollTo({ top: targetY, behavior: 'smooth' });
@@ -261,18 +261,20 @@ export function setupMeals(){
   quickSearch.addEventListener('keydown', (e)=>{
     if (e.key==='Enter'){
       const first = quickList.querySelector('.item');
-      const btn = first?.querySelector('.add');
+      const btn   = first?.querySelector('.add');
       if (btn && btn instanceof HTMLElement) {
         btn.click(); e.preventDefault();
       }
     }
     if (e.key==='Escape'){
-      quickSearch.blur();
-      e.preventDefault();
+      quickSearch.blur(); e.preventDefault();
     }
     if (e.key==='Tab' && !e.shiftKey){
       const firstQty = /** @type {HTMLInputElement|null} */ (quickList.querySelector('.qty'));
-      if (firstQty) { firstQty.focus(); firstQty.select(); e.preventDefault(); }
+      if (firstQty) {
+        firstQty.focus();
+        firstQty.select(); e.preventDefault();
+      }
     }
   });
 
@@ -281,26 +283,28 @@ export function setupMeals(){
     if (!target.classList.contains('qty')) { return; }
     if (e.key === 'Enter') {
       const addBtn = /** @type {HTMLElement|null} */ (target.closest('.item')?.querySelector('.add'));
-      if (addBtn) { addBtn.click(); e.preventDefault(); }
+      if (addBtn) {
+        addBtn.click(); e.preventDefault();
+      }
     }
     if (e.key === 'Tab') {
-      const qtys = /** @type {NodeListOf<HTMLElement>} */ (quickList.querySelectorAll('.qty'));
-      const idx = Array.prototype.indexOf.call(qtys, target);
+      const qtys = /** @type {NodeListOf<HTMLInputElement>} */ (quickList.querySelectorAll('.qty'));
+      const idx  = Array.prototype.indexOf.call(qtys, target);
       if (!e.shiftKey && idx < qtys.length - 1) {
-        qtys[idx + 1].focus(); qtys[idx + 1].select(); e.preventDefault();
+        qtys[idx + 1].focus();
+        qtys[idx + 1].select(); e.preventDefault();
       } else if (!e.shiftKey && idx === qtys.length - 1) {
-        // Tab past the last item — collapse the list and let focus leave normally
         setMealsMode('overview');
         document.body.classList.remove('header-hidden');
       } else if (e.shiftKey && idx > 0) {
-        qtys[idx - 1].focus(); qtys[idx - 1].select(); e.preventDefault();
+        qtys[idx - 1].focus();
+        qtys[idx - 1].select(); e.preventDefault();
       } else if (e.shiftKey && idx === 0) {
         quickSearch.focus(); e.preventDefault();
       }
     }
   });
   quickList.addEventListener('refresh', renderQuickList);
-  window.addEventListener('meals-activate', renderQuickList);
 
   window.addEventListener('keydown', (e) => {
     if (!e.ctrlKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) { return; }
@@ -312,17 +316,18 @@ export function setupMeals(){
   });
 
   quickList.addEventListener('click', async (e) => {
-    const target = /** @type {HTMLElement} */ (e.target);
-  const item = target.closest('.item');
-  if (!item) { return; }
-    const itemEl = /** @type {HTMLElement} */ (item);
-    const id = V.id(itemEl.dataset.id);
-    const food = await Foods.byId(id); if (!food) {
+    const target  = /** @type {HTMLElement} */ (e.target);
+    const item    = target.closest('.item');
+    if (!item) { return; }
+    const itemEl  = /** @type {HTMLElement} */ (item);
+    const id      = V.id(itemEl.dataset.id);
+    const food    = await Foods.byId(id);
+    if (!food) {
       itemEl.classList.add('shake');
       setTimeout(()=> itemEl.classList.remove('shake'), 500);
       return;
     }
-  const qtyEl = $.input(item.querySelector('.qty'));
+    const qtyEl = $.input(item.querySelector('.qty'));
     if (target.classList.contains('add')) {
       let qty;
       try {
@@ -356,43 +361,117 @@ export function setupMeals(){
   });
 
   /**
-   * Compute aggregate nutrition totals from an array of meals.
    * @param {Meal[]} meals
-   * @returns {import('../data.js').Macros}
+   * @returns {Macros}
    */
   function computeTotals(meals){
     return meals.reduce((a, m)=>{
-      a.kcal+=m.foodSnapshot.kcal*m.multiplier;
-      a.prot+=m.foodSnapshot.prot*m.multiplier;
-      a.carbs+=m.foodSnapshot.carbs*m.multiplier;
-      a.fats+=m.foodSnapshot.fats*m.multiplier;
+      a.kcal  += m.foodSnapshot.kcal  * m.multiplier;
+      a.prot  += m.foodSnapshot.prot  * m.multiplier;
+      a.carbs += m.foodSnapshot.carbs * m.multiplier;
+      a.fats  += m.foodSnapshot.fats  * m.multiplier;
       return a;
     }, {kcal:0,prot:0,carbs:0,fats:0});
   }
 
   /**
-   * Build a normalized totals view model.
-   * Targets/remaining/status are stubbed until goals feature exists.
+   * Build normalized totals view model, incorporating goals when set.
    * @param {Macros} totals
    * @returns {{ calories: MacroVM, protein: MacroVM, carbs: MacroVM, fat: MacroVM }}
    */
   function buildTotalsViewModel(totals){
-    /** @param {number} consumed @returns {MacroVM} */
-    const stub = (consumed) => ({ consumed, target: null, remaining: null, status: 'none' });
+    if (!currentGoals) {
+      /** @param {number} consumed @returns {MacroVM} */
+      const stub = (consumed) => ({ consumed, target: null, remaining: null, status: 'none' });
+      return {
+        calories: stub(totals.kcal),
+        protein:  stub(totals.prot),
+        carbs:    stub(totals.carbs),
+        fat:      stub(totals.fats),
+      };
+    }
+    const g = Goals.derivedGrams(currentGoals);
+    /** @param {number} consumed @param {number} target @returns {MacroVM} */
+    const macro = (consumed, target) => ({
+      consumed,
+      target,
+      remaining: target - consumed,
+      status:    Goals.computeStatus(consumed, target),
+    });
     return {
-      calories: stub(totals.kcal),
-      protein:  stub(totals.prot),
-      carbs:    stub(totals.carbs),
-      fat:      stub(totals.fats),
+      calories: macro(totals.kcal, currentGoals.kcal),
+      protein:  macro(totals.prot, g.protG),
+      carbs:    macro(totals.carbs, g.carbsG),
+      fat:      macro(totals.fats, g.fatG),
     };
   }
 
   /**
    * Render macros totals display — expanded (overview) + compact (entry) variants.
-   * @param {import('../data.js').Macros} totals
+   * @param {Macros} totals
    */
   function renderDayInfo(totals){
-    const vm = buildTotalsViewModel(totals);
+    const vm    = buildTotalsViewModel(totals);
+    const goals = currentGoals;
+
+    /** @param {MacroVM} mvm @param {'kcal'|'g'} unit @returns {string} */
+    const subtextStr = (mvm, unit) => {
+      if (mvm.remaining === null) { return ''; }
+      const abs = Math.abs(mvm.remaining);
+      return mvm.remaining >= 0
+        ? `${$.fmtNum(abs, 0)} ${unit} left`
+        : `${$.fmtNum(abs, 0)} ${unit} over`;
+    };
+
+    /** @param {MacroVM} mvm @returns {number} */
+    const barPct = (mvm) =>
+      mvm.target ? Math.min(100, Math.round((mvm.consumed / mvm.target) * 100)) : 0;
+
+    // Hero extras (only when goals set)
+    const heroExtras = goals ? `
+      <div class="summary-hero-subtext status-${vm.calories.status}">${subtextStr(vm.calories, 'kcal')}</div>
+      <div class="summary-hero-bar">
+        <div class="summary-hero-bar-fill ${vm.calories.status}" style="width:${barPct(vm.calories)}%"></div>
+      </div>` : '';
+
+    /** @param {MacroVM} mvm @returns {string} */
+    const macroExtras = (mvm) => goals ? `
+      <div class="macro-subtext status-${mvm.status}">${subtextStr(mvm, 'g')}</div>
+      <div class="macro-bar"><div class="macro-bar-fill" style="width:${barPct(mvm)}%"></div></div>` : '';
+
+    // 7-day window badge (only when goals set and window data available)
+    let windowBadgeHtml = '';
+    if (goals && currentWindowVM) {
+      const statuses   = [currentWindowVM.calories, currentWindowVM.protein, currentWindowVM.carbs, currentWindowVM.fat].map(m => m.status);
+      const order      = { none: 0, ok: 1, warn: 2, bad: 3 };
+      const worstStatus = statuses.reduce((a, b) => order[a] >= order[b] ? a : b, /** @type {'none'|'ok'|'warn'|'bad'} */ ('none'));
+      const statusLabel = { ok: 'on track', warn: 'drifting', bad: 'off track', none: '' };
+      const dataHint    = currentWindowVM.dataWarning ? ` (${currentWindowVM.windowDays} / 7 days)` : '';
+      windowBadgeHtml   = `
+        <div class="window-badge" data-testid="windowBadge">
+          <span>7-day avg: ${$.fmtNum(currentWindowVM.calories.avgConsumed, 0)} kcal</span>
+          <span class="status-dot ${worstStatus}"></span>
+          <span>${statusLabel[worstStatus]}${dataHint}</span>
+        </div>`;
+    }
+
+    // Compact summary
+    let compactLine1 = `${$.fmtNum(vm.calories.consumed, 0)} kcal`;
+    if (goals && vm.calories.remaining !== null) {
+      const calSubtext = subtextStr(vm.calories, 'kcal');
+      if (calSubtext) { compactLine1 += ` — ${calSubtext}`; }
+    }
+
+    /** @param {string} label @param {MacroVM} mvm @returns {string} */
+    const compactMacro = (label, mvm) => {
+      if (goals && mvm.remaining !== null) {
+        const s = subtextStr(mvm, 'g');
+        return `${label} ${s}`;
+      }
+      return `${label} ${$.fmtNum(mvm.consumed, 0)}g`;
+    };
+    const compactLine2 = `${compactMacro('P', vm.protein)} · ${compactMacro('C', vm.carbs)} · ${compactMacro('F', vm.fat)}`;
+
     dayTotals.innerHTML = `
       <div class="day-summary day-summary-expanded">
         <div class="summary-hero">
@@ -401,40 +480,41 @@ export function setupMeals(){
             <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
             <span class="unit">kcal</span>
           </div>
+          ${heroExtras}
         </div>
         <div class="summary-macros">
-          <div class="macro-card macro-protein">
+          <div class="macro-card macro-protein${goals ? ' status-' + vm.protein.status : ''}">
             <div class="macro-label">Protein</div>
             <div class="macro-value">${$.fmtNum(vm.protein.consumed, 0)}<span class="unit">g</span></div>
+            ${macroExtras(vm.protein)}
           </div>
-          <div class="macro-card macro-carbs">
+          <div class="macro-card macro-carbs${goals ? ' status-' + vm.carbs.status : ''}">
             <div class="macro-label">Carbs</div>
             <div class="macro-value">${$.fmtNum(vm.carbs.consumed, 0)}<span class="unit">g</span></div>
+            ${macroExtras(vm.carbs)}
           </div>
-          <div class="macro-card macro-fat">
+          <div class="macro-card macro-fat${goals ? ' status-' + vm.fat.status : ''}">
             <div class="macro-label">Fat</div>
             <div class="macro-value">${$.fmtNum(vm.fat.consumed, 0)}<span class="unit">g</span></div>
+            ${macroExtras(vm.fat)}
           </div>
         </div>
+        ${windowBadgeHtml}
       </div>
       <div class="day-summary day-summary-compact">
-        <div class="compact-primary">${$.fmtNum(vm.calories.consumed, 0)} kcal</div>
-        <div class="compact-secondary">P ${$.fmtNum(vm.protein.consumed, 0)}g · C ${$.fmtNum(vm.carbs.consumed, 0)}g · F ${$.fmtNum(vm.fat.consumed, 0)}g</div>
+        <div class="compact-primary">${compactLine1}</div>
+        <div class="compact-secondary">${compactLine2}</div>
       </div>`;
   }
 
-  /**
-   * Render the list of meals with action buttons.
-   * @param {Meal[]} meals
-   */
   /**
    * @param {Meal[]} meals
    * @param {boolean} [animateFirst]
    */
   function renderMealsList(meals, animateFirst = false){
     mealsList.innerHTML = [...meals].reverse().map(/** @param {Meal} m */ m => {
-      const snap = m.foodSnapshot;
-      const mul = m.multiplier;
+      const snap     = m.foodSnapshot;
+      const mul      = m.multiplier;
       const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
       return `
       <div class="meal-row" data-id="${m.id}">
@@ -456,11 +536,16 @@ export function setupMeals(){
   }
 
   /**
-   * Fetch meals for current date, compute totals, and render UI.
+   * Fetch meals for current date, goals, and window VM, then render UI.
    * @param {boolean} [animateFirst]
    */
   async function renderMeals(animateFirst = false){
-    currentMeals = /** @type {Meal[]} */ (await Meals.listByDate(curDate));
+    [currentMeals, currentGoals] = await Promise.all([
+      /** @type {Promise<Meal[]>} */ (Meals.listByDate(curDate)),
+      Goals.get(),
+    ]);
+    currentWindowVM = await Goals.computeWindowVM($.isoToday(), currentGoals);
+    mealsUiState.goalsEnabled = currentGoals !== null;
     const totals = computeTotals(currentMeals);
     renderDayInfo(totals);
     renderMealsList(currentMeals, animateFirst);
@@ -468,11 +553,11 @@ export function setupMeals(){
 
   mealsList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-    const row = target.closest('.meal-row');
+    const row    = target.closest('.meal-row');
     if (!row) { return; }
-    const rowEl = /** @type {HTMLElement} */ (row);
-    const id = V.id(rowEl.dataset.id);
-    const meal = currentMeals.find(m => m.id === id);
+    const rowEl  = /** @type {HTMLElement} */ (row);
+    const id     = V.id(rowEl.dataset.id);
+    const meal   = currentMeals.find(m => m.id === id);
     if (!meal) { return; }
     if (target.classList.contains('del')) {
       await Meals.remove(meal.id);
@@ -490,18 +575,22 @@ export function setupMeals(){
 
   /** @param {string=} name */
   function goFoodsWithPrefill(name){
-    // Delegate to Foods page; focus the name field if present
-    const evt = new CustomEvent('go-foods', { detail: { name: name || '' } });
-    window.dispatchEvent(evt);
+    window.dispatchEvent(new CustomEvent('go-foods', { detail: { name: name || '' } }));
   }
 
-  // Listen to cross-module navigation prefill
   window.addEventListener('go-meals', (e) => {
     const name = /** @type {CustomEvent} */(e).detail?.name || '';
     $.showPage('meals');
     quickSearch.value = name;
     renderQuickList();
     quickSearch.focus();
+  });
+
+  // Re-render meals (and quick list) when the user navigates back to this tab,
+  // ensuring goals changes made on the report page are reflected immediately.
+  window.addEventListener('meals-activate', async () => {
+    await renderMeals();
+    renderQuickList();
   });
 
   renderQuickList();

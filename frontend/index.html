@@ -90,11 +90,12 @@
   </main>
 
   <main id="page-report" class="grid hidden">
+    <section class="card" id="goalsCard" data-testid="goalsCard"></section>
+    <section class="card" id="windowCard" data-testid="windowCard"></section>
     <section class="card">
       <div class="row">
-        <div class="field"><label>From</label><input type="date" id="repFrom"></div>
-        <div class="field"><label>To</label><input type="date" id="repTo"></div>
-        <div class="row right" style="align-items:flex-end"><button class="btn" id="repRefresh">Refresh</button></div>
+        <div class="field" style="flex:1"><label>From</label><input type="date" id="repFrom"></div>
+        <div class="field" style="flex:1"><label>To</label><input type="date" id="repTo"></div>
       </div>
       <div id="repTable" style="margin-top:10px"></div>
     </section>

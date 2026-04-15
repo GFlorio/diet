@@ -29,7 +29,8 @@ export function setupNav(){
 	$.arr('.tab').forEach(tab => $.html(tab).addEventListener('click', () => {
 		const page = /** @type {'meals'|'foods'|'report'} */ ($.html(tab).dataset.page);
 		$.showPage(page);
-		if (page === 'meals') { window.dispatchEvent(new Event('meals-activate')); }
+		if (page === 'meals')  { window.dispatchEvent(new Event('meals-activate')); }
+		if (page === 'report') { window.dispatchEvent(new Event('report-activate')); }
 	}));
 }
 
