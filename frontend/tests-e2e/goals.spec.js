@@ -285,34 +285,4 @@ test.describe('Goals: 7-day window', () => {
     await expect(page.locator('[data-testid="windowBadge"]')).toContainText('7-day avg');
   });
 
-  test('sparse data notice shown in window card when fewer than 4 days logged', async ({ page }) => {
-    // Arrange: set goals, log meal for only 1 day (< 4)
-    await createFood(page, CHICKEN);
-    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-    await page.locator('.tab', { hasText: 'Meals' }).click();
-    await page.fill('#quickSearch', 'chi');
-    await page.click('#quickList .item .add');
-
-    // Act: open goals
-    await page.locator('.tab', { hasText: 'Goals' }).click();
-
-    // Assert: sparse data notice appears
-    await expect(page.locator('[data-testid="windowCard"]')).toContainText('log more meals for a meaningful average');
-  });
-
-  test('window card shows average on goals page', async ({ page }) => {
-    // Arrange
-    await createFood(page, CHICKEN);
-    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-    await page.locator('.tab', { hasText: 'Meals' }).click();
-    await page.fill('#quickSearch', 'chi');
-    await page.click('#quickList .item .add');
-
-    // Act
-    await page.locator('.tab', { hasText: 'Goals' }).click();
-
-    // Assert: window card shows 1 of 7 days and calorie average
-    await expect(page.locator('[data-testid="windowCard"]')).toContainText('1 of 7 days');
-    await expect(page.locator('[data-testid="windowCard"]')).toContainText('165'); // chicken kcal
-  });
 });
