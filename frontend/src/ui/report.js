@@ -3,40 +3,21 @@ import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
 
 /**
- * @typedef {import('../data.js').Meal} Meal
- * @typedef {import('../data.js').Macros} Macros
  * @typedef {import('../data-goals.js').Goals} GoalsType
- * @typedef {import('../data-goals.js').WindowVM} WindowVM
- * @typedef {import('../data-goals.js').MacroWindow} MacroWindow
  */
 
 export function setupReport() {
-  const goalsCard  = $.html($.id('goalsCard'));
-  const windowCard = $.html($.id('windowCard'));
-  const repFrom    = $.input($.id('repFrom'));
-  const repTo      = $.input($.id('repTo'));
-  const repTable   = $.html($.id('repTable'));
-
-  /** @type {(d: string, n: number) => string} */
-  const shiftDay = (d, n) => {
-    const dt = new Date(d);
-    dt.setDate(dt.getDate() + n);
-    return $.toISO(dt);
-  };
-  repTo.value   = $.isoToday();
-  repFrom.value = shiftDay(repTo.value, -6);
-  repFrom.addEventListener('change', renderReport);
-  repTo.addEventListener('change', renderReport);
+  const goalsCard    = $.html($.id('goalsCard'));
+  const heatmapCard  = $.html($.id('heatmapCard'));
 
   // -------------------------------------------------------------------------
   // Goals card
   // -------------------------------------------------------------------------
 
   async function refreshGoals() {
-    const goals    = await Goals.get();
-    const windowVM = await Goals.computeWindowVM($.isoToday(), goals);
+    const goals = await Goals.get();
     renderGoalsCard(goals);
-    renderWindowCard(goals, windowVM);
+    renderHeatmap();
   }
 
   /** @param {GoalsType | null} goals */
@@ -278,18 +259,18 @@ export function setupReport() {
         handleEl.setPointerCapture(e.pointerId);
       });
       handleEl.addEventListener('pointermove', e => {
-        if (!handleEl.hasPointerCapture(e.pointerId)) return;
+        if (!handleEl.hasPointerCapture(e.pointerId)) {return;}
         const rect    = barEl.getBoundingClientRect();
         const snapped = snap5(Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100)));
         if (handleNum === 1) {
           const newProt = Math.max(0, Math.min(100 - fatPct, snapped));
-          if (newProt === protPct) return;
+          if (newProt === protPct) {return;}
           protPct  = newProt;
           carbsPct = 100 - newProt - fatPct;
         } else {
           const newBoundary = Math.max(protPct, Math.min(100, snapped));
           const newCarbs    = newBoundary - protPct;
-          if (newCarbs === carbsPct) return;
+          if (newCarbs === carbsPct) {return;}
           carbsPct = newCarbs;
           fatPct   = 100 - protPct - newCarbs;
         }
@@ -359,102 +340,191 @@ export function setupReport() {
   }
 
   // -------------------------------------------------------------------------
-  // Window card
+  // Calorie adherence heatmap
   // -------------------------------------------------------------------------
 
-  /**
-   * @param {GoalsType | null} goals
-   * @param {WindowVM | null} windowVM
-   */
-  function renderWindowCard(goals, windowVM) {
-    if (!goals) {
-      windowCard.innerHTML = '<div class="muted" style="font-size:13px">Set daily targets above to see your 7-day average.</div>';
-      return;
-    }
-    if (!windowVM) {
-      windowCard.innerHTML = `
-        <div class="row"><strong>7-day average</strong></div>
-        <div class="muted" style="margin-top:6px; font-size:13px">Log meals to see your 7-day average.</div>`;
-      return;
+  /** @type {HTMLElement | null} */
+  let tooltipEl = null;
+  /** @type {HTMLElement | null} */
+  let activeDay = null;
+
+  function hideTooltip() {
+    tooltipEl?.classList.add('hidden');
+    activeDay = null;
+  }
+
+  /** @param {HTMLElement} dayEl */
+  function showTooltip(dayEl) {
+    if (!tooltipEl) { return; }
+    const { iso, status, kcal, goal } = dayEl.dataset;
+    const date    = new Date((iso ?? '') + 'T00:00:00');
+    const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+    const STATUS_LABELS = /** @type {Record<string,string>} */ ({ ok: 'On target', warn: 'Close', bad: 'Off target' });
+
+    let body = '';
+    if (status === 'future') {
+      body = '<div class="cal-tt-muted">Future</div>';
+    } else if (kcal !== null && kcal !== undefined) {
+      const kcalNum = Number(kcal);
+      body = `<div class="cal-tt-kcal">${$.fmtNum(kcalNum, 0)} kcal</div>`;
+      if (goal) {
+        body += `<div class="cal-tt-muted">${$.fmtNum(Number(goal), 0)} target</div>`;
+      }
+      if (STATUS_LABELS[status ?? '']) {
+        body += `<div class="cal-tt-status cal-tt-${status}">${STATUS_LABELS[status ?? '']}</div>`;
+      }
+    } else {
+      body = '<div class="cal-tt-muted">No data</div>';
     }
 
-    const { windowDays, dataWarning, calories, protein, carbs, fat } = windowVM;
+    tooltipEl.innerHTML = `<div class="cal-tt-date">${$.esc(dateStr)}</div>${body}`;
 
-    /** @param {MacroWindow} m @param {string} label @param {string} unit */
-    const row = (m, label, unit) => `
-      <div class="item">
-        <div>
-          <span>${label}</span>
-          <span class="muted"> · ${$.fmtNum(m.avgConsumed, 0)} / ${$.fmtNum(m.target ?? 0, 0)} ${unit}</span>
-        </div>
-        <span class="status-dot ${m.status}"></span>
+    const rect   = dayEl.getBoundingClientRect();
+    const cx     = rect.left + rect.width / 2;
+    const spaceAbove = rect.top;
+    const top    = spaceAbove > 80 ? rect.top - 8 : rect.bottom + 8;
+    const anchor = spaceAbove > 80 ? 'bottom' : 'top';
+
+    const tooltipLeft = Math.min(Math.max(8, cx - 68), window.innerWidth - 144);
+    tooltipEl.style.left      = `${tooltipLeft}px`;
+    tooltipEl.style.top       = `${top}px`;
+    tooltipEl.style.transform = anchor === 'bottom' ? 'translateY(-100%)' : 'translateY(0)';
+    tooltipEl.style.setProperty('--arrow-x', `${cx - tooltipLeft}px`);
+    tooltipEl.dataset.anchor  = anchor;
+    tooltipEl.classList.remove('hidden');
+    activeDay = dayEl;
+  }
+
+  // Hide tooltip on click outside the heatmap card (registered once)
+  document.addEventListener('click', e => {
+    if (!(/** @type {HTMLElement} */ (e.target)).closest('#heatmapCard')) {
+      hideTooltip();
+    }
+  });
+
+  async function renderHeatmap() {
+    const goals     = await Goals.get();
+    const today     = $.isoToday();
+    const NUM_WEEKS = 16;
+
+    // Find the Monday of the week that started NUM_WEEKS-1 weeks ago
+    const todayDate       = new Date(today + 'T00:00:00');
+    const dayOfWeek       = todayDate.getDay(); // 0=Sun…6=Sat
+    const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const startDate       = new Date(todayDate);
+    startDate.setDate(todayDate.getDate() - daysSinceMonday - (NUM_WEEKS - 1) * 7);
+
+    const fromISO = $.toISO(startDate);
+    const meals   = await Meals.listRange(fromISO, today);
+
+    /** @type {Record<string, number>} */
+    const kcalByDay = {};
+    for (const m of meals) {
+      kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + m.foodSnapshot.kcal * m.multiplier;
+    }
+
+    /** @type {Array<Array<{iso:string, status:string, kcal:number|null}>>} */
+    const weeks = [];
+    for (let w = 0; w < NUM_WEEKS; w++) {
+      const week = [];
+      for (let d = 0; d < 7; d++) {
+        const date     = new Date(startDate);
+        date.setDate(startDate.getDate() + w * 7 + d);
+        const iso      = $.toISO(date);
+        const isFuture = iso > today;
+        const kcal     = kcalByDay[iso] ?? null;
+        let status     = 'empty';
+        if (isFuture) {
+          status = 'future';
+        } else if (kcal !== null) {
+          status = goals ? Goals.computeStatus(kcal, goals.kcal) : 'logged';
+        }
+        week.push({ iso, status, kcal });
+      }
+      weeks.push(week);
+    }
+
+    const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    // Month header row: one cell per week column, label shown when month changes
+    let lastMonth = '';
+    const monthCells = weeks.map(week => {
+      const monthName  = new Date(week[0].iso + 'T00:00:00').toLocaleString('en', { month: 'short' });
+      const monthLabel = monthName !== lastMonth ? monthName : '';
+      lastMonth = monthName;
+      return `<div class="cal-month-cell">${$.esc(monthLabel)}</div>`;
+    }).join('');
+    const monthRowHtml = `<div class="cal-month-row"><div class="cal-dlabel-spacer"></div>${monthCells}</div>`;
+
+    // One row per day of week; one square per week column
+    const dayRowsHtml = DAY_LABELS.map((label, d) => {
+      const squares = weeks.map(week => {
+        const { iso, status, kcal } = week[d];
+        const dataKcal = kcal !== null ? ` data-kcal="${Math.round(kcal)}"` : '';
+        const dataGoal = goals ? ` data-goal="${goals.kcal}"` : '';
+        return `<div class="cal-day cal-day-${status}" data-iso="${$.esc(iso)}" data-status="${status}"${dataKcal}${dataGoal}></div>`;
+      }).join('');
+      return `<div class="cal-day-row"><div class="cal-dlabel">${label}</div>${squares}</div>`;
+    }).join('');
+
+    const legendHtml = `
+      <div class="cal-legend">
+        <div class="cal-day cal-day-ok"></div><span>On target</span>
+        <div class="cal-day cal-day-warn"></div><span>Close</span>
+        <div class="cal-day cal-day-bad"></div><span>Off</span>
+        <div class="cal-day cal-day-empty"></div><span>No data</span>
       </div>`;
 
-    windowCard.innerHTML = `
-      <div class="row">
-        <strong>7-day average</strong>
-        <span class="muted right">${windowDays} of 7 days</span>
+    heatmapCard.innerHTML = `
+      <div class="goals-view-header" style="margin-bottom:12px">
+        <span class="goals-view-title">Calorie adherence</span>
       </div>
-      <div class="list" style="margin-top:8px">
-        ${row(calories, 'Calories', 'kcal')}
-        ${row(protein,  'Protein',  'g')}
-        ${row(carbs,    'Carbs',    'g')}
-        ${row(fat,      'Fat',      'g')}
+      <div class="cal-heatmap">
+        ${monthRowHtml}
+        ${dayRowsHtml}
       </div>
-      ${dataWarning
-        ? `<div class="muted" style="margin-top:8px; font-size:12px">Based on ${windowDays} of 7 days — log more meals for a meaningful average.</div>`
-        : ''}`;
+      ${legendHtml}
+      <div class="cal-tooltip hidden" id="calTooltip"></div>
+      ${!goals ? '<p class="muted" style="margin:10px 0 0;font-size:12px">Set daily targets above to see goal adherence.</p>' : ''}`;
+
+    tooltipEl = $.html($.id('calTooltip'));
+    activeDay = null;
+
+    const grid = heatmapCard.querySelector('.cal-heatmap');
+    if (!grid) { return; }
+
+    // Desktop: hover (only on devices that support hover, to avoid synthetic mouse events on touch)
+    if (window.matchMedia('(hover: hover)').matches) {
+      grid.addEventListener('mouseover', e => {
+        const day = /** @type {HTMLElement} */ (e.target).closest('.cal-day[data-iso]');
+        if (day) { showTooltip(/** @type {HTMLElement} */ (day)); }
+      });
+      grid.addEventListener('mouseout', e => {
+        const to = /** @type {HTMLElement | null} */ (e.relatedTarget);
+        if (!to?.closest('.cal-day[data-iso]')) { hideTooltip(); }
+      });
+    }
+
+    // Mobile: tap to toggle
+    grid.addEventListener('click', e => {
+      const day = /** @type {HTMLElement} */ (e.target).closest('.cal-day[data-iso]');
+      if (!day) {
+        hideTooltip();
+        return;
+      }
+      if (activeDay === day) {
+        hideTooltip();
+        return;
+      }
+      showTooltip(/** @type {HTMLElement} */ (day));
+    });
   }
 
-  // -------------------------------------------------------------------------
-  // Date-range report (existing)
-  // -------------------------------------------------------------------------
-
-  async function renderReport() {
-    const from = repFrom.value;
-    const to   = repTo.value;
-    if (!from || !to) { return; }
-    if (from > to) {
-      $.toast('Invalid range', { type: 'error' }); return;
-    }
-    const inRange = /** @type {Meal[]} */ (await Meals.listRange(from, to));
-    /** @type {Record<string, Macros>} */
-    const days = {};
-    for (const m of inRange) {
-      const k = m.date;
-      const s = m.foodSnapshot;
-      const q = m.multiplier;
-      if (!days[k]) { days[k] = { kcal: 0, prot: 0, carbs: 0, fats: 0 }; }
-      days[k].kcal  += s.kcal  * q;
-      days[k].prot  += s.prot  * q;
-      days[k].carbs += s.carbs * q;
-      days[k].fats  += s.fats  * q;
-    }
-    /** @type {Array<[string, Macros]>} */
-    const rows = Object.keys(days).sort().map((d) => [d, days[d]]);
-    const rowsHtml = rows.length
-      ? rows.map(([d, t]) => `
-        <div class="item rep-row">
-          <div>${d}</div>
-          <div class="right">${$.fmtNum(t.kcal, 0)}</div>
-          <div class="right">${$.fmtNum(t.prot)}</div>
-          <div class="right">${$.fmtNum(t.carbs)}</div>
-          <div class="right">${$.fmtNum(t.fats)}</div>
-        </div>`).join('')
-      : '<div class="muted">No meals in range.</div>';
-    repTable.innerHTML = `
-      <div class="item rep-row">
-        <strong>Day</strong>
-        <strong class="right">kcal</strong>
-        <strong class="right">P</strong>
-        <strong class="right">C</strong>
-        <strong class="right">F</strong>
-      </div>
-      ${rowsHtml}`;
-  }
-
-  window.addEventListener('report-activate', () => { refreshGoals(); renderReport(); });
+  window.addEventListener('report-activate', () => {
+    refreshGoals();
+    renderHeatmap();
+  });
 
   refreshGoals();
-  renderReport();
+  renderHeatmap();
 }
