@@ -13,27 +13,28 @@ async function createFood(page, f) {
 }
 
 /**
- * Set goals via the new form: maintenance = kcal, magnitude = 0 (so target = maintenance).
- * Sets prot slider first, then carbs (fat auto-adjusts to 100 - prot - carbs).
+ * Set goals via the stepper form: maintenance = kcal, magnitude = 0 (so target = maintenance).
+ * Sets prot first (carbs/fat auto-adjust proportionally), then carbs (fat auto-adjusts).
+ * Uses 'stepper-set' custom events on hidden state inputs for precise programmatic control.
  */
 async function setGoals(page, { kcal, prot, carbs, fat: _fat }) {
   await page.locator('.tab', { hasText: 'Report' }).click();
   await page.click('[data-testid="goalsEditBtn"]');
   await page.fill('[data-testid="goalsMaintenanceKcal"]', String(kcal));
   // Set magnitude to 0 so target = maintenance
-  await page.locator('[data-testid="goalsMagnitude"]').evaluate((el, v) => {
-    /** @type {HTMLInputElement} */ (el).value = String(v);
-    el.dispatchEvent(new Event('input'));
-  }, 0);
+  await page.locator('[data-testid="goalsMagnitude"]').evaluate(el => {
+    /** @type {HTMLInputElement} */ (el).value = '0';
+    el.dispatchEvent(new CustomEvent('stepper-set'));
+  });
   // Set protein (carbs/fat auto-adjust proportionally)
   await page.locator('[data-testid="goalsProtPct"]').evaluate((el, v) => {
     /** @type {HTMLInputElement} */ (el).value = String(v);
-    el.dispatchEvent(new Event('input'));
+    el.dispatchEvent(new CustomEvent('stepper-set'));
   }, prot);
   // Set carbs (fat auto-adjusts to remainder)
   await page.locator('[data-testid="goalsCarbsPct"]').evaluate((el, v) => {
     /** @type {HTMLInputElement} */ (el).value = String(v);
-    el.dispatchEvent(new Event('input'));
+    el.dispatchEvent(new CustomEvent('stepper-set'));
   }, carbs);
   await page.click('[data-testid="goalsSaveBtn"]');
 }
@@ -52,7 +53,7 @@ test.describe('Goals: settings UI', () => {
     await page.locator('.tab', { hasText: 'Report' }).click();
 
     // Assert
-    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No targets set');
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No daily targets set yet');
     await expect(page.locator('[data-testid="goalsEditBtn"]')).toContainText('Set daily targets');
   });
 
@@ -62,9 +63,9 @@ test.describe('Goals: settings UI', () => {
 
     // Assert: display mode shows values
     await expect(page.locator('[data-testid="goalsCard"]')).toContainText('2000 kcal');
-    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('30 %');
-    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('45 %');
-    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('25 %');
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('30%');
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('45%');
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('25%');
     // Derived grams should appear
     await expect(page.locator('[data-testid="goalsCard"]')).toContainText('150 g'); // protein
   });
@@ -107,18 +108,18 @@ test.describe('Goals: settings UI', () => {
     await expect(page.locator('[data-testid="goalsSaveBtn"]')).not.toBeDisabled();
   });
 
-  test('macro sliders always sum to 100%', async ({ page }) => {
+  test('macro split bar always sums to 100%', async ({ page }) => {
     // Arrange
     await page.locator('.tab', { hasText: 'Report' }).click();
     await page.click('[data-testid="goalsEditBtn"]');
 
-    // Act: move protein slider
-    await page.locator('[data-testid="goalsProtPct"]').evaluate((el, v) => {
-      /** @type {HTMLInputElement} */ (el).value = String(v);
-      el.dispatchEvent(new Event('input'));
-    }, 40);
+    // Act: set protein to 35% via stepper-set (carbs/fat auto-adjust proportionally)
+    await page.locator('[data-testid="goalsProtPct"]').evaluate(el => {
+      /** @type {HTMLInputElement} */ (el).value = '35';
+      el.dispatchEvent(new CustomEvent('stepper-set'));
+    });
 
-    // Assert: prot + carbs + fat = 100
+    // Assert: prot + carbs + fat = 100 (read from hidden state inputs)
     const prot  = await page.locator('[data-testid="goalsProtPct"]').inputValue();
     const carbs = await page.locator('[data-testid="goalsCarbsPct"]').inputValue();
     const fat   = await page.locator('[data-testid="goalsFatPct"]').inputValue();
@@ -134,7 +135,7 @@ test.describe('Goals: settings UI', () => {
     await page.click('[data-testid="goalsRemoveBtn"]');
 
     // Assert: back to empty state
-    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No targets set');
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No daily targets set yet');
     const records = await getAllFromStore(page, 'nutri-pwa', 'goals');
     expect(records).toHaveLength(0);
   });

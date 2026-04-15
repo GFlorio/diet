@@ -239,31 +239,36 @@ label{ font-size:12px; color:var(--muted) }
 .goals-section-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-bottom:8px; display:flex; align-items:center; gap:10px }
 .goals-section-label::after{ content:''; flex:1; height:1px; background:var(--border) }
 
-/* Goals — edit form target result hero */
-.goals-target-result{ margin-top:12px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-md); text-align:center }
-.goals-target-result-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; margin-bottom:6px }
-.goals-target-result-num{ font-size:36px; font-weight:800; line-height:1 }
-.goals-target-result-unit{ font-size:14px; color:var(--muted); font-weight:500; margin-left:4px }
-
-/* Goals macro slider row */
-.goals-macro{ margin-top:12px }
-.goals-macro:first-of-type{ margin-top:0 }
-
-/* Goals magnitude numeric box (next to range slider) */
-.goals-magnitude-num{ width:72px; text-align:right; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--fg); font-size:14px }
-
 /* Goals calorie mode toggle */
-.goals-mode-toggle{ display:flex; gap:2px; border:1px solid var(--border); border-radius:10px; overflow:hidden; padding:2px; background:var(--surface-2) }
-.goals-mode-btn{ flex:1; padding:6px 12px; border:none; border-radius:8px; cursor:pointer; font-size:13px; background:transparent; color:var(--muted); transition:background .15s, color .15s }
+.goals-mode-toggle{ display:flex; gap:2px; border:1px solid var(--border); border-radius:10px; overflow:hidden; padding:2px; background:var(--surface-2); flex-shrink:0 }
+.goals-mode-btn{ flex:1; padding:12px 10px; border:none; border-radius:8px; cursor:pointer; font-size:13px; background:transparent; color:var(--muted); transition:background .15s, color .15s }
 .goals-mode-btn.active{ background:var(--brand); color:white }
 
+/* Goals — mode toggle + magnitude stepper on one line */
+.goals-cal-row{ display:flex; align-items:center; gap:10px; margin-top:10px }
+.goals-mag-inline{ display:flex; align-items:center; gap:6px; flex:1 }
+.goals-mag-inline-val{ flex:1; text-align:center; font-size:15px; font-weight:600; white-space:nowrap }
+
+/* Goals — macro split bar */
+.goals-macro-bar-wrap{ position:relative; margin-top:8px; user-select:none }
+.goals-macro-bar{ display:flex; height:76px; border-radius:var(--radius-md); overflow:hidden }
+.goals-macro-seg{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; overflow:hidden; min-width:0; color:#0f172a }
+.goals-macro-seg-prot{ background:var(--brand) }
+.goals-macro-seg-carbs{ background:var(--ok) }
+.goals-macro-seg-fat{ background:var(--warn) }
+.goals-macro-seg-name{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; opacity:.7 }
+.goals-macro-seg-pct{ font-size:17px; font-weight:800; line-height:1 }
+.goals-macro-seg-g{ font-size:11px; opacity:.75 }
+.goals-macro-seg.narrow .goals-macro-seg-name,
+.goals-macro-seg.narrow .goals-macro-seg-g{ display:none }
+.goals-macro-seg.narrow .goals-macro-seg-pct{ font-size:13px }
+.goals-macro-handle{ position:absolute; top:0; bottom:0; width:3px; background:var(--bg); transform:translateX(-50%); cursor:ew-resize; z-index:1; touch-action:none }
+.goals-macro-handle::before{ content:''; position:absolute; left:-14px; right:-14px; top:0; bottom:0 }
+
 /* Goals — edit form action buttons */
-.goals-actions{ display:flex; gap:8px; margin-top:20px }
+.goals-actions{ display:flex; gap:8px; margin-top:16px }
 .goals-actions .btn.primary{ flex:1 }
 .goals-remove-action{ margin-top:8px; text-align:center }
-
-/* Goals range sliders */
-input[type="range"]{ width:100%; accent-color:var(--brand); cursor:pointer; margin-top:4px }
 
 /* Impact preview in quick-add list */
 .food-result-delta{ font-size:12px; color:var(--muted); margin-top:2px }

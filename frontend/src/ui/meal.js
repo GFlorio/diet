@@ -198,10 +198,7 @@ export function setupMeals(){
     } else {
       document.body.classList.add('header-hidden');
       setMealsMode('entry');
-      const targetY = daysHeader.getBoundingClientRect().bottom + window.scrollY;
-      if (window.scrollY < targetY) {
-        window.scrollTo({ top: targetY, behavior: 'smooth' });
-      }
+      quickAddCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
   quickSearch.addEventListener('blur', () => {
