@@ -72,6 +72,16 @@ const DB_NAME = 'diet';
 /** @type {PouchDB.Database} */
 let db = new PouchDB(DB_NAME);
 
+let _persistRequested = false;
+
+function requestPersistentStorage() {
+  if (_persistRequested || !navigator.storage?.persist) { return; }
+  _persistRequested = true;
+  navigator.storage.persisted().then((already) => {
+    if (!already) { return navigator.storage.persist(); }
+  }).catch((e) => console.warn('Persistent storage request failed', e));
+}
+
 
 /**
  * @param {'foods'|'meals'|'goals'} store
@@ -115,6 +125,7 @@ export const get = async (storeName, key) => {
  * @returns {Promise<string>}
  */
 export const put = async (storeName, val) => {
+  requestPersistentStorage();
   const id = /** @type {any} */ (val).id ?? newId(storeName, /** @type {any} */ (val));
   let _rev;
   try {
