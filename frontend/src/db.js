@@ -64,8 +64,8 @@ import PouchDB from 'pouchdb-browser';
  */
 
 /**
- * @typedef {string | {from: string, to: string}} GetAllQuery
- * Exact string value, or a {from, to} range (inclusive on both ends).
+ * @typedef {{from: string, to: string}} DateRange
+ * Inclusive date range for meal queries.
  */
 
 const DB_NAME = 'diet';
@@ -139,14 +139,14 @@ export const del = async (storeName, key) => {
 };
 
 /**
- * Gets all records from a store, optionally filtered by index and query.
+ * Gets all records from a store, optionally filtered by date range.
+ * For meals, pass a DateRange to restrict by date; omit for all meals.
  * @template {keyof StoreMap} S
  * @param {S} storeName
- * @param {string=} index
- * @param {GetAllQuery=} query
+ * @param {DateRange=} dateRange
  * @returns {Promise<StoreMap[S][]>}
  */
-export const getAll = async (storeName, index, query) => {
+export const getAll = async (storeName, dateRange) => {
   if (storeName === 'foods') {
     const result = await db.allDocs({ startkey: 'food:', endkey: 'food:\uffff', include_docs: true });
     return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
@@ -162,21 +162,16 @@ export const getAll = async (storeName, index, query) => {
   }
 
   if (storeName === 'meals') {
-    if (!index) {
+    if (!dateRange) {
       const result = await db.allDocs({ startkey: 'meal:', endkey: 'meal:\uffff', include_docs: true });
       return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
     }
-    if (index === 'by_date') {
-      const { startkey, endkey } = typeof query === 'object' && query !== null && 'from' in query
-        ? { startkey: `meal:${query.from}:`, endkey: `meal:${query.to}:\uffff` }
-        : { startkey: `meal:${query}:`,      endkey: `meal:${query}:\uffff` };
-      const result = await db.allDocs({ startkey, endkey, include_docs: true });
-      return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
-    }
-    if (index === 'by_foodId') {
-      const all = await getAll('meals');
-      return /** @type {any} */ (all.filter((m) => /** @type {any} */ (m).foodId === query));
-    }
+    const result = await db.allDocs({
+      startkey: `meal:${dateRange.from}:`,
+      endkey: `meal:${dateRange.to}:\uffff`,
+      include_docs: true,
+    });
+    return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
   }
 
   throw new Error(`getAll: unsupported store ${storeName}`);
@@ -199,9 +194,6 @@ export const resetDB = async () => {
   await db.destroy();
   db = new PouchDB(DB_NAME);
 };
-
-/** No-op: PouchDB opens lazily; kept for call-site compatibility. */
-export const openDB = async () => {};
 
 // Expose a minimal test API on window (safe for this offline PWA).
 /** @type {any} */ (window).__testDB = {

@@ -159,8 +159,7 @@ function isoDate(val){
   } else {
     throw new ValidationError('Expected date string or Date');
   }
-  const m = /^\d{4}-\d{2}-\d{2}$/.test(iso);
-  assert(m, 'Invalid date format, expected YYYY-MM-DD');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(iso), 'Invalid date format, expected YYYY-MM-DD');
   const d = new Date(iso + 'T00:00:00Z');
   assert(!Number.isNaN(d.getTime()), 'Invalid date');
   return iso;

@@ -249,6 +249,14 @@ export function setupGoals() {
       updateForm();
     });
 
+    /** @param {number} prot @param {number} carbs @param {number} fat */
+    function setMacros(prot, carbs, fat) {
+      protPct = prot;
+      carbsPct = carbs;
+      fatPct = fat;
+      updateForm();
+    }
+
     // Macro bar drag handles.
     // Handle 1 (protein/carbs boundary): dragging adjusts protPct; carbsPct takes the remainder; fatPct stays.
     // Handle 2 (carbs/fat boundary): dragging adjusts carbsPct; fatPct takes the remainder; protPct stays.
@@ -265,16 +273,13 @@ export function setupGoals() {
         if (handleNum === 1) {
           const newProt = Math.max(0, Math.min(100 - fatPct, snapped));
           if (newProt === protPct) {return;}
-          protPct  = newProt;
-          carbsPct = 100 - newProt - fatPct;
+          setMacros(newProt, 100 - newProt - fatPct, fatPct);
         } else {
           const newBoundary = Math.max(protPct, Math.min(100, snapped));
           const newCarbs    = newBoundary - protPct;
           if (newCarbs === carbsPct) {return;}
-          carbsPct = newCarbs;
-          fatPct   = 100 - protPct - newCarbs;
+          setMacros(protPct, newCarbs, 100 - protPct - newCarbs);
         }
-        updateForm();
       });
     }
     setupHandle(handle1El, 1);
@@ -286,30 +291,20 @@ export function setupGoals() {
       const newProt   = Math.max(0, Math.min(100, snap5(Number(protHidden.value) || 0)));
       const remaining = 100 - newProt;
       const prevCF    = carbsPct + fatPct;
-      if (prevCF > 0) {
-        const newCarbs = Math.round((remaining * carbsPct / prevCF) / 5) * 5;
-        carbsPct = newCarbs;
-        fatPct   = remaining - newCarbs;
-      } else {
-        carbsPct = Math.round(remaining / 2 / 5) * 5;
-        fatPct   = remaining - carbsPct;
-      }
-      protPct = newProt;
-      updateForm();
+      const newCarbs  = prevCF > 0
+        ? Math.round((remaining * carbsPct / prevCF) / 5) * 5
+        : Math.round(remaining / 2 / 5) * 5;
+      setMacros(newProt, newCarbs, remaining - newCarbs);
     });
     // Carbs: fat compensates.
     carbsHidden.addEventListener('stepper-set', () => {
       const newCarbs = Math.max(0, Math.min(100 - protPct, snap5(Number(carbsHidden.value) || 0)));
-      carbsPct = newCarbs;
-      fatPct   = 100 - protPct - newCarbs;
-      updateForm();
+      setMacros(protPct, newCarbs, 100 - protPct - newCarbs);
     });
     // Fat: carbs compensates.
     fatHidden.addEventListener('stepper-set', () => {
       const newFat = Math.max(0, Math.min(100 - protPct, snap5(Number(fatHidden.value) || 0)));
-      fatPct   = newFat;
-      carbsPct = 100 - protPct - newFat;
-      updateForm();
+      setMacros(protPct, 100 - protPct - newFat, newFat);
     });
 
     saveBtn.addEventListener('click', async () => {

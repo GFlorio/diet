@@ -623,7 +623,7 @@ export function setupMeals(){
         duration: 5000,
         action: {
           label: 'Undo',
-          callback: () => Meals.restore(meal).then(() => renderMeals()),
+          callback: async () => { await Meals.restore(meal); renderMeals(); },
         },
       });
       return;

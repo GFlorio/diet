@@ -45,7 +45,7 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listByDate(dateISO) {
-    const xs = await db.getAll('meals', 'by_date', dateISO);
+    const xs = await db.getAll('meals', { from: dateISO, to: dateISO });
     return xs.sort((a, b) => a.id.localeCompare(b.id));
   },
   /**
@@ -56,7 +56,7 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listRange(fromISO, toISO) {
-    const xs = await db.getAll('meals', 'by_date', { from: fromISO, to: toISO });
+    const xs = await db.getAll('meals', { from: fromISO, to: toISO });
     return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   },
   /**
@@ -67,7 +67,7 @@ export const Meals = {
    * @returns {Promise<Map<string, number>>}
    */
   async frecencyScores(sinceISO, todayISO) {
-    const meals = await db.getAll('meals', 'by_date', { from: sinceISO, to: todayISO });
+    const meals = await db.getAll('meals', { from: sinceISO, to: todayISO });
     const MS_PER_DAY = 86400000;
     const todayMs = Date.parse(todayISO);
     /** @type {Map<string, number>} */
@@ -120,7 +120,7 @@ export const Meals = {
    * @returns {Promise<boolean>}
    */
   async hasForFood(foodId) {
-    const xs = await db.getAll('meals', 'by_foodId', foodId);
+    const xs = await db.getWhere('meals', (m) => m.foodId === foodId);
     return xs.length > 0;
   },
   /**

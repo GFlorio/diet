@@ -1,4 +1,3 @@
-import * as db from './db.js';
 import { Foods } from './data-foods.js';
 import { Meals } from './data-meals.js';
 
@@ -11,5 +10,4 @@ import { Meals } from './data-meals.js';
  * @typedef {import('./data-foods.js').CreateFoodInput} CreateFoodInput
  */
 
-export const { openDB } = db;
 export { Foods, Meals };

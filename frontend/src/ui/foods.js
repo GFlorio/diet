@@ -147,7 +147,7 @@ export function setupFoods(){
                 duration: 5000,
                 action: {
                   label: 'Undo',
-                  callback: () => Foods.restore({ ...f, archived: true }).then(() => renderFoods()),
+                  callback: async () => { await Foods.restore({ ...f, archived: true }); renderFoods(); },
                 },
               });
             },
@@ -216,8 +216,10 @@ export function setupFoods(){
             duration: 8000,
             action: {
               label: 'Update meals',
-              callback: () => Meals.syncAllForFood(editId)
-                .then(n => $.toast(`✓ ${n} meal${n === 1 ? '' : 's'} updated`)),
+              callback: async () => {
+                const n = await Meals.syncAllForFood(editId);
+                $.toast(`✓ ${n} meal${n === 1 ? '' : 's'} updated`);
+              },
             },
           });
         }

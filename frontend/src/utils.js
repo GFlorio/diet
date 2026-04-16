@@ -144,13 +144,6 @@ export const toISO = (d) => localISO(new Date(d));
 export const now = () => Date.now();
 
 /**
- * Returns a comparator function for sorting by key k.
- * @param {string} k
- * @returns {(a: {[key: string]: any}, b: {[key: string]: any}) => number}
- */
-export const by = (k) => (a, b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0);
-
-/**
  * Escapes HTML special characters in a string.
  * @param {string} [s='']
  * @returns {string}
