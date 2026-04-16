@@ -34,31 +34,9 @@ export function setupNav(){
 	}));
 }
 
-function setupScrollHide(){
-	const HIDE_THRESHOLD = 80;  // px down before header hides
-	const SHOW_THRESHOLD = 15;  // px up before header reappears
-	let lastY = window.scrollY;
-	let upAccum = 0;
-	window.addEventListener('scroll', () => {
-		const y = window.scrollY;
-		if (y < HIDE_THRESHOLD) {
-			upAccum = 0;
-			document.body.classList.remove('header-hidden');
-		} else if (y > lastY) {
-			upAccum = 0;
-			document.body.classList.add('header-hidden');
-		} else {
-			upAccum += lastY - y;
-			if (upAccum >= SHOW_THRESHOLD) { document.body.classList.remove('header-hidden'); }
-		}
-		lastY = y;
-	}, { passive: true });
-}
-
 export function setupUI(){
 	setupTheme();
 	setupNav();
-	setupScrollHide();
 }
 
 export function populateViews(){

@@ -238,9 +238,14 @@ export function setupMeals(){
     if (!touchDevice && quickAddBottom <= window.innerHeight) {
       setMealsMode('spacious');
     } else {
-      document.body.classList.add('header-hidden');
       setMealsMode('entry');
-      dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (touchDevice && window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+          dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, { once: true });
+      } else {
+        dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   });
   quickSearch.addEventListener('blur', () => {
@@ -248,7 +253,6 @@ export function setupMeals(){
     window.setTimeout(() => {
       if (!mealsUiState.quickSearchFocused && !quickAddCard.contains(document.activeElement)) {
         setMealsMode('overview');
-        document.body.classList.remove('header-hidden');
       }
     }, 120);
   });
@@ -291,7 +295,6 @@ export function setupMeals(){
         qtys[idx + 1].select(); e.preventDefault();
       } else if (!e.shiftKey && idx === qtys.length - 1) {
         setMealsMode('overview');
-        document.body.classList.remove('header-hidden');
       } else if (e.shiftKey && idx > 0) {
         qtys[idx - 1].focus();
         qtys[idx - 1].select(); e.preventDefault();
@@ -416,8 +419,8 @@ export function setupMeals(){
 
     /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
     const deltaStr = (delta, unit) => delta >= 0
-      ? `${$.fmtNum(delta, 0)} ${unit} left today`
-      : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over today`;
+      ? `${$.fmtNum(delta, 0)} ${unit} left`
+      : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over`;
 
     // --- Hero section ---
     let heroValueHtml;
@@ -435,7 +438,7 @@ export function setupMeals(){
         </div>`;
       heroExtras = `
         <div class="summary-hero-subtext status-warn">${wvm.windowDays}/7 days logged</div>
-        <div class="summary-hero-subtext">${deltaStr(calDelta, 'kcal')}</div>
+        <div class="summary-hero-subtext"><span class="muted">${$.fmtNum(vm.calories.consumed, 0)} kcal today</span> · ${deltaStr(calDelta, 'kcal')}</div>
         <div class="summary-hero-bar">
           <div class="summary-hero-bar-fill ${st}" style="width:${todayPct}%"></div>
         </div>`;
@@ -483,7 +486,7 @@ export function setupMeals(){
           <div class="macro-card ${cls} status-${macroWin.status}">
             <div class="macro-label">${label}</div>
             <div class="macro-value">${$.fmtNum(macroWin.avgConsumed, 0)}<span class="unit">g avg</span></div>
-            <div class="macro-subtext">${deltaStr(d, 'g')}</div>
+            <div class="macro-subtext"><span class="muted">${$.fmtNum(macroVM.consumed, 0)}g</span> · ${deltaStr(d, 'g')}</div>
             <div class="macro-bar"><div class="macro-bar-fill" style="width:${barPct}%"></div></div>
           </div>`;
       }
