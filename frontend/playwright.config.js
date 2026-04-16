@@ -23,7 +23,7 @@ export default defineConfig({
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
     cwd: __dirname,
-    env: { NODE_ENV: 'production' },
+    env: { NODE_ENV: 'production', VITE_E2E: 'true' },
   },
   projects: [
     {

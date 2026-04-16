@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
 async function createFood(page, f){
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -14,8 +14,9 @@ async function createFood(page, f){
 
 test.describe('Meals: quick add, edit qty, snapshots', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
@@ -44,7 +45,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await page.fill('#quickSearch', 'yog');
     await page.click('#quickList .item .add');
     await expect(page.locator('#mealsList')).toContainText('Yogurt');
-    const mealsBefore = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsBefore = await getAllFromStore(page, 'meals');
     expect(mealsBefore[0].foodSnapshot.kcal).toBe(100);
 
     // Act: edit food kcal to 120 and name change
@@ -61,7 +62,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     // Assert: existing meal unchanged in UI and DB
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await expect(page.locator('#mealsList')).toContainText('Yogurt');
-    const mealsAfter = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsAfter = await getAllFromStore(page, 'meals');
     expect(mealsAfter[0].foodSnapshot.kcal).toBe(100);
   });
 
@@ -187,7 +188,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
 
     // Assert: both days' meals updated snapshots
     await expect(async () => {
-    const mealsAll = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsAll = await getAllFromStore(page, 'meals');
       expect(mealsAll.length).toBeGreaterThanOrEqual(3);
       expect(mealsAll.every(m => m.foodSnapshot.prot === 10)).toBeTruthy();
     }).toPass({ timeout: 20000 });
@@ -215,7 +216,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     // Assert: meal is restored in the list and in IndexedDB
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
     await expect(async () => {
-      const meals = await getAllFromStore(page, 'nutri-pwa', 'meals');
+      const meals = await getAllFromStore(page, 'meals');
       expect(meals).toHaveLength(1);
     }).toPass();
   });

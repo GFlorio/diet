@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { resetDB } from './playwright-helpers.js';
+import { resetDB, loadPouchDB } from './playwright-helpers.js';
 
-const DB_NAME = 'nutri-pwa';
 
 test.describe('Foods: combined search + status filter', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, DB_NAME);
+    await resetDB(page);
     await page.reload();
     await page.locator('.tab', { hasText: 'Foods' }).click();
   });

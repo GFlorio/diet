@@ -1,9 +1,4 @@
-/**
- * @type {IDBDatabase | undefined}
- */
-let db;
-const DB_NAME = 'nutri-pwa';
-const DB_VER = 3;
+import PouchDB from 'pouchdb-browser';
 
 /**
  * Macro nutrient fields.
@@ -18,7 +13,7 @@ const DB_VER = 3;
 /**
  * Food object stored/returned by the DB.
  * @typedef {Macros & {
- *   id: number,
+ *   id: string,
  *   name: string,
  *   refLabel: string,
  *   archived?: boolean,
@@ -29,7 +24,7 @@ const DB_VER = 3;
 /**
  * Snapshot of a food taken at meal creation time.
  * @typedef {Macros & {
- *   id: number,
+ *   id: string,
  *   name: string,
  *   refLabel: string,
  *   updatedAt: number
@@ -39,8 +34,8 @@ const DB_VER = 3;
 /**
  * A meal entry.
  * @typedef {{
- *   id: number,
- *   foodId: number,
+ *   id: string,
+ *   foodId: string,
  *   foodSnapshot: FoodSnapshot,
  *   multiplier: number,
  *   date: string,
@@ -49,9 +44,9 @@ const DB_VER = 3;
  */
 
 /**
- * User nutrition goals (singleton record, id always 1).
+ * User nutrition goals (singleton record, id always 'goals:1').
  * @typedef {{
- *   id: 1,
+ *   id: string,
  *   kcal: number,
  *   maintenanceKcal: number,
  *   calMode: 'surplus' | 'deficit',
@@ -69,180 +64,172 @@ const DB_VER = 3;
  */
 
 /**
- * Opens the IndexedDB database.
- * @returns {Promise<IDBDatabase>}
+ * @typedef {string | {from: string, to: string}} GetAllQuery
+ * Exact string value, or a {from, to} range (inclusive on both ends).
  */
-export const openDB = () => new Promise((resolve, reject) => {
-  const req = indexedDB.open(DB_NAME, DB_VER);
-  req.onupgradeneeded = (e) => {
-    /** @type {IDBOpenDBRequest} */
-    // @ts-ignore - during upgrade, target is present and is an IDBOpenDBRequest
-    const targ = e.target;
-    const db = targ && 'result' in targ ? /** @type {IDBOpenDBRequest} */ targ.result : req.result;
-    if (!db.objectStoreNames.contains('foods')) {
-      const s = db.createObjectStore('foods', { keyPath: 'id', autoIncrement: true });
-      s.createIndex('by_name', 'name', { unique: false });
-      s.createIndex('by_archived', 'archived', { unique: false });
-      s.createIndex('by_updatedAt', 'updatedAt', { unique: false });
-    }
-    if (!db.objectStoreNames.contains('meals')) {
-      const s = db.createObjectStore('meals', { keyPath: 'id', autoIncrement: true });
-      s.createIndex('by_date', 'date', { unique: false });
-      s.createIndex('by_foodId', 'foodId', { unique: false });
-      s.createIndex('by_updatedAt', 'updatedAt', { unique: false });
-    }
-    if (!db.objectStoreNames.contains('goals')) {
-      db.createObjectStore('goals', { keyPath: 'id' });
-    }
-  };
-  req.onsuccess = function () {
-    resolve(req.result);
-  };
-  req.onerror = function () {
-    reject(req.error);
-  };
-});
+
+const DB_NAME = 'diet';
+/** @type {PouchDB.Database} */
+let db = new PouchDB(DB_NAME);
+
 
 /**
- * Ensures the database is open and returns the instance.
- * @returns {Promise<IDBDatabase>}
+ * @param {'foods'|'meals'|'goals'} store
+ * @param {Record<string, unknown>} record
+ * @returns {string}
  */
-export const ensureDB = async () => {
-  if (!db) {db = await openDB();}
-  return db;
+function newId(store, record) {
+  if (store === 'foods') {return `food:${record.id ?? Date.now()}`;}
+  if (store === 'meals') {return `meal:${record.date}:${String(record.id ?? Date.now()).padStart(13, '0')}`;}
+  if (store === 'goals') {return 'goals:1';}
+  throw new Error(`newId: unknown store ${store}`);
+}
+
+/** Strip PouchDB internals, leaving id as a copy of _id. */
+function strip(/** @type {any} */ doc) {
+  const { _id, _rev, ...rest } = doc;
+  return { id: _id, ...rest };
+}
+
+/**
+ * Gets a record by its string id.
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
+ * @param {string} key  The full string id (e.g. 'food:123', 'meal:2024-01-15:...')
+ * @returns {Promise<StoreMap[S]|undefined>}
+ */
+export const get = async (storeName, key) => {
+  try {
+    return strip(await db.get(String(key)));
+  } catch (e) {
+    if (/** @type {any} */ (e).status === 404) {return undefined;}
+    throw e;
+  }
 };
 
 /**
- * Internal: Wraps a transaction for one or more stores.
- * @template T
- * @param {string[]} stores
- * @param {'readonly'|'readwrite'} mode
- * @param {(tx: IDBTransaction, store: IDBObjectStore|null) => void} fn
+ * Inserts or updates a record. Returns the record's string id.
+ * @template {keyof StoreMap} S
+ * @param {S} storeName
+ * @param {Partial<StoreMap[S]>} val
+ * @returns {Promise<string>}
+ */
+export const put = async (storeName, val) => {
+  const id = /** @type {any} */ (val).id ?? newId(storeName, /** @type {any} */ (val));
+  let _rev;
+  try {
+    const existing = await db.get(id);
+    _rev = existing._rev;
+  } catch (e) {
+    if (/** @type {any} */ (e).status !== 404) {throw e;}
+  }
+  await db.put({ _id: id, ...(_rev ? { _rev } : {}), ...val, id });
+  return id;
+};
+
+/**
+ * Deletes a record by its string id.
+ * @param {keyof StoreMap} storeName
+ * @param {string} key
  * @returns {Promise<void>}
  */
-export const txWrap = async (stores, mode, fn) => {
-  const dbi = await ensureDB();
-  return new Promise((resolve, reject) => {
-    const tx = dbi.transaction(stores, mode);
-    const store = stores.length === 1 ? tx.objectStore(stores[0]) : null;
-    fn(tx, store);
-    tx.oncomplete = function () {
-      resolve(undefined);
-    };
-    tx.onerror = function () {
-      reject(tx.error);
-    };
-    tx.onabort = function () {
-      reject(tx.error);
-    };
-  });
+export const del = async (storeName, key) => {
+  const doc = await db.get(String(key));
+  await db.remove(doc);
 };
 
 /**
- * Internal: Gets all records from a store or index, optionally filtered by query.
+ * Gets all records from a store, optionally filtered by index and query.
  * @template {keyof StoreMap} S
  * @param {S} storeName
  * @param {string=} index
- * @param {*} [query]
+ * @param {GetAllQuery=} query
  * @returns {Promise<StoreMap[S][]>}
  */
 export const getAll = async (storeName, index, query) => {
-  const dbi = await ensureDB();
-  return new Promise((resolve, reject) => {
-    const tx = dbi.transaction([storeName], 'readonly');
-    const store = tx.objectStore(storeName);
-    const src = index ? store.index(index) : store;
-    const req = query ? src.getAll(query) : src.getAll();
-    req.onsuccess = function () {
-      resolve(req.result);
-    };
-    req.onerror = function () {
-      reject(req.error);
-    };
-  });
+  if (storeName === 'foods') {
+    const result = await db.allDocs({ startkey: 'food:', endkey: 'food:\uffff', include_docs: true });
+    return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
+  }
+
+  if (storeName === 'goals') {
+    try {
+      return /** @type {any} */ ([strip(await db.get('goals:1'))]);
+    } catch (e) {
+      if (/** @type {any} */ (e).status === 404) {return [];}
+      throw e;
+    }
+  }
+
+  if (storeName === 'meals') {
+    if (!index) {
+      const result = await db.allDocs({ startkey: 'meal:', endkey: 'meal:\uffff', include_docs: true });
+      return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
+    }
+    if (index === 'by_date') {
+      const { startkey, endkey } = typeof query === 'object' && query !== null && 'from' in query
+        ? { startkey: `meal:${query.from}:`, endkey: `meal:${query.to}:\uffff` }
+        : { startkey: `meal:${query}:`,      endkey: `meal:${query}:\uffff` };
+      const result = await db.allDocs({ startkey, endkey, include_docs: true });
+      return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
+    }
+    if (index === 'by_foodId') {
+      const all = await getAll('meals');
+      return /** @type {any} */ (all.filter((m) => /** @type {any} */ (m).foodId === query));
+    }
+  }
+
+  throw new Error(`getAll: unsupported store ${storeName}`);
 };
 
 /**
- * Internal: Gets all records from a store matching a predicate.
+ * Gets all records matching a predicate.
  * @template {keyof StoreMap} S
  * @param {S} storeName
  * @param {(val: StoreMap[S]) => boolean} pred
  * @returns {Promise<StoreMap[S][]>}
  */
 export const getWhere = async (storeName, pred) => {
-  const dbi = await ensureDB();
-  return new Promise((resolve, reject) => {
-    const tx = dbi.transaction([storeName], 'readonly');
-    const store = tx.objectStore(storeName);
-    const req = store.openCursor();
-    /** @type {any[]} */
-    const out = [];
-    req.onsuccess = function () {
-      const cur = req.result;
-      if (!cur) {
-        resolve(out);
-        return;
-      }
-      if (pred(cur.value)) { out.push(cur.value); }
-      cur.continue();
-    };
-    req.onerror = function () {
-      reject(req.error);
-    };
-  });
+  const all = await getAll(storeName);
+  return all.filter(pred);
 };
 
-/**
- * Internal: Puts a value into a store.
- * @template {keyof StoreMap} S
- * @param {S} storeName
- * @param {Partial<StoreMap[S]>} val
- * @returns {Promise<IDBValidKey>} The key/id of the stored value
- */
-export const put = async (storeName, val) => {
-  const dbi = await ensureDB();
-  return new Promise((resolve, reject) => {
-    const tx = dbi.transaction([storeName], 'readwrite');
-    const store = tx.objectStore(storeName);
-    const req = store.put(val);
-    req.onsuccess = function () {
-      resolve(req.result);
-    };
-    req.onerror = function () {
-      reject(req.error);
-    };
-  });
+/** @returns {Promise<void>} */
+export const resetDB = async () => {
+  await db.destroy();
+  db = new PouchDB(DB_NAME);
 };
 
-/**
- * Internal: Deletes a record from a store by key.
- * @param {keyof StoreMap} storeName
- * @param {number|string} key
- * @returns {Promise<void>}
- */
-export const del = (storeName, key) => txWrap([storeName], 'readwrite', (tx, s) => {
-  if (s) { s.delete(key); }
-});
+/** No-op: PouchDB opens lazily; kept for call-site compatibility. */
+export const openDB = async () => {};
 
-/**
- * Internal: Gets a record from a store by key.
- * @template {keyof StoreMap} S
- * @param {S} storeName
- * @param {number|string} key
- * @returns {Promise<StoreMap[S]|undefined>}
- */
-export const get = async (storeName, key) => {
-  const dbi = await ensureDB();
-  return new Promise((resolve, reject) => {
-    const tx = dbi.transaction([storeName], 'readonly');
-    const s = tx.objectStore(storeName);
-    const req = s.get(key);
-    req.onsuccess = function () {
-      resolve(req.result ?? undefined);
-    };
-    req.onerror = function () {
-      reject(req.error);
-    };
-  });
+// Expose a minimal test API on window (safe for this offline PWA).
+/** @type {any} */ (window).__testDB = {
+  reset: () => resetDB(),
+  getAll: (/** @type {keyof StoreMap} */ store) => getAll(store),
+  /**
+   * Insert synthetic meal records directly, bypassing the UI.
+   * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number}>} meals
+   */
+  insertMeals: async (meals) => {
+    for (const m of meals) {
+      await put('meals', {
+        foodId: 'food:0',
+        foodSnapshot: { id: 'food:0', name: 'Test Food', refLabel: '100g',
+          kcal: m.kcal, prot: m.prot, carbs: m.carbs, fats: m.fats, updatedAt: 0 },
+        multiplier: m.multiplier ?? 1,
+        date: m.date,
+        updatedAt: 0,
+      });
+    }
+  },
+  /**
+   * Insert raw food records directly, bypassing the UI.
+   * @param {Array<Partial<Food>>} foods
+   */
+  insertFoods: async (foods) => {
+    for (const f of foods) {
+      await put('foods', f);
+    }
+  },
 };
-

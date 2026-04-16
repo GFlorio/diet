@@ -9,6 +9,11 @@ import {
     isoDate,
 } from './validation-core.js';
 
+/** @param {unknown} v */
+function nonEmptyString(v) {
+    return string(v, { minLen: 1 });
+}
+
 /** @param {unknown} val */
 const validateName = (val) => string(val, {
     minLen: 1, maxLen: 120, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u,
@@ -61,7 +66,7 @@ function validateFoodLike(v, typeName, typeFields) {
     let base = {};
     try {
         base = validateAndCollect({
-            id: () => number(o.id, { min: 1, integer: true }),
+            id: () => nonEmptyString(o.id),
             name: () => validateName(o.name),
             refLabel: () => validateRefLabel(o.refLabel),
             updatedAt: () => number(o.updatedAt, { min: 0, integer: true }),
@@ -147,10 +152,10 @@ function meal(v){
     const bad = new Set();
     /** @type {Partial<Meal>} */
     const out = {};
-    try { out.id = number(o.id, { min: 1, integer: true }); }
+    try { out.id = nonEmptyString(o.id); }
     catch (e) { collectFieldsFromError(e, bad, 'id'); }
 
-    try { out.foodId = number(o.foodId, { min: 1, integer: true }); }
+    try { out.foodId = nonEmptyString(o.foodId); }
     catch (e) { collectFieldsFromError(e, bad, 'foodId'); }
 
     try { out.foodSnapshot = foodSnapshot(o.foodSnapshot); }
@@ -244,16 +249,6 @@ function mealPatch(patch){
     return /** @type {Partial<Meal>} */ (validateAndCollect(validators, 'Invalid fields'));
 }
 
-/**
- * Narrow and validate an id read from DOM dataset or input.
- * @param {unknown} v
- * @returns {number}
- * @throws {ValidationError}
- */
-function id(v){
-    return number(v, { min: 1, integer: true });
-}
-
 export {
     macros,
     foodSnapshot,
@@ -263,5 +258,4 @@ export {
     mealCreate,
     foodPatch,
     mealPatch,
-    id,
 };

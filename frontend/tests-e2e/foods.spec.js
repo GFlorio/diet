@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -14,8 +14,9 @@ async function createFood(page, f) {
 
 test.describe('Foods page', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-  await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     // Reload after clearing DB so app re-opens and creates stores
     await page.reload();
   });
@@ -41,7 +42,7 @@ test.describe('Foods page', () => {
     await expect(page.locator('#foodsList .item .meta')).toContainText('100 g');
 
     // Check IndexedDB contents
-    const foods = await getAllFromStore(page, 'nutri-pwa', 'foods');
+    const foods = await getAllFromStore(page, 'foods');
     expect(foods.length).toBe(1);
     expect(foods[0]).toMatchObject({ name: 'Chicken breast', refLabel: '100 g', archived: false });
 
@@ -52,7 +53,7 @@ test.describe('Foods page', () => {
     await page.fill('#foodProt', '32');
     await page.click('#saveFoodBtn');
     await expect(async () => {
-      const updatedFoods = await getAllFromStore(page, 'nutri-pwa', 'foods');
+      const updatedFoods = await getAllFromStore(page, 'foods');
       expect(updatedFoods[0].prot).toBe(32);
     }).toPass();
     await expect(page.locator('#foodsList')).toContainText('Prot 32g');
@@ -73,7 +74,7 @@ test.describe('Foods page', () => {
 
     // Assert: food is removed from IndexedDB
     await expect(async () => {
-      const foods = await getAllFromStore(page, 'nutri-pwa', 'foods');
+      const foods = await getAllFromStore(page, 'foods');
       expect(foods).toHaveLength(0);
     }).toPass();
 
@@ -83,7 +84,7 @@ test.describe('Foods page', () => {
 
     // Assert: food is back in IndexedDB as archived
     await expect(async () => {
-      const foods = await getAllFromStore(page, 'nutri-pwa', 'foods');
+      const foods = await getAllFromStore(page, 'foods');
       expect(foods).toHaveLength(1);
       expect(foods[0]).toMatchObject({ name: 'Broccoli', archived: true });
     }).toPass();

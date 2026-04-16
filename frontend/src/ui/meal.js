@@ -134,6 +134,51 @@ export function setupMeals(){
   const FRECENCY_DAYS = 90;
 
   /**
+   * Build quantity-adjusted macro contribution line HTML.
+   * Each segment is colored: green up to 5% over goal, yellow up to 15%, red beyond.
+   * @param {import('../data.js').Food} f
+   * @param {number} qty
+   * @param {Macros} totals
+   * @returns {string}
+   */
+  function macroContribHtml(f, qty, totals){
+    const dKcal  = f.kcal  * qty;
+    const dProt  = f.prot  * qty;
+    const dCarbs = f.carbs * qty;
+    const dFats  = f.fats  * qty;
+    const g = currentGoals ? Goals.derivedGrams(currentGoals) : null;
+
+    /** @param {number} consumed @param {number} delta @param {number|null} goal @returns {'ok'|'warn'|'bad'|'none'} */
+    const statusFor = (consumed, delta, goal) => {
+      if (!goal) {return 'none';}
+      const after = consumed + delta;
+      if (after <= goal * 1.05) {return 'ok';}
+      if (after <= goal * 1.15) {return 'warn';}
+      return 'bad';
+    };
+
+    const kcalSt  = statusFor(totals.kcal,  dKcal,  currentGoals ? currentGoals.kcal : null);
+    const protSt  = statusFor(totals.prot,  dProt,  g ? g.protG  : null);
+    const carbsSt = statusFor(totals.carbs, dCarbs, g ? g.carbsG : null);
+    const fatSt   = statusFor(totals.fats,  dFats,  g ? g.fatG   : null);
+
+    /** @param {number} v @param {string} unit @param {string} st @returns {string} */
+    const seg = (v, unit, st) => {
+      const text = `+${$.fmtNum(v, 0)}${unit}`;
+      return st === 'none'
+        ? `<span>${text}</span>`
+        : `<span class="status-${st}">${text}</span>`;
+    };
+
+    return [
+      seg(dKcal, ' kcal', kcalSt),
+      seg(dProt, 'g protein', protSt),
+      seg(dCarbs, 'g carbs', carbsSt),
+      seg(dFats, 'g fat', fatSt),
+    ].join('');
+  }
+
+  /**
    * Render the quick-add food search results (limited to 3 foods).
    */
   async function renderQuickList(){
@@ -146,28 +191,11 @@ export function setupMeals(){
     const foods    = await Foods.list({ search: q, status: 'active', scores });
     const totals   = computeTotals(currentMeals);
 
-    quickList.innerHTML = foods.slice(0, 3).map(f => {
-      // Impact preview — 1x serving
-      const deltaKcal  = f.kcal;
-      const deltaLine  = `+${$.fmtNum(deltaKcal, 0)} kcal · P ${$.fmtNum(f.prot, 0)}g · C ${$.fmtNum(f.carbs, 0)}g · F ${$.fmtNum(f.fats, 0)}g`;
-
-      let afterHtml = '';
-      if (currentGoals) {
-        const afterKcal  = totals.kcal + deltaKcal;
-        const status     = Goals.computeStatus(afterKcal, currentGoals.kcal);
-        const diff       = afterKcal - currentGoals.kcal;
-        const afterLabel = diff <= 0
-          ? `After: ${$.fmtNum(afterKcal, 0)} kcal (${$.fmtNum(-diff, 0)} left)`
-          : `After: ${$.fmtNum(afterKcal, 0)} kcal (${$.fmtNum(diff, 0)} over)`;
-        afterHtml = `<div class="food-result-after ${status}">${afterLabel}</div>`;
-      }
-
-      return `
-      <div class="item" data-id="${f.id}">
-        <div>
+    quickList.innerHTML = foods.slice(0, 3).map(f => `
+      <div class="item food-card" data-id="${f.id}">
+        <div class="food-card-header">
           <button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button>
-          <div class="food-result-delta">${deltaLine}</div>
-          ${afterHtml}
+          <span class="food-card-portion">${$.esc(f.refLabel)}</span>
         </div>
         <div class="actions">
           <input type="number" inputmode="decimal" step="0.5" min="0"
@@ -176,9 +204,9 @@ export function setupMeals(){
           <button class="btn small ghost add05" tabindex="-1" title="+0.5">+0.5</button>
           <button class="btn small ghost add1"  tabindex="-1" title="+1">+1</button>
         </div>
-        <div class="meta">${$.esc(f.refLabel)}</div>
-      </div>`;
-    }).join('') || '<div class="muted">No Foods match the filter. '
+        <div class="food-card-macros">${macroContribHtml(f, 1, totals)}</div>
+      </div>`
+    ).join('') || '<div class="muted">No Foods match the filter. '
       + 'Type a name and <a href="#" id="quickNew">create it</a>.</div>';
 
     const createLink = document.getElementById('quickNew');
@@ -187,6 +215,20 @@ export function setupMeals(){
         e.preventDefault(); goFoodsWithPrefill(q);
       });
     }
+
+    // Attach qty→macros live update listeners
+    quickList.querySelectorAll('.item[data-id]').forEach(el => {
+      const itemEl = /** @type {HTMLElement} */ (el);
+      const food = foods.find(f => String(f.id) === itemEl.dataset.id);
+      if (!food) {return;}
+      const qtyInput = /** @type {HTMLInputElement|null} */ (itemEl.querySelector('.qty'));
+      const macrosDiv = itemEl.querySelector('.food-card-macros');
+      if (!qtyInput || !macrosDiv) {return;}
+      qtyInput.addEventListener('input', () => {
+        const qty = Math.max(0, Number(qtyInput.value) || 0);
+        macrosDiv.innerHTML = macroContribHtml(food, qty, totals);
+      });
+    });
   }
 
   quickSearch.addEventListener('focus', () => {
@@ -198,7 +240,7 @@ export function setupMeals(){
     } else {
       document.body.classList.add('header-hidden');
       setMealsMode('entry');
-      quickAddCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
   quickSearch.addEventListener('blur', () => {
@@ -274,7 +316,8 @@ export function setupMeals(){
     const item    = target.closest('.item');
     if (!item) { return; }
     const itemEl  = /** @type {HTMLElement} */ (item);
-    const id      = V.id(itemEl.dataset.id);
+    const id      = itemEl.dataset.id;
+    if (!id) { return; }
     const food    = await Foods.byId(id);
     if (!food) {
       itemEl.classList.add('shake');
@@ -297,17 +340,18 @@ export function setupMeals(){
         qtyEl.value = '1';
         quickSearch.value = '';
         renderMeals(true);
-        renderQuickList();
         quickSearch.focus();
       }, '✓ Added');
       return;
     }
     if (target.classList.contains('add1')) {
       qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 1)));
+      qtyEl.dispatchEvent(new Event('input'));
       quickSearch.focus(); return;
     }
     if (target.classList.contains('add05')) {
       qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 0.5)));
+      qtyEl.dispatchEvent(new Event('input'));
       quickSearch.focus(); return;
     }
     if (target.classList.contains('food-link')) {
@@ -369,7 +413,6 @@ export function setupMeals(){
     const vm   = buildTotalsViewModel(totals);
     const wvm  = currentWindowVM;
 
-    const STATUS_LABEL = /** @type {Record<string, string>} */ ({ ok: 'on track', warn: 'drifting', bad: 'off track', none: '' });
 
     /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
     const deltaStr = (delta, unit) => delta >= 0
@@ -385,15 +428,13 @@ export function setupMeals(){
       const st       = wvm.calories.status;
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
       const todayPct = Math.min(100, Math.round((vm.calories.consumed / wvm.calories.idealToday) * 100));
-      const dataHint = wvm.dataWarning ? ` · ${wvm.windowDays}/7 days` : '';
-
       heroValueHtml = `
         <div class="summary-hero-value status-${st}">
           <span class="num">${$.fmtNum(wvm.calories.avgConsumed, 0)}</span>
           <span class="unit">kcal avg</span>
         </div>`;
       heroExtras = `
-        <div class="summary-hero-subtext status-${st}">${STATUS_LABEL[st]} · 7-day avg${dataHint}</div>
+        <div class="summary-hero-subtext status-warn">${wvm.windowDays}/7 days logged</div>
         <div class="summary-hero-subtext">${deltaStr(calDelta, 'kcal')}</div>
         <div class="summary-hero-bar">
           <div class="summary-hero-bar-fill ${st}" style="width:${todayPct}%"></div>
@@ -559,11 +600,12 @@ export function setupMeals(){
       /** @type {Promise<Meal[]>} */ (Meals.listByDate(curDate)),
       Goals.get(),
     ]);
-    currentWindowVM = await Goals.computeWindowVM($.isoToday(), currentGoals);
+    currentWindowVM = await Goals.computeWindowVM(curDate, currentGoals);
     mealsUiState.goalsEnabled = currentGoals !== null;
     const totals = computeTotals(currentMeals);
     renderDayInfo(totals);
     renderMealsList(currentMeals, animateFirst);
+    renderQuickList();
   }
 
   mealsList.addEventListener('click', async (e) => {
@@ -571,7 +613,7 @@ export function setupMeals(){
     const row    = target.closest('.meal-row');
     if (!row) { return; }
     const rowEl  = /** @type {HTMLElement} */ (row);
-    const id     = V.id(rowEl.dataset.id);
+    const id     = rowEl.dataset.id;
     const meal   = currentMeals.find(m => m.id === id);
     if (!meal) { return; }
     if (target.classList.contains('del')) {
@@ -603,11 +645,7 @@ export function setupMeals(){
 
   // Re-render meals (and quick list) when the user navigates back to this tab,
   // ensuring goals changes made on the goals page are reflected immediately.
-  window.addEventListener('meals-activate', async () => {
-    await renderMeals();
-    renderQuickList();
-  });
+  window.addEventListener('meals-activate', () => renderMeals());
 
-  renderQuickList();
   renderMeals();
 }

@@ -1,35 +1,41 @@
+/**
+ * No-op: kept for call-site compatibility. window.__testDB is exposed by
+ * db.js once the app has loaded via page.goto().
+ */
+export async function loadPouchDB(_page) {}
 
-export async function getAllFromStore(page, dbName, store) {
-  return page.evaluate(({ dbName, store }) => {
-    function openDB(name) {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(name);
-        req.onsuccess = () => { resolve(req.result); };
-        req.onerror = () => { reject(req.error); };
-      });
-    }
-    return openDB(dbName).then(db => {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction([store], 'readonly');
-        const s = tx.objectStore(store);
-        const req = s.getAll();
-        req.onsuccess = () => { resolve(req.result); };
-        req.onerror = () => { reject(req.error); };
-      });
-    });
-  }, { dbName, store });
+/**
+ * Destroy and recreate the diet DB. Must be called after page.goto() so the
+ * app bundle has run and window.__testDB is available.
+ * @param {import('@playwright/test').Page} page
+ */
+export async function resetDB(page) {
+  await page.evaluate(() => window.__testDB.reset());
 }
 
-const DB_NAME = 'nutri-pwa';
+/**
+ * Read all records from a logical store. Requires the app to be loaded.
+ * @param {import('@playwright/test').Page} page
+ * @param {'foods'|'meals'|'goals'} store
+ */
+export async function getAllFromStore(page, store) {
+  return page.evaluate((s) => window.__testDB.getAll(s), store);
+}
 
-// Isolate tests: start with a clean DB by deleting it via page context
-export async function resetDB(page, dbName = DB_NAME) {
-  await page.evaluate((name) => {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.deleteDatabase(name);
-      req.onsuccess = () => { resolve(); };
-      req.onerror = () => { reject(req.error); };
-      req.onblocked = () => { resolve(); };
-    });
-  }, dbName);
+/**
+ * Insert synthetic meal records, bypassing the UI. Requires the app to be loaded.
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number}>} meals
+ */
+export async function insertMeals(page, meals) {
+  await page.evaluate((m) => window.__testDB.insertMeals(m), meals);
+}
+
+/**
+ * Insert raw food records, bypassing the UI. Requires the app to be loaded.
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<Partial<import('../src/db.js').Food>>} foods
+ */
+export async function insertFoods(page, foods) {
+  await page.evaluate((f) => window.__testDB.insertFoods(f), foods);
 }

@@ -23,7 +23,7 @@ import { Meals } from './data-meals.js';
  * }} MacroWindow
  */
 
-const GOALS_KEY = /** @type {1} */ (1);
+const GOALS_KEY = 'goals:1';
 
 /**
  * @returns {Promise<Goals|null>}
@@ -121,8 +121,7 @@ export async function computeWindowVM(todayISO, goals) {
       { kcal: 0, prot: 0, carbs: 0, fats: 0 },
     );
 
-  // Average always uses 7 as the denominator (full calendar week).
-  const WINDOW_SIZE = 7;
+  // Average uses only logged days as the denominator (days with no meals are excluded).
   const totalSum = {
     kcal:  prevSum.kcal  + todayMacros.kcal,
     prot:  prevSum.prot  + todayMacros.prot,
@@ -130,10 +129,10 @@ export async function computeWindowVM(todayISO, goals) {
     fats:  prevSum.fats  + todayMacros.fats,
   };
   const avg = {
-    kcal:  totalSum.kcal  / WINDOW_SIZE,
-    prot:  totalSum.prot  / WINDOW_SIZE,
-    carbs: totalSum.carbs / WINDOW_SIZE,
-    fats:  totalSum.fats  / WINDOW_SIZE,
+    kcal:  totalSum.kcal  / windowDays,
+    prot:  totalSum.prot  / windowDays,
+    carbs: totalSum.carbs / windowDays,
+    fats:  totalSum.fats  / windowDays,
   };
 
   const g = derivedGrams(goals);
@@ -142,12 +141,16 @@ export async function computeWindowVM(todayISO, goals) {
   const pctOff = (consumed, target) =>
     target > 0 ? Math.abs(consumed - target) / target : null;
 
-  // How much to eat today to bring the 7-day average back to target,
+  // How much to eat today to bring the logged-days average back to target,
   // clamped to ±15% of the daily target so the suggestion stays reasonable.
+  // If today has no meals yet, eating today adds a new day, so the effective
+  // denominator is windowDays + 1 rather than windowDays.
   const CLAMP = 0.15;
+  const todayLogged = todayISO in byDay;
+  const effectiveDays = todayLogged ? windowDays : windowDays + 1;
   /** @param {number} prevSumVal @param {number} target @returns {number} */
   const idealToday = (prevSumVal, target) => {
-    const ideal = WINDOW_SIZE * target - prevSumVal;
+    const ideal = effectiveDays * target - prevSumVal;
     return Math.max(target * (1 - CLAMP), Math.min(target * (1 + CLAMP), ideal));
   };
 

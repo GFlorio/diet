@@ -20,12 +20,12 @@ import * as db from './db.js';
 /**
  * Foods store API
  * @type {{
- *   list: (opts?: {search?: string, status?: 'active'|'archived'|'all', scores?: Map<number,number>}) => Promise<Food[]>,
+ *   list: (opts?: {search?: string, status?: 'active'|'archived'|'all', scores?: Map<string,number>}) => Promise<Food[]>,
  *   create: (food: CreateFoodInput) => Promise<Food>,
- *   update: (id: number, patch: UpdateFoodPatch) => Promise<Food|undefined>,
- *   setArchived: (id: number, archived: boolean) => Promise<Food|undefined>,
- *   byId: (id: number) => Promise<Food|undefined>,
- *   remove: (id: number) => Promise<void>,
+ *   update: (id: string, patch: UpdateFoodPatch) => Promise<Food|undefined>,
+ *   setArchived: (id: string, archived: boolean) => Promise<Food|undefined>,
+ *   byId: (id: string) => Promise<Food|undefined>,
+ *   remove: (id: string) => Promise<void>,
  *   restore: (food: Food) => Promise<void>
  * }}
  */
@@ -34,7 +34,7 @@ export const Foods = {
    * Lists foods, optionally filtered by search and status.
    * When `scores` is provided (a frecency map of foodId → score), foods are
    * sorted by score descending; ties and unscored foods fall back to alphabetical.
-   * @param {{search?: string, status?: 'active'|'archived'|'all', scores?: Map<number,number>}=} opts
+   * @param {{search?: string, status?: 'active'|'archived'|'all', scores?: Map<string,number>}=} opts
    * @returns {Promise<Food[]>}
    */
   async list({ search = '', status = 'active', scores } = {}) {
@@ -72,12 +72,12 @@ export const Foods = {
       updatedAt: t,
     };
     const id = await db.put('foods', food);
-    food.id = Number(id);
+    food.id = id;
     return /** @type {Food} */ (food);
   },
   /**
    * Updates a food entry by id.
-   * @param {number} id
+   * @param {string} id
    * @param {UpdateFoodPatch} patch
    * @returns {Promise<Food|undefined>}
    */
@@ -90,7 +90,7 @@ export const Foods = {
   },
   /**
    * Sets archived status for a food entry.
-   * @param {number} id
+   * @param {string} id
    * @param {boolean} archived
    * @returns {Promise<Food|undefined>}
    */
@@ -99,7 +99,7 @@ export const Foods = {
   },
   /**
    * Gets a food entry by id.
-   * @param {number} id
+   * @param {string} id
    * @returns {Promise<Food|undefined>}
    */
   async byId(id) {
@@ -107,7 +107,7 @@ export const Foods = {
   },
   /**
    * Permanently deletes a food entry by id.
-   * @param {number} id
+   * @param {string} id
    * @returns {Promise<void>}
    */
   async remove(id) {

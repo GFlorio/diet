@@ -123,7 +123,8 @@ export function setupFoods(){
     const target = $.html($.assertEl(e.target));
     const row = $.html($.assertEl(target.closest('.item')));
 
-    const id = v.id(row.dataset.id);
+    const id = row.dataset.id;
+    if (!id) { return; }
     const f = await Foods.byId(id);
     if (target.classList.contains('edit')){
       setFoodForm(f);
@@ -189,7 +190,7 @@ export function setupFoods(){
       clearFieldErrors();
       const payload = v.createFoodInput(readFormPayload());
       const isNew = !foodId.value;
-      const editId = isNew ? null : v.id(foodId.value);
+      const editId = isNew ? null : foodId.value;
       await $.withConfirm(submitBtn, async () => {
         if (editId) {
           await Foods.update(editId, payload);

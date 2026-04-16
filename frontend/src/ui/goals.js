@@ -500,7 +500,7 @@ export function setupGoals() {
         if (day) { showTooltip(/** @type {HTMLElement} */ (day)); }
       });
       grid.addEventListener('mouseout', e => {
-        const to = /** @type {HTMLElement | null} */ (e.relatedTarget);
+        const to = /** @type {HTMLElement | null} */ ((/** @type {MouseEvent} */ (e)).relatedTarget);
         if (!to?.closest('.cal-day[data-iso]')) { hideTooltip(); }
       });
     }

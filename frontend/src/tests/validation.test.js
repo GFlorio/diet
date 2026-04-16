@@ -95,18 +95,18 @@ describe('schema: macros', () => {
 });
 
 describe('schema: foodSnapshot', () => {
-  const base = { id: 1, name: 'Apple', refLabel: '100g', updatedAt: 1, kcal: 52, prot: 0.3, carbs: 14, fats: 0.2 };
+  const base = { id: 'food:1', name: 'Apple', refLabel: '100g', updatedAt: 1, kcal: 52, prot: 0.3, carbs: 14, fats: 0.2 };
   test('passes with correct payload', () => {
     const s = v.foodSnapshot(base);
     expect(s).toMatchObject(base);
   });
   test('collects multiple bad fields', () => {
-    expectValidationError(() => v.foodSnapshot({ ...base, id: 0, name: '', kcal: 'x' }), ['id','name','kcal']);
+    expectValidationError(() => v.foodSnapshot({ ...base, id: '', name: '', kcal: 'x' }), ['id','name','kcal']);
   });
 });
 
 describe('schema: food', () => {
-  const base = { id: 1, name: 'Banana', refLabel: '100g', updatedAt: 1, kcal: 89, prot: 1.1, carbs: 23, fats: 0.3, archived: false };
+  const base = { id: 'food:1', name: 'Banana', refLabel: '100g', updatedAt: 1, kcal: 89, prot: 1.1, carbs: 23, fats: 0.3, archived: false };
   test('passes and normalizes archived', () => {
     const s = v.food(base);
     expect(s).toMatchObject({ ...base, archived: false });
@@ -241,9 +241,9 @@ describe('schema: createFoodInput — name pattern and length', () => {
 });
 
 describe('schema: meal + mealCreate + patches', () => {
-  const snapshot = { id: 1, name: 'Rice', refLabel: '100g', updatedAt: 1, kcal: 130, prot: 2.4, carbs: 28, fats: 0.3 };
+  const snapshot = { id: 'food:1', name: 'Rice', refLabel: '100g', updatedAt: 1, kcal: 130, prot: 2.4, carbs: 28, fats: 0.3 };
   const food = { ...snapshot, archived: false };
-  const meal = { id: 1, foodId: 1, foodSnapshot: snapshot, multiplier: 1.5, date: '2024-02-02', updatedAt: 1 };
+  const meal = { id: 'meal:2024-02-02:0000000000001', foodId: 'food:1', foodSnapshot: snapshot, multiplier: 1.5, date: '2024-02-02', updatedAt: 1 };
 
   test('meal validates full object', () => {
     const m = v.meal(meal);

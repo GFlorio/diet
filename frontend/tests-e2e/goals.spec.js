@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -43,8 +43,9 @@ const CHICKEN = { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs
 
 test.describe('Goals: settings UI', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
@@ -73,11 +74,13 @@ test.describe('Goals: settings UI', () => {
   test('saves goals to IndexedDB', async ({ page }) => {
     // Act
     await setGoals(page, { kcal: 1800, prot: 25, carbs: 50, fat: 25 });
+    // Wait for save to complete (edit form closes and view re-renders)
+    await expect(page.locator('[data-testid="goalsSaveBtn"]')).not.toBeVisible();
 
     // Assert: check DB
-    const records = await getAllFromStore(page, 'nutri-pwa', 'goals');
+    const records = await getAllFromStore(page, 'goals');
     expect(records).toHaveLength(1);
-    expect(records[0].id).toBe(1);
+    expect(records[0].id).toBe('goals:1');
     expect(records[0].kcal).toBe(1800);
     expect(records[0].maintenanceKcal).toBe(1800);
     expect(records[0].calMode).toBe('deficit');
@@ -136,7 +139,7 @@ test.describe('Goals: settings UI', () => {
 
     // Assert: back to empty state
     await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No daily targets set yet');
-    const records = await getAllFromStore(page, 'nutri-pwa', 'goals');
+    const records = await getAllFromStore(page, 'goals');
     expect(records).toHaveLength(0);
   });
 
@@ -157,8 +160,9 @@ test.describe('Goals: settings UI', () => {
 
 test.describe('Goals: daily status on Meals page', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
@@ -219,32 +223,33 @@ test.describe('Goals: daily status on Meals page', () => {
 
 test.describe('Goals: impact preview in quick-add list', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
-  test('shows delta line for every food result', async ({ page }) => {
+  test('shows macro contribution line for every food result', async ({ page }) => {
     // Arrange
     await createFood(page, CHICKEN);
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'chi');
 
-    // Assert: delta line always present
-    await expect(page.locator('.food-result-delta').first()).toContainText('+165 kcal');
+    // Assert: macro line always present with kcal contribution
+    await expect(page.locator('.food-card-macros').first()).toContainText('+165 kcal');
   });
 
-  test('shows After line only when goals are set', async ({ page }) => {
+  test('shows macro line without status colors when no goals are set', async ({ page }) => {
     // Arrange: no goals
     await createFood(page, CHICKEN);
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'chi');
 
-    // Assert: no After line without goals
-    await expect(page.locator('.food-result-after')).toHaveCount(0);
+    // Assert: no status color spans without goals
+    await expect(page.locator('.food-card-macros .status-ok, .food-card-macros .status-warn, .food-card-macros .status-bad')).toHaveCount(0);
   });
 
-  test('shows After line with projected total when goals are set', async ({ page }) => {
+  test('shows status-colored macros when goals are set', async ({ page }) => {
     // Arrange
     await createFood(page, CHICKEN);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
@@ -253,15 +258,16 @@ test.describe('Goals: impact preview in quick-add list', () => {
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'chi');
 
-    // Assert: After line shows projected total (0 + 165 = 165 kcal)
-    await expect(page.locator('.food-result-after').first()).toContainText('After: 165 kcal');
+    // Assert: kcal contribution colored ok (165 kcal << 2000 goal)
+    await expect(page.locator('.food-card-macros .status-ok').first()).toContainText('+165 kcal');
   });
 });
 
 test.describe('Goals: 7-day window', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
@@ -284,7 +290,6 @@ test.describe('Goals: 7-day window', () => {
 
     // Assert: hero shows avg label and a status line
     await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('7-day avg');
 
     // Assert: second subtext line shows today's delta guidance
     const deltaLine = page.locator('.summary-hero-subtext').nth(1);

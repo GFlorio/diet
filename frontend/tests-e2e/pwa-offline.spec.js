@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
 test.describe('PWA and offline persistence', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 
@@ -24,8 +25,10 @@ test.describe('PWA and offline persistence', () => {
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'ban');
     await page.click('#quickList .item .add');
+    // Wait for the meal row to appear (confirms async DB write completed)
+    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
 
-    const mealsOnline = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsOnline = await getAllFromStore(page, 'meals');
     expect(mealsOnline.length).toBe(1);
 
   // Go offline (SW blocked in config, but IDB should still work)
@@ -34,7 +37,7 @@ test.describe('PWA and offline persistence', () => {
     await page.fill('#quickSearch', 'ban');
     await page.click('#quickList .item .add');
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(2);
-    const mealsOffline = await getAllFromStore(page, 'nutri-pwa', 'meals');
+    const mealsOffline = await getAllFromStore(page, 'meals');
     expect(mealsOffline.length).toBe(2);
 
     // Come back online, app remains stable

@@ -1,104 +1,26 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
-
-const DB_NAME = 'nutri-pwa';
-
-/**
- * Seed `count` food records directly into IndexedDB, bypassing the UI.
- * The DB schema must already exist (call after page.reload() in beforeEach).
- * @param {import('@playwright/test').Page} page
- * @param {number} count
- */
-async function seedFoodsDB(page, count) {
-  await page.evaluate(async (count) => {
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('nutri-pwa');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    const tx = db.transaction(['foods'], 'readwrite');
-    const store = tx.objectStore('foods');
-    const now = Date.now();
-    for (let i = 0; i < count; i++) {
-      store.add({
-        name: `Bulk Food ${i + 1}`,
-        refLabel: '100 g',
-        kcal: 100,
-        prot: 10,
-        carbs: 20,
-        fats: 5,
-        archived: false,
-        updatedAt: now + i,
-      });
-    }
-    await new Promise((resolve, reject) => {
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  }, count);
-}
-
-/**
- * Seed one food and `mealCount` meals on `date`, returning the per-meal macro values.
- * @param {import('@playwright/test').Page} page
- * @param {string} date - ISO date string (YYYY-MM-DD)
- * @param {number} mealCount
- */
-async function seedMealsDB(page, date, mealCount) {
-  return page.evaluate(async ({ date, mealCount }) => {
-    const db = await new Promise((resolve, reject) => {
-      const req = indexedDB.open('nutri-pwa');
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-
-    // Create one food and capture its auto-generated id
-    const foodId = await new Promise((resolve, reject) => {
-      const tx = db.transaction(['foods'], 'readwrite');
-      const req = tx.objectStore('foods').add({
-        name: 'Smoke Food',
-        refLabel: '100 g',
-        kcal: 100,
-        prot: 10,
-        carbs: 20,
-        fats: 5,
-        archived: false,
-        updatedAt: Date.now(),
-      });
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-
-    // Seed meals for the given date
-    const now = Date.now();
-    const snapshot = {
-      id: foodId, name: 'Smoke Food', refLabel: '100 g',
-      kcal: 100, prot: 10, carbs: 20, fats: 5, updatedAt: now,
-    };
-    const tx2 = db.transaction(['meals'], 'readwrite');
-    const mStore = tx2.objectStore('meals');
-    for (let i = 0; i < mealCount; i++) {
-      mStore.add({ foodId, foodSnapshot: snapshot, multiplier: 1, date, updatedAt: now + i });
-    }
-    await new Promise((resolve, reject) => {
-      tx2.oncomplete = resolve;
-      tx2.onerror = () => reject(tx2.error);
-    });
-
-    return { kcalPerMeal: 100, protPerMeal: 10, carbsPerMeal: 20, fatsPerMeal: 5 };
-  }, { date, mealCount });
-}
+import { getAllFromStore, resetDB, insertFoods, insertMeals } from './playwright-helpers.js';
 
 test.describe('Cardinality smoke tests: large datasets', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await resetDB(page, DB_NAME);
+    await resetDB(page);
     await page.reload();
   });
 
   test('renders 100 foods without crashing or showing an error placeholder', async ({ page }) => {
-    // Arrange: seed 100 foods directly into IDB
-    await seedFoodsDB(page, 100);
+    // Arrange: seed 100 foods directly into DB
+    const now = Date.now();
+    await insertFoods(page, Array.from({ length: 100 }, (_, i) => ({
+      name: `Bulk Food ${i + 1}`,
+      refLabel: '100 g',
+      kcal: 100,
+      prot: 10,
+      carbs: 20,
+      fats: 5,
+      archived: false,
+      updatedAt: now + i,
+    })));
 
     // Reload so the app initialises with the seeded data
     await page.reload();
@@ -111,15 +33,15 @@ test.describe('Cardinality smoke tests: large datasets', () => {
     await expect(page.locator('#foodsList')).not.toContainText('No foods yet');
 
     // Sanity: DB still contains 100 records
-    const foods = await getAllFromStore(page, DB_NAME, 'foods');
+    const foods = await getAllFromStore(page, 'foods');
     expect(foods).toHaveLength(100);
   });
 
   test('renders 50 meals for one day and shows correct aggregate totals', async ({ page }) => {
-    // Arrange: seed 50 meals (multiplier=1, kcal=100 each) for today's date.
-    // Use the same UTC-based computation the app uses (utils.isoToday).
+    // Arrange: seed 50 meals (multiplier=1, kcal=100 each) for today's date
     const isoToday = await page.evaluate(() => new Date().toISOString().slice(0, 10));
-    const macros = await seedMealsDB(page, isoToday, 50);
+    const perMeal = { kcal: 100, prot: 10, carbs: 20, fats: 5 };
+    await insertMeals(page, Array.from({ length: 50 }, () => ({ date: isoToday, ...perMeal })));
 
     // Reload so app picks up seeded data
     await page.reload();
@@ -131,11 +53,10 @@ test.describe('Cardinality smoke tests: large datasets', () => {
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(50, { timeout: 15_000 });
 
     // Assert: totals card shows the correct kcal sum
-    const expectedKcal = macros.kcalPerMeal * 50; // 5000
-    await expect(page.locator('#dayTotals')).toContainText(String(expectedKcal));
+    await expect(page.locator('#dayTotals')).toContainText(String(perMeal.kcal * 50));
 
     // Sanity: DB contains 50 meal records
-    const meals = await getAllFromStore(page, DB_NAME, 'meals');
+    const meals = await getAllFromStore(page, 'meals');
     expect(meals).toHaveLength(50);
   });
 });

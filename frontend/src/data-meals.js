@@ -30,28 +30,23 @@ function snapshotFromFood(food) {
  * @type {{
  *   listByDate: (dateISO: string) => Promise<Meal[]>,
  *   listRange: (fromISO: string, toISO: string) => Promise<Meal[]>,
- *   frecencyScores: (sinceISO: string, todayISO: string) => Promise<Map<number, number>>,
+ *   frecencyScores: (sinceISO: string, todayISO: string) => Promise<Map<string, number>>,
  *   create: (opts: {food: Food, multiplier: number, date: string}) => Promise<Meal>,
- *   update: (id: number, patch: Partial<Meal>) => Promise<Meal|undefined>,
- *   remove: (id: number) => Promise<void>,
+ *   remove: (id: string) => Promise<void>,
  *   restore: (meal: Meal) => Promise<void>,
- *   syncMealToFood: (meal: Meal) => Promise<Meal>,
- *   syncAllForFood: (foodId: number) => Promise<number>,
- *   hasForFood: (foodId: number) => Promise<boolean>
+ *   syncAllForFood: (foodId: string) => Promise<number>,
+ *   hasForFood: (foodId: string) => Promise<boolean>
  * }}
  */
 export const Meals = {
-  // NOTE: IDBKeyRange isn't available on the unit test harness, so anything that
-  // needs to hit this must be an e2e test.
-
   /**
    * Lists meals by date.
    * @param {string} dateISO
    * @returns {Promise<Meal[]>}
    */
   async listByDate(dateISO) {
-    const xs = await db.getAll('meals', 'by_date', IDBKeyRange.only(dateISO));
-    return xs.sort((a, b) => a.id - b.id);
+    const xs = await db.getAll('meals', 'by_date', dateISO);
+    return xs.sort((a, b) => a.id.localeCompare(b.id));
   },
   /**
    * Lists meals within an inclusive date range.
@@ -61,21 +56,21 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listRange(fromISO, toISO) {
-    const xs = await db.getAll('meals', 'by_date', IDBKeyRange.bound(fromISO, toISO));
-    return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+    const xs = await db.getAll('meals', 'by_date', { from: fromISO, to: toISO });
+    return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
   },
   /**
    * Computes frecency scores for foods based on meal history in [sinceISO, todayISO].
    * Score for each meal = 1 / (daysDiff + 1); scores are summed per food.
    * @param {string} sinceISO
    * @param {string} todayISO
-   * @returns {Promise<Map<number, number>>}
+   * @returns {Promise<Map<string, number>>}
    */
   async frecencyScores(sinceISO, todayISO) {
-    const meals = await db.getAll('meals', 'by_date', IDBKeyRange.bound(sinceISO, todayISO));
+    const meals = await db.getAll('meals', 'by_date', { from: sinceISO, to: todayISO });
     const MS_PER_DAY = 86400000;
     const todayMs = Date.parse(todayISO);
-    /** @type {Map<number, number>} */
+    /** @type {Map<string, number>} */
     const scores = new Map();
     for (const meal of meals) {
       const daysDiff = Math.round((todayMs - Date.parse(meal.date)) / MS_PER_DAY);
@@ -100,25 +95,12 @@ export const Meals = {
       updatedAt: t,
     };
     const id = await db.put('meals', meal);
-    meal.id = Number(id);
+    meal.id = id;
     return /** @type {Meal} */ (meal);
   },
   /**
-   * Updates a meal entry by id.
-   * @param {number} id
-   * @param {Partial<Meal>} patch
-   * @returns {Promise<Meal|undefined>}
-   */
-  async update(id, patch) {
-    const cur = await db.get('meals', id);
-    if (!cur) { return; }
-    const next = /** @type {Meal} */ ({ ...cur, ...patch, updatedAt: $.now() });
-    await db.put('meals', next);
-    return next;
-  },
-  /**
    * Removes a meal entry by id.
-   * @param {number} id
+   * @param {string} id
    * @returns {Promise<void>}
    */
   async remove(id) {
@@ -133,35 +115,19 @@ export const Meals = {
     await db.put('meals', meal);
   },
   /**
-   * Syncs a single meal's foodSnapshot to match the current Food.
-   * @param {Meal} meal
-   * @returns {Promise<Meal>}
-   */
-  async syncMealToFood(meal) {
-    const food = await db.get('foods', meal.foodId);
-    if (!food) { return meal; }
-    const next = /** @type {Meal} */ ({
-      ...meal,
-      foodSnapshot: snapshotFromFood(food),
-      updatedAt: $.now(),
-    });
-    await db.put('meals', next);
-    return next;
-  },
-  /**
-   * Syncs all meals for a given foodId to the latest Food snapshot.
-   * @param {number} foodId
-   * @returns {Promise<number>} Number of meals updated
-   */
-  /**
    * Returns true if any meal references the given foodId.
-   * @param {number} foodId
+   * @param {string} foodId
    * @returns {Promise<boolean>}
    */
   async hasForFood(foodId) {
-    const xs = await db.getAll('meals', 'by_foodId', IDBKeyRange.only(foodId));
+    const xs = await db.getAll('meals', 'by_foodId', foodId);
     return xs.length > 0;
   },
+  /**
+   * Syncs all meals for a given foodId to the latest Food snapshot.
+   * @param {string} foodId
+   * @returns {Promise<number>} Number of meals updated
+   */
   async syncAllForFood(foodId) {
     const food = await db.get('foods', foodId);
     if (!food) { return 0; }

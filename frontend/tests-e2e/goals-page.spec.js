@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resetDB } from './playwright-helpers.js';
+import { resetDB, loadPouchDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -41,8 +41,9 @@ const RICE = { name: 'Rice', refLabel: '100g', kcal: 130, prot: 2.4, carbs: 28, 
 
 test.describe('Goals page: heatmap', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
   });
 

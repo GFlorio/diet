@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
-const DB_NAME = 'nutri-pwa';
 
 test.describe('Food form validation UI', () => {
 	test.beforeEach(async ({ page }) => {
 		// Arrange: open app with a clean IndexedDB state
+		await loadPouchDB(page);
 		await page.goto('/');
-		await resetDB(page, DB_NAME);
+		await resetDB(page);
 		await page.reload();
 		await page.locator('.tab', { hasText: 'Foods' }).click();
 	});
@@ -60,7 +60,7 @@ test.describe('Food form validation UI', () => {
 		await expect(page.locator('#foodProt')).toHaveValue('31');
 
 		// Assert: nothing persisted in IndexedDB after failed validation
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 
@@ -77,7 +77,7 @@ test.describe('Food form validation UI', () => {
 		await expect(page.locator('#foodKcal')).toHaveClass(/error/);
 		await expect(page.locator('#foodKcal')).toHaveValue('-50');
 
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 
@@ -98,7 +98,7 @@ test.describe('Food form validation UI', () => {
 		await expect(page.locator('#foodKcal')).toHaveValue('6000');
 		await expect(page.locator('#foodProt')).toHaveValue('1500');
 
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 
@@ -113,7 +113,7 @@ test.describe('Food form validation UI', () => {
 		// Assert: name field flagged, nothing saved
 		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
 		await expect(page.locator('#foodName')).toHaveClass(/error/);
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 
@@ -126,7 +126,7 @@ test.describe('Food form validation UI', () => {
 
 		// Assert: food created successfully
 		await expect(page.locator('#foodsList')).toContainText('Café (raw)');
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(1);
 		expect(foods[0].name).toBe('Café (raw)');
 	});
@@ -140,7 +140,7 @@ test.describe('Food form validation UI', () => {
 		await page.locator('#saveFoodBtn').click();
 
 		// Assert: food saved — boundary value is valid
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(1);
 		expect(foods[0].name).toBe(name);
 	});
@@ -157,7 +157,7 @@ test.describe('Food form validation UI', () => {
 		// Assert: name field flagged, nothing saved
 		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
 		await expect(page.locator('#foodName')).toHaveClass(/error/);
-		const foods = await getAllFromStore(page, DB_NAME, 'foods');
+		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 

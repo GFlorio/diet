@@ -113,17 +113,29 @@ export function select(el) { return castEl(el, HTMLSelectElement, 'HTML select e
 export const fmtNum = (n, d = 1) => Number(n).toFixed(d).replace(/\.0+$/, '');
 
 /**
- * Returns today's date in ISO format (YYYY-MM-DD).
+ * Format a Date to local YYYY-MM-DD (respects the user's timezone).
+ * @param {Date} d
  * @returns {string}
  */
-export const isoToday = () => new Date().toISOString().slice(0, 10);
+const localISO = (d) => {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+};
 
 /**
- * Converts a date to ISO format (YYYY-MM-DD).
+ * Returns today's date in ISO format (YYYY-MM-DD), in the user's local timezone.
+ * @returns {string}
+ */
+export const isoToday = () => localISO(new Date());
+
+/**
+ * Converts a date to ISO format (YYYY-MM-DD), in the user's local timezone.
  * @param {string|Date} d
  * @returns {string}
  */
-export const toISO = (d) => new Date(d).toISOString().slice(0, 10);
+export const toISO = (d) => localISO(new Date(d));
 
 /**
  * Returns the current timestamp in milliseconds.

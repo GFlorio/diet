@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
 
 test.describe('Foods: create, edit, search, archive, batch update', () => {
   test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
     await page.goto('/');
-    await resetDB(page, 'nutri-pwa');
+    await resetDB(page);
     await page.reload();
     await page.locator('.tab', { hasText: 'Foods' }).click();
   });
@@ -30,7 +31,7 @@ test.describe('Foods: create, edit, search, archive, batch update', () => {
     await page.click('#saveFoodBtn');
     await expect(page.locator('#foodsList')).toContainText('Apple');
 
-    const foods = await getAllFromStore(page, 'nutri-pwa', 'foods');
+    const foods = await getAllFromStore(page, 'foods');
     expect(foods).toHaveLength(2);
 
     // Search for Rice only

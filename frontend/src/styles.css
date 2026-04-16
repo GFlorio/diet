@@ -264,12 +264,12 @@ label{ font-size:12px; color:var(--muted) }
 .goals-actions .btn.primary{ flex:1 }
 .goals-remove-action{ margin-top:8px; text-align:center }
 
-/* Impact preview in quick-add list */
-.food-result-delta{ font-size:12px; color:var(--muted); margin-top:2px }
-.food-result-after{ font-size:12px; margin-top:1px; color:var(--muted) }
-.food-result-after.ok  { color:var(--ok) }
-.food-result-after.warn{ color:var(--warn) }
-.food-result-after.bad { color:var(--bad) }
+/* Food card in quick-add list — 3-line layout */
+.item.food-card{ grid-template-columns:1fr; gap:6px }
+.food-card-header{ display:flex; align-items:baseline; gap:8px }
+.food-card-portion{ font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap }
+.item.food-card .actions{ justify-content:center }
+.food-card-macros{ font-size:12px; color:var(--muted); display:flex; justify-content:space-evenly; text-align:center }
 
 /* Calorie adherence heatmap */
 .cal-heatmap { display: flex; flex-direction: column; gap: 2px; width: fit-content; margin: 0 auto; }
