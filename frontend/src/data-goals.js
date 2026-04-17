@@ -1,6 +1,6 @@
+import { Meals } from './data-meals.js';
 import * as db from './db.js';
 import * as $ from './utils.js';
-import { Meals } from './data-meals.js';
 
 /**
  * @typedef {import('./db.js').Goals} Goals
@@ -86,7 +86,7 @@ export function derivedGrams(goals) {
 export async function computeWindowVM(todayISO, goals) {
   if (!goals) { return null; }
 
-  const d = new Date(todayISO + 'T00:00:00');
+  const d = new Date(`${todayISO}T00:00:00`);
   d.setDate(d.getDate() - 6);
   const fromISO = $.toISO(d);
 

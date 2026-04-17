@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { resetDB, insertMeals, loadPouchDB } from './playwright-helpers.js';
+import { expect, test } from '@playwright/test';
+import { insertMeals, loadPouchDB, resetDB } from './playwright-helpers.js';
 
 // --- shared fixtures --------------------------------------------------------
 

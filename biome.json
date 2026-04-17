@@ -1,0 +1,42 @@
+{
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "test": "recommended",
+      "playwright": "all"
+    },
+    "rules": {
+      "recommended": true,
+      "nursery": {
+        "noImpliedEval": "error",
+        "noFloatingPromises": "error",
+        "noNestedPromises": "error"
+      },
+      "suspicious": {
+        "noDoubleEquals": "error",
+        "useAwait": "error"
+      },
+      "style": {
+        "useBlockStatements": "error",
+        "useConst": "error"
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noUnresolvedImports": "error",
+        "noUndeclaredDependencies": "error"
+      },
+      "security": {
+        "noGlobalEval": "error"
+      }
+    }
+  }
+}

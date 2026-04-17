@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
+import { expect, test } from '@playwright/test';
+import { getAllFromStore, loadPouchDB, resetDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();

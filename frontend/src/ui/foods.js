@@ -1,6 +1,6 @@
 import { Foods, Meals } from '../data.js';
-import * as v from '../validation.js';
 import * as $ from '../utils.js';
+import * as v from '../validation.js';
 
 /**
  * @typedef {import('../data.js').Food} Food
@@ -38,7 +38,7 @@ export function setupFoods(){
    * Remove error styling from all food form input fields.
    */
   function clearFieldErrors(){
-    fieldToInput.forEach(el => el.classList.remove('error'));
+    fieldToInput.forEach(el => { el.classList.remove('error'); });
   }
 
   /**
@@ -133,7 +133,7 @@ export function setupFoods(){
     }
     if (target.classList.contains('archive')){
       await Foods.setArchived(id, true);
-      renderFoods();
+      await renderFoods();
       const hasMeals = await Meals.hasForFood(id);
       if (!hasMeals && f) {
         $.toast(`No meal history for "${$.esc(f.name)}" — delete permanently?`, {
@@ -142,12 +142,12 @@ export function setupFoods(){
             label: 'Delete',
             callback: async () => {
               await Foods.remove(id);
-              renderFoods();
+              await renderFoods();
               $.toast(`"${$.esc(f.name)}" deleted`, {
                 duration: 5000,
                 action: {
                   label: 'Undo',
-                  callback: async () => { await Foods.restore({ ...f, archived: true }); renderFoods(); },
+                  callback: async () => { await Foods.restore({ ...f, archived: true }); await renderFoods(); },
                 },
               });
             },
@@ -158,7 +158,7 @@ export function setupFoods(){
     }
     if (target.classList.contains('unarchive')){
       await Foods.setArchived(id, false);
-      renderFoods();
+      await renderFoods();
       return;
     }
   });
@@ -195,7 +195,7 @@ export function setupFoods(){
         if (editId) {
           await Foods.update(editId, payload);
         } else { await Foods.create(payload); }
-        setFoodForm(); renderFoods();
+        setFoodForm(); await renderFoods();
         const quickListEl = /** @type {HTMLElement|undefined} */ ($.sel('#quickList'));
         if (quickListEl) {quickListEl.dispatchEvent(new Event('refresh'));}
       }, '✓ Saved');
@@ -243,7 +243,7 @@ export function setupFoods(){
     }
   }, 400);
   [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat]
-    .forEach(el => el.addEventListener('input', liveCheck));
+    .forEach(el => { el.addEventListener('input', liveCheck); });
 
   // Listen to cross-module navigation prefill
   window.addEventListener('go-foods', async (e) => {
@@ -260,5 +260,5 @@ export function setupFoods(){
     }
   });
 
-  renderFoods();
+  void renderFoods();
 }

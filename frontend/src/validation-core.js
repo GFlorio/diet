@@ -37,7 +37,7 @@ function collectFieldsFromError(err, into, fallbackField){
     Array.isArray((/** @type {any} */ (err)).fields) &&
     /** @type {any} */ (err).fields.length
   ) {
-    /** @type {{ fields: string[] }} */ (err).fields.forEach((f) => into.add(f));
+    /** @type {{ fields: string[] }} */ (err).fields.forEach((f) => { into.add(f); });
   } else {
     into.add(fallbackField);
   }
@@ -160,19 +160,19 @@ function isoDate(val){
     throw new ValidationError('Expected date string or Date');
   }
   assert(/^\d{4}-\d{2}-\d{2}$/.test(iso), 'Invalid date format, expected YYYY-MM-DD');
-  const d = new Date(iso + 'T00:00:00Z');
+  const d = new Date(`${iso}T00:00:00Z`);
   assert(!Number.isNaN(d.getTime()), 'Invalid date');
   return iso;
 }
 
 export {
-  ValidationError,
   assert,
-  collectFieldsFromError,
-  validateAndCollect,
-  isObject,
-  string,
-  number,
   boolean,
+  collectFieldsFromError,
+  isObject,
   isoDate,
+  number,
+  string,
+  ValidationError,
+  validateAndCollect,
 };

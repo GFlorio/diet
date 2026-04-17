@@ -1,4 +1,4 @@
-// eslint-disable-next-line import/no-unresolved
+// biome-ignore lint/correctness/noUnresolvedImports: virtual Vite module
 import { registerSW } from 'virtual:pwa-register';
 import * as $ from './utils.js';
 

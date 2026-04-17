@@ -1,12 +1,12 @@
 import {
-    ValidationError,
-    collectFieldsFromError,
-    validateAndCollect,
-    isObject,
-    string,
-    number,
     boolean,
+    collectFieldsFromError,
+    isObject,
     isoDate,
+    number,
+    string,
+    ValidationError,
+    validateAndCollect,
 } from './validation-core.js';
 
 /** @param {unknown} v */
@@ -188,8 +188,7 @@ function mealCreate(v){
     /** @type {Set<string>} */
     const bad = new Set();
     /** @type {{ food: Food; multiplier: number; date: string }} */
-    // @ts-ignore - filled incrementally
-    const out = {};
+    const out = /** @type {any} */ ({});
     try { out.food = food(o.food); }
     catch (e) { collectFieldsFromError(e, bad, 'food'); }
 
@@ -250,12 +249,12 @@ function mealPatch(patch){
 }
 
 export {
-    macros,
-    foodSnapshot,
-    food,
     createFoodInput,
+    food,
+    foodPatch,
+    foodSnapshot,
+    macros,
     meal,
     mealCreate,
-    foodPatch,
     mealPatch,
 };

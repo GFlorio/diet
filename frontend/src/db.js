@@ -79,6 +79,7 @@ function requestPersistentStorage() {
   _persistRequested = true;
   navigator.storage.persisted().then((already) => {
     if (!already) { return navigator.storage.persist(); }
+    return true;
   }).catch((e) => console.warn('Persistent storage request failed', e));
 }
 
@@ -104,11 +105,11 @@ function strip(/** @type {any} */ doc) {
 /**
  * Gets a record by its string id.
  * @template {keyof StoreMap} S
- * @param {S} storeName
+ * @param {S} _storeName
  * @param {string} key  The full string id (e.g. 'food:123', 'meal:2024-01-15:...')
  * @returns {Promise<StoreMap[S]|undefined>}
  */
-export const get = async (storeName, key) => {
+export const get = async (_storeName, key) => {
   try {
     return strip(await db.get(String(key)));
   } catch (e) {
@@ -140,11 +141,11 @@ export const put = async (storeName, val) => {
 
 /**
  * Deletes a record by its string id.
- * @param {keyof StoreMap} storeName
+ * @param {keyof StoreMap} _storeName
  * @param {string} key
  * @returns {Promise<void>}
  */
-export const del = async (storeName, key) => {
+export const del = async (_storeName, key) => {
   const doc = await db.get(String(key));
   await db.remove(doc);
 };

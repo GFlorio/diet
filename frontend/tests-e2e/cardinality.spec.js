@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB, insertFoods, insertMeals } from './playwright-helpers.js';
+import { expect, test } from '@playwright/test';
+import { getAllFromStore, insertFoods, insertMeals, resetDB } from './playwright-helpers.js';
 
 test.describe('Cardinality smoke tests: large datasets', () => {
   test.beforeEach(async ({ page }) => {

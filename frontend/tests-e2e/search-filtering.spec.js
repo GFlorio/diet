@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { resetDB, loadPouchDB } from './playwright-helpers.js';
+import { expect, test } from '@playwright/test';
+import { loadPouchDB, resetDB } from './playwright-helpers.js';
 
 
 test.describe('Foods: combined search + status filter', () => {

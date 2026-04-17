@@ -40,9 +40,8 @@ export function assertEl(obj) {
  */
 export function showPage(page){
   const pages = ['meals', 'foods', 'goals'];
-  arr('.tab').forEach(t => html(t).classList.toggle('active', html(t).dataset.page === page));
-  pages.forEach(p =>
-    html(document.getElementById('page-' + p)).classList.toggle('hidden', p !== page));
+  arr('.tab').forEach(t => { html(t).classList.toggle('active', html(t).dataset.page === page); });
+  pages.forEach(p => { html(document.getElementById(`page-${p}`)).classList.toggle('hidden', p !== page); });
 }
 
 /** Format macro nutrients meta string
@@ -148,7 +147,7 @@ export const now = () => Date.now();
  * @param {string} [s='']
  * @returns {string}
  */
-export const esc = (s = '') => ('' + s).replace(/[&<>"']/g, c => ({
+export const esc = (s = '') => (`${s}`).replace(/[&<>"']/g, c => ({
 	'&': '&amp;',
 	'<': '&lt;',
 	'>': '&gt;',
@@ -168,7 +167,7 @@ export const esc = (s = '') => ('' + s).replace(/[&<>"']/g, c => ({
  */
 export function toast(msg, { type = '', duration = 3000, action } = {}) {
   const el = document.createElement('div');
-  el.className = 'toast' + (type ? ' ' + type : '');
+  el.className = `toast${type ? ` ${type}` : ''}`;
   el.setAttribute('role', 'status');
 
   const text = document.createElement('span');

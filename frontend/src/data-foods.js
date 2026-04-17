@@ -1,5 +1,5 @@
-import * as $ from './utils.js';
 import * as db from './db.js';
+import * as $ from './utils.js';
 
 /**
  * @typedef {import('./db.js').Food} Food
@@ -48,7 +48,7 @@ export const Foods = {
     if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
     if (search) {
       const q = search.trim().toLowerCase();
-      xs = xs.filter((f) => (f.name + ' ' + f.refLabel).toLowerCase().includes(q));
+      xs = xs.filter((f) => (`${f.name} ${f.refLabel}`).toLowerCase().includes(q));
     }
     return xs;
   },
@@ -94,7 +94,7 @@ export const Foods = {
    * @param {boolean} archived
    * @returns {Promise<Food|undefined>}
    */
-  async setArchived(id, archived) {
+  setArchived(id, archived) {
     return this.update(id, { archived: !!archived });
   },
   /**
@@ -102,7 +102,7 @@ export const Foods = {
    * @param {string} id
    * @returns {Promise<Food|undefined>}
    */
-  async byId(id) {
+  byId(id) {
     return db.get('foods', id);
   },
   /**

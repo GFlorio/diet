@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test.describe('Theme: selection, persistence, and fallback', () => {
   test.beforeEach(async ({ page }) => {

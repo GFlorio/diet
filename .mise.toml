@@ -7,19 +7,27 @@ uv = "latest"
 [env]
 GOFLAGS = "-trimpath"
 NODE_ENV = "development"
-_.path = ["{{config_root}}/frontend/node_modules/.bin"]
+_.path = ["{{config_root}}/node_modules/.bin", "{{config_root}}/frontend/node_modules/.bin"]
 
 # Tasks – run with `mise run <task>`
 [tasks]
 
 # ----- Bootstrap -----------------------------------------------------------
 [tasks.bootstrap]
-# Installs Node deps with npm and Go deps / code‑gen
+# Installs all kinds of dependencies
 run = [
   "npm ci",
-  # Ensure Playwright browsers and system dependencies are installed for E2E
-  "mise run e2e-install"
+  "mise run e2e-install",
+  "mise run hooks-install"
 ]
+
+[tasks.e2e-install]
+description = "Install Playwright browsers and system deps (may prompt for sudo on Linux)"
+run         = "cd frontend && npx playwright install --with-deps"
+
+[tasks.hooks-install]
+description = "Configure git to use the versioned hooks directory"
+run         = "git config core.hooksPath hooks"
 
 # ----- Full-stack dev ------------------------------------------------------
 [tasks.dev]
@@ -37,21 +45,21 @@ run = "npm --workspace frontend run build"
 
 # ----- Lint & Type‑check ---------------------------------------------------
 [tasks.lint]
-description = "Run ESLint on all source files"
-run         = "eslint --max-warnings=0 ."
+description = "Run Biome linter on all source files"
+run         = "biome lint frontend/"
 
 [tasks.lint-fix]
-description = "Run ESLint with auto-fix"
-run         = "eslint --fix --max-warnings=0 ."
+description = "Run Biome linter with auto-fix"
+run         = "biome lint --write frontend/"
 
 [tasks.typecheck]
 description = "Run TypeScript compiler (no emit)"
 run         = "tsc -p frontend/jsconfig.json --noEmit"
 
 [tasks.full-lint]
-description = "Run ESLint and Typescript lints"
+description = "Run Biome linter and TypeScript type check"
 run = [
-  "mise run lint",
+  "mise run lint-fix",
   "mise run typecheck"
 ]
 
@@ -61,10 +69,6 @@ description = "Remove build artifacts"
 run         = "rm -rf dist bin"
 
 # ----- E2E / Playwright ----------------------------------------------------
-[tasks.e2e-install]
-description = "Install Playwright browsers and system deps (may prompt for sudo on Linux)"
-run         = "cd frontend && npx playwright install --with-deps"
-
 [tasks.e2e]
 description = "Run Playwright E2E tests"
 run         = "npm --workspace frontend run e2e"

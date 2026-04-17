@@ -1,7 +1,7 @@
-import * as $ from '../utils.js';
-import * as V from '../validation.js';
 import { Foods, Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
+import * as $ from '../utils.js';
+import * as V from '../validation.js';
 
 /**
  * @typedef {import('../data.js').Food} Food
@@ -56,14 +56,14 @@ export function setupMeals(){
    * @returns {string}
    */
   function fmtHuman(iso){
-    const d = new Date(iso + 'T00:00:00');
+    const d = new Date(`${iso}T00:00:00`);
     return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
 
   function updateHeader(){
     dayLabel.dataset.iso  = curDate;
     dayLabel.textContent  = fmtHuman(curDate);
-    const d    = new Date(curDate + 'T00:00:00');
+    const d    = new Date(`${curDate}T00:00:00`);
     const prev = new Date(d); prev.setDate(d.getDate()-1);
     const next = new Date(d); next.setDate(d.getDate()+1);
     prevDayBox.textContent = fmtHuman($.toISO(prev));
@@ -77,16 +77,16 @@ export function setupMeals(){
   /** @param {'dateSlideLeft'|'dateSlideRight'} cls */
   function animateDateChange(cls){
     const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
-    animEls.forEach(el => el && el.classList.add(cls));
-    setTimeout(()=> animEls.forEach(el => el && el.classList.remove(cls)), SWIPE_ANIM_MS);
+    animEls.forEach(el => { el?.classList.add(cls); });
+    setTimeout(()=> animEls.forEach(el => { el?.classList.remove(cls); }), SWIPE_ANIM_MS);
   }
 
   function shiftDate(/** @type {number} */ delta){
-    const d = new Date(curDate + 'T00:00:00');
+    const d = new Date(`${curDate}T00:00:00`);
     d.setDate(d.getDate() + delta);
     curDate = $.toISO(d);
     updateHeader();
-    renderMeals();
+    void renderMeals();
     updateTodayBtn();
     animateDateChange(delta > 0 ? 'dateSlideLeft' : 'dateSlideRight');
   }
@@ -121,7 +121,7 @@ export function setupMeals(){
     const cls = curDate < today ? 'dateSlideLeft' : 'dateSlideRight';
     curDate = today;
     updateHeader();
-    renderMeals();
+    void renderMeals();
     updateTodayBtn();
     animateDateChange(cls);
   });
@@ -184,7 +184,7 @@ export function setupMeals(){
   async function renderQuickList(){
     const q        = quickSearch.value.trim();
     const todayISO = $.isoToday();
-    const sinceDate = new Date(todayISO + 'T00:00:00');
+    const sinceDate = new Date(`${todayISO}T00:00:00`);
     sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
     const sinceISO = $.toISO(sinceDate);
     const scores   = await Meals.frecencyScores(sinceISO, todayISO);
@@ -342,7 +342,7 @@ export function setupMeals(){
         await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
         qtyEl.value = '1';
         quickSearch.value = '';
-        renderMeals(true);
+        await renderMeals(true);
         quickSearch.focus();
       }, '✓ Added');
       return;
@@ -608,7 +608,7 @@ export function setupMeals(){
     const totals = computeTotals(currentMeals);
     renderDayInfo(totals);
     renderMealsList(currentMeals, animateFirst);
-    renderQuickList();
+    await renderQuickList();
   }
 
   mealsList.addEventListener('click', async (e) => {
@@ -621,12 +621,12 @@ export function setupMeals(){
     if (!meal) { return; }
     if (target.classList.contains('del')) {
       await Meals.remove(meal.id);
-      renderMeals();
+      await renderMeals();
       $.toast(`"${$.esc(meal.foodSnapshot.name)}" removed`, {
         duration: 5000,
         action: {
           label: 'Undo',
-          callback: async () => { await Meals.restore(meal); renderMeals(); },
+          callback: async () => { await Meals.restore(meal); await renderMeals(); },
         },
       });
       return;
@@ -642,7 +642,7 @@ export function setupMeals(){
     const name = /** @type {CustomEvent} */(e).detail?.name || '';
     $.showPage('meals');
     quickSearch.value = name;
-    renderQuickList();
+    void renderQuickList();
     quickSearch.focus();
   });
 
@@ -650,5 +650,5 @@ export function setupMeals(){
   // ensuring goals changes made on the goals page are reflected immediately.
   window.addEventListener('meals-activate', () => renderMeals());
 
-  renderMeals();
+  void renderMeals();
 }

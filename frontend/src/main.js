@@ -1,10 +1,10 @@
 // Entry point to wire everything together
 import { Foods } from './data.js';
 import { setupPWA } from './pwa.js';
-import { setupUI, populateViews } from './ui/ui.js';
+import { populateViews, setupUI } from './ui/ui.js';
 import { showPage } from './utils.js';
 
-(async function init(){
+void (async function init(){
   setupUI();
   setupPWA();
   populateViews();

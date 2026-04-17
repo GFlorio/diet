@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { getAllFromStore, resetDB, loadPouchDB } from './playwright-helpers.js';
+import { expect, test } from '@playwright/test';
+import { getAllFromStore, loadPouchDB, resetDB } from './playwright-helpers.js';
 
 test.describe('PWA and offline persistence', () => {
   test.beforeEach(async ({ page }) => {

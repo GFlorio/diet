@@ -29,7 +29,7 @@ export async function resetDB(page) {
  * @param {import('@playwright/test').Page} page
  * @param {'foods'|'meals'|'goals'} store
  */
-export async function getAllFromStore(page, store) {
+export function getAllFromStore(page, store) {
   return page.evaluate((s) => window.__testDB.getAll(s), store);
 }
 

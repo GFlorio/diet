@@ -1,4 +1,4 @@
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('../db.js', () => ({
   get: vi.fn(),
@@ -17,9 +17,9 @@ vi.mock('../data-meals.js', () => ({
   },
 }));
 
-import { get, save, remove, computeStatus, derivedGrams, computeWindowVM } from '../data-goals.js';
-import * as db from '../db.js';
+import { computeStatus, computeWindowVM, derivedGrams, get, remove, save } from '../data-goals.js';
 import { Meals } from '../data-meals.js';
+import * as db from '../db.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -155,7 +155,7 @@ describe('computeWindowVM', () => {
    */
   function makeMeal(/** @type {string} */ date, kcal = 2000, prot = 150, carbs = 225, fats = 56) {
     return {
-      id: 'meal:' + date + ':0000000000001', foodId: 'food:1', multiplier: 1, date, updatedAt: 0,
+      id: `meal:${date}:0000000000001`, foodId: 'food:1', multiplier: 1, date, updatedAt: 0,
       foodSnapshot: { id: 'food:1', name: 'X', refLabel: '100g', kcal, prot, carbs, fats, updatedAt: 0 },
     };
   }

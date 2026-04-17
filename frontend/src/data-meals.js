@@ -1,5 +1,5 @@
-import * as $ from './utils.js';
 import * as db from './db.js';
+import * as $ from './utils.js';
 
 /**
  * @typedef {import('./db.js').Food} Food

@@ -25,6 +25,12 @@ html,body{ height:100% }
 body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:var(--bg); color:var(--fg) }
 .app{ max-width:960px; margin:0 auto; padding: 8px 12px 64px }
 
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; min-height:45px; min-width:45px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:12px; cursor:pointer; box-shadow:var(--shadow); user-select:none }
+.btn:active{ transform:translateY(1px) }
+.btn.primary{ background:var(--brand); border-color:var(--brand); color:white }
+.btn.ghost{ background:transparent; box-shadow:none }
+.btn.small{ padding:6px 8px; border-radius:10px; font-size:12px; min-height:45px; min-width:45px }
+
 /* Config modal */
 #configModal{ border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg); color:var(--fg); padding:0; max-width:min(380px,calc(100vw - 32px)); width:100%; box-shadow:var(--shadow) }
 #configModal::backdrop{ background:rgba(0,0,0,.45) }
@@ -43,12 +49,6 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, 
 .status-dot.ok{ background:var(--ok) }
 .status-dot.bad{ background:var(--bad) }
 .config-status-note{ font-size:12px; color:var(--muted); margin-left:auto }
-
-.btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; min-height:45px; min-width:45px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:12px; cursor:pointer; box-shadow:var(--shadow); user-select:none }
-.btn:active{ transform:translateY(1px) }
-.btn.primary{ background:var(--brand); border-color:var(--brand); color:white }
-.btn.ghost{ background:transparent; box-shadow:none }
-.btn.small{ padding:6px 8px; border-radius:10px; font-size:12px; min-height:45px; min-width:45px }
 
 nav.tabs{ display:flex; gap:8px; padding:8px; border-bottom:1px dashed var(--border) }
 nav.tabs .tab{ flex:1; text-align:center; padding:10px; min-height:45px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:12px; background:var(--card); cursor:pointer; user-select:none }
@@ -80,7 +80,7 @@ label{ font-size:12px; color:var(--muted) }
 
 .actions{ display:flex; gap:6px; align-items:center }
 
-.hidden{ display:none !important }
+.hidden{ display:none }
 
 /* Meals page enhancements */
 /* Subheader with date navigation */
@@ -112,9 +112,7 @@ label{ font-size:12px; color:var(--muted) }
 .totalBlock + .totalBlock{ border-left:1px solid var(--border) }
 .totalBlock .label{ display:block; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; white-space:nowrap }
 .totalBlock .value{ display:flex; align-items:baseline; justify-content:center; gap:2px; font-size:15px; font-weight:600; color:var(--fg); margin-top:1px }
-.totalBlock .value .unit{ font-size:10px; font-weight:400 }
 .totalBlock:first-child .value{ font-size:20px; font-weight:700; color:var(--fg) }
-.totalBlock:first-child .value .unit{ font-size:11px; color:var(--muted) }
 
 /* Day summary — two-variant responsive summary component */
 .day-summary{
@@ -170,6 +168,8 @@ label{ font-size:12px; color:var(--muted) }
 .macro-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600 }
 .macro-value{ font-size:18px; font-weight:700; line-height:1.1 }
 .macro-value .unit{ font-size:11px; color:var(--muted); font-weight:500; margin-left:2px }
+.totalBlock .value .unit{ font-size:10px; font-weight:400 }
+.totalBlock:first-child .value .unit{ font-size:11px; color:var(--muted) }
 .macro-subtext{ font-size:11px; color:var(--muted) }
 .macro-bar{ height:6px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden }
 .macro-bar-fill{ width:0%; height:100%; border-radius:999px; background:var(--brand) }

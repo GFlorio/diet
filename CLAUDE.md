@@ -10,10 +10,10 @@ Prefer `mise` tasks over raw npm scripts:
 ```bash
 mise run dev           # Start Vite dev server
 mise run build         # Build for production
-mise run lint          # ESLint (max-warnings=0)
-mise run lint-fix      # ESLint with --fix
+mise run lint          # Biome linter
+mise run lint-fix      # Biome linter with auto-fix
 mise run typecheck     # TypeScript type check via JSDoc (no emit)
-mise run full-lint     # ESLint + Typescript (prefer this)
+mise run full-lint     # Biome + TypeScript (prefer this)
 mise run test-unit     # Vitest unit tests (one-shot)
 mise run test-unit-watch  # Vitest in watch mode
 mise run test-unit-file src/tests/foo.test.js  # single unit test file

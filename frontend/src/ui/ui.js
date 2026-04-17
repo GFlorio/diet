@@ -1,8 +1,8 @@
+import { canInstallPWA, isPWAInstalled, promptInstall } from '../pwa.js';
 import * as $ from '../utils.js'
-import { isPWAInstalled, canInstallPWA, promptInstall } from '../pwa.js';
-import { setupMeals } from './meal.js';
 import { setupFoods } from './foods.js';
 import { setupGoals } from './goals.js';
+import { setupMeals } from './meal.js';
 
 /** @returns {'auto'|'light'|'dark'} */
 function getStoredTheme() {
@@ -43,7 +43,7 @@ export function setupConfigModal(){
 	installBtn.addEventListener('click', async () => {
 		const accepted = await promptInstall();
 		if (accepted) {
-			refreshStatus();
+			await refreshStatus();
 		}
 	});
 
@@ -51,7 +51,7 @@ export function setupConfigModal(){
 		// PWA installed status
 		const pwaDot = /** @type {HTMLElement} */ ($.id('statusPWA').querySelector('.status-dot'));
 		const installed = isPWAInstalled();
-		pwaDot.className = 'status-dot ' + (installed ? 'ok' : 'bad');
+		pwaDot.className = `status-dot ${installed ? 'ok' : 'bad'}`;
 		const canInstall = canInstallPWA();
 		installBtn.classList.toggle('hidden', installed || !canInstall);
 		installNote.classList.toggle('hidden', installed || canInstall);
@@ -59,17 +59,17 @@ export function setupConfigModal(){
 		// Persistent storage status
 		const storageDot = /** @type {HTMLElement} */ ($.id('statusStorage').querySelector('.status-dot'));
 		const persisted = await navigator.storage?.persisted?.() ?? false;
-		storageDot.className = 'status-dot ' + (persisted ? 'ok' : 'bad');
+		storageDot.className = `status-dot ${persisted ? 'ok' : 'bad'}`;
 
 		// Service worker / offline status
 		const swDot = /** @type {HTMLElement} */ ($.id('statusSW').querySelector('.status-dot'));
 		const swRegs = await navigator.serviceWorker?.getRegistrations();
 		const swActive = swRegs?.some(r => r.active) ?? false;
-		swDot.className = 'status-dot ' + (swActive ? 'ok' : 'bad');
+		swDot.className = `status-dot ${swActive ? 'ok' : 'bad'}`;
 	}
 
 	configBtn.addEventListener('click', () => {
-		refreshStatus();
+		void refreshStatus();
 		dialog.showModal();
 	});
 
@@ -82,12 +82,12 @@ export function setupConfigModal(){
 }
 
 export function setupNav(){
-	$.arr('.tab').forEach(tab => $.html(tab).addEventListener('click', () => {
+	$.arr('.tab').forEach(tab => { $.html(tab).addEventListener('click', () => {
 		const page = /** @type {'meals'|'foods'|'goals'} */ ($.html(tab).dataset.page);
 		$.showPage(page);
 		if (page === 'meals')  { window.dispatchEvent(new Event('meals-activate')); }
 		if (page === 'goals') { window.dispatchEvent(new Event('goals-activate')); }
-	}));
+	}); });
 }
 
 export function setupUI(){
@@ -101,4 +101,4 @@ export function populateViews(){
 	setupGoals();
 }
 
-export { setupMeals, setupFoods, setupGoals };
+export { setupFoods, setupGoals, setupMeals };

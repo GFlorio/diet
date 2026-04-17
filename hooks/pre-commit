@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -e
+
+echo "▶ pre-commit: running full-lint..."
+mise run full-lint
+
+echo "▶ pre-commit: running tests..."
+mise run test

@@ -1,6 +1,6 @@
-import * as $ from '../utils.js';
 import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
+import * as $ from '../utils.js';
 
 /**
  * @typedef {import('../data-goals.js').Goals} GoalsType
@@ -17,7 +17,7 @@ export function setupGoals() {
   async function refreshGoals() {
     const goals = await Goals.get();
     renderGoalsCard(goals);
-    renderHeatmap();
+    await renderHeatmap();
   }
 
   /** @param {GoalsType | null} goals */
@@ -227,7 +227,7 @@ export function setupGoals() {
     // Mode toggle
     modeToggle.querySelectorAll('.goals-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        modeToggle.querySelectorAll('.goals-mode-btn').forEach(b => b.classList.remove('active'));
+        modeToggle.querySelectorAll('.goals-mode-btn').forEach(b => { b.classList.remove('active'); });
         btn.classList.add('active');
         updateForm();
       });
@@ -316,7 +316,7 @@ export function setupGoals() {
         carbsPct,
         fatPct,
       });
-      refreshGoals();
+      await refreshGoals();
     });
 
     cancelBtn.addEventListener('click', () => refreshGoals());
@@ -325,7 +325,7 @@ export function setupGoals() {
     if (removeBtnEl) {
       $.button(removeBtnEl).addEventListener('click', async () => {
         await Goals.remove();
-        refreshGoals();
+        await refreshGoals();
       });
     }
 
@@ -352,7 +352,7 @@ export function setupGoals() {
   function showTooltip(dayEl) {
     if (!tooltipEl) { return; }
     const { iso, status, kcal, goal } = dayEl.dataset;
-    const date    = new Date((iso ?? '') + 'T00:00:00');
+    const date    = new Date(`${iso ?? ''}T00:00:00`);
     const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
     const STATUS_LABELS = /** @type {Record<string,string>} */ ({ ok: 'On target', warn: 'Close', bad: 'Off target' });
 
@@ -403,7 +403,7 @@ export function setupGoals() {
     const NUM_WEEKS = 16;
 
     // Find the Monday of the week that started NUM_WEEKS-1 weeks ago
-    const todayDate       = new Date(today + 'T00:00:00');
+    const todayDate       = new Date(`${today}T00:00:00`);
     const dayOfWeek       = todayDate.getDay(); // 0=Sun…6=Sat
     const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const startDate       = new Date(todayDate);
@@ -444,7 +444,7 @@ export function setupGoals() {
     // Month header row: one cell per week column, label shown when month changes
     let lastMonth = '';
     const monthCells = weeks.map(week => {
-      const monthName  = new Date(week[0].iso + 'T00:00:00').toLocaleString('en', { month: 'short' });
+      const monthName  = new Date(`${week[0].iso}T00:00:00`).toLocaleString('en', { month: 'short' });
       const monthLabel = monthName !== lastMonth ? monthName : '';
       lastMonth = monthName;
       return `<div class="cal-month-cell">${$.esc(monthLabel)}</div>`;
@@ -516,10 +516,10 @@ export function setupGoals() {
   }
 
   window.addEventListener('goals-activate', () => {
-    refreshGoals();
-    renderHeatmap();
+    void refreshGoals();
+    void renderHeatmap();
   });
 
-  refreshGoals();
-  renderHeatmap();
+  void refreshGoals();
+  void renderHeatmap();
 }
