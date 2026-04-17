@@ -7,16 +7,15 @@
 # ///
 
 from __future__ import annotations
+import math
 from pathlib import Path
 from typing import Tuple
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 
-BRAND_PRIMARY = "#0ea5e9"  # theme_color
-BRAND_DARK = "#0b1220"     # background_color / dark accent
-PLATE_WHITE = "#ffffff"
-PLATE_RIM = "#eef3f7"
+BRAND_PRIMARY = "#7c3aed"  # --brand from styles.css
+BRAND_DARK = "#0b1220"     # --bg from styles.css
 
 
 def ensure_dir(p: Path) -> None:
@@ -28,69 +27,41 @@ def draw_rounded_rect(draw: ImageDraw.ImageDraw, xy: Tuple[int, int, int, int], 
 
 
 def make_base_icon(size: int = 1024) -> Image.Image:
-    """Create a simple, crisp icon: rounded brand background + plate + lightning bolt."""
+    """Ring icon: dark rounded-square background with a thick brand arc and a notch at top-right."""
     scale = size / 1024.0
     im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(im)
 
-    # Background rounded square
+    # Dark background (rounded square)
     pad = int(64 * scale)
     radius = int(200 * scale)
-    draw_rounded_rect(draw, (pad, pad, size - pad, size - pad), radius, BRAND_PRIMARY)
+    draw_rounded_rect(draw, (pad, pad, size - pad, size - pad), radius, BRAND_DARK)
 
-    # Plate shadow (blurred ellipse)
-    plate_r = int(size * 0.33)
     cx, cy = size // 2, size // 2
-    shadow_offset_y = int(size * 0.02)
-    shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    sdraw = ImageDraw.Draw(shadow)
-    sdraw.ellipse(
-        (cx - plate_r, cy - plate_r + shadow_offset_y, cx + plate_r, cy + plate_r + shadow_offset_y),
-        fill=(0, 0, 0, 80),
-    )
-    shadow = shadow.filter(ImageFilter.GaussianBlur(int(size * 0.03)))
-    im.alpha_composite(shadow)
+    ring_r = int(size * 0.36)         # radius to ring centre-line
+    ring_thickness = int(size * 0.13) # stroke width
 
-    # Plate (outer + rim)
-    draw.ellipse((cx - plate_r, cy - plate_r, cx + plate_r, cy + plate_r), fill=PLATE_WHITE)
-    rim_r = int(plate_r * 0.82)
-    draw.ellipse((cx - rim_r, cy - rim_r, cx + rim_r, cy + rim_r), fill=PLATE_RIM)
-    inner_r = int(plate_r * 0.66)
-    draw.ellipse((cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r), fill=PLATE_WHITE)
+    bbox = (cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r)
 
-    # Lightning bolt (calories) centered on plate
-    bolt_h = int(plate_r * 1.35)
-    bolt_w = int(plate_r * 0.85)
-    # Normalized bolt polygon around (0,0). Tweaked for good readability at small sizes.
-    pts_norm = [
-        (0.05, -1.00),
-        (-0.35, -0.10),
-        (-0.05, -0.10),
-        (-0.25, 1.00),
-        (0.35, 0.12),
-        (0.10, 0.12),
-    ]
+    # 30° gap centred at 315° (top-right). PIL angles are clockwise from 3 o'clock.
+    gap_center = 315
+    gap_half = 15
+    arc_start = gap_center + gap_half  # 330°
+    arc_end = gap_center - gap_half    # 300°
 
-    def to_abs(p: Tuple[float, float]) -> Tuple[int, int]:
-        x, y = p
-        ax = int(cx + x * (bolt_w / 2))
-        ay = int(cy + y * (bolt_h / 2))
-        return (ax, ay)
+    # Arc covers 330° of the circle (clockwise from arc_start to arc_end)
+    draw.arc(bbox, start=arc_start, end=arc_end, fill=BRAND_PRIMARY, width=ring_thickness)
 
-    pts = list(map(to_abs, pts_norm))
-    draw.polygon(pts, fill=BRAND_DARK)
-
-    # Small highlight on plate (subtle)
-    hl = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    hld = ImageDraw.Draw(hl)
-    hl_r = int(plate_r * 0.95)
-    hld.pieslice(
-        (cx - hl_r, cy - hl_r, cx + hl_r, cy + hl_r),
-        start=220,
-        end=320,
-        fill=(255, 255, 255, 36),
-    )
-    im.alpha_composite(hl)
+    # Round end-caps at both arc termini for a clean finish
+    cap_r = ring_thickness // 2
+    for angle_deg in (arc_start, arc_end):
+        angle_rad = math.radians(angle_deg)
+        cap_x = cx + ring_r * math.cos(angle_rad)
+        cap_y = cy + ring_r * math.sin(angle_rad)
+        draw.ellipse(
+            (cap_x - cap_r, cap_y - cap_r, cap_x + cap_r, cap_y + cap_r),
+            fill=BRAND_PRIMARY,
+        )
 
     return im
 
@@ -99,7 +70,7 @@ def save_png(im: Image.Image, path: Path, size: int, opaque: bool = False) -> No
     img = im if im.size == (size, size) else im.resize((size, size), Image.Resampling.LANCZOS)
     if opaque:
         # Flatten onto solid background for Apple touch icon (no transparency preferred)
-        bg = Image.new("RGB", img.size, BRAND_PRIMARY)
+        bg = Image.new("RGB", img.size, BRAND_DARK)
         bg.paste(img, mask=img.split()[-1])
         bg.save(path, format="PNG")
     else:
@@ -108,7 +79,7 @@ def save_png(im: Image.Image, path: Path, size: int, opaque: bool = False) -> No
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    out_dir = repo_root / "frontend" / "icons"
+    out_dir = repo_root / "frontend" / "public" / "icons"
     ensure_dir(out_dir)
 
     base = make_base_icon(1024)
