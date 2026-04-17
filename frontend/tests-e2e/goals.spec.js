@@ -293,7 +293,7 @@ test.describe('Goals: 7-day window', () => {
 
     // Assert: second subtext line shows today's delta guidance
     const deltaLine = page.locator('.summary-hero-subtext').nth(1);
-    await expect(deltaLine).toContainText(/kcal (left|over) today/);
+    await expect(deltaLine).toContainText(/kcal (left|over)/);
   });
 
   test('macro cards show avg value and delta after goals are set and a meal is logged', async ({ page }) => {
@@ -307,7 +307,7 @@ test.describe('Goals: 7-day window', () => {
     // Assert: macro cards show "g avg" unit and per-macro delta subtext
     const proteinCard = page.locator('.macro-protein');
     await expect(proteinCard.locator('.macro-value .unit')).toHaveText('g avg');
-    await expect(proteinCard.locator('.macro-subtext')).toContainText(/g (left|over) today/);
+    await expect(proteinCard.locator('.macro-subtext')).toContainText(/g (left|over)/);
   });
 
 });

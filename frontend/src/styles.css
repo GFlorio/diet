@@ -25,11 +25,24 @@ html,body{ height:100% }
 body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; background:var(--bg); color:var(--fg) }
 .app{ max-width:960px; margin:0 auto; padding: 8px 12px 64px }
 
-header{ border-bottom:1px solid var(--border); }
-.bar{ display:flex; align-items:center; gap:8px; padding:10px 8px; }
-.title{ font-size:18px; font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px }
-.title svg{ width:22px; height:22px }
-.grow{ flex:1 }
+/* Config modal */
+#configModal{ border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--bg); color:var(--fg); padding:0; max-width:min(380px,calc(100vw - 32px)); width:100%; box-shadow:var(--shadow) }
+#configModal::backdrop{ background:rgba(0,0,0,.45) }
+.config-inner{ padding:16px; display:grid; gap:20px }
+.config-header{ display:flex; align-items:center }
+.config-title{ font-size:16px; font-weight:700; flex:1 }
+.config-close{ font-size:16px; padding:6px 10px; min-height:36px; min-width:36px }
+.config-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600; margin-bottom:8px }
+.config-theme-row{ display:flex; gap:6px }
+.config-theme-row .btn{ flex:1 }
+.config-theme-row .btn.active{ outline:2px solid var(--brand) }
+.config-status-list{ display:grid }
+.config-status-row{ display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; color:var(--muted) }
+.config-status-row:last-child{ border-bottom:none }
+.status-dot{ width:10px; height:10px; border-radius:50%; background:var(--muted); flex-shrink:0 }
+.status-dot.ok{ background:var(--ok) }
+.status-dot.bad{ background:var(--bad) }
+.config-status-note{ font-size:12px; color:var(--muted); margin-left:auto }
 
 .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; min-height:45px; min-width:45px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:12px; cursor:pointer; box-shadow:var(--shadow); user-select:none }
 .btn:active{ transform:translateY(1px) }

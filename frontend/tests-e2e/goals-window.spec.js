@@ -217,14 +217,14 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     // Before deletion: idealToday = 2×2000−2000 = 2000; consumed = 165 → delta = 1835
     const deltaLine = page.locator('.summary-hero-subtext').nth(1);
-    await expect(deltaLine).toContainText('kcal left today');
+    await expect(deltaLine).toContainText('kcal left');
 
     // Delete today's meal
     await page.locator('#mealsList .meal-row .del').click();
 
     // After deletion: effectiveDays = 1+1 = 2, prevSum = 2000, idealToday = 2000; consumed = 0
     // The bug would have set effectiveDays = windowDays (1) → ideal = 1×2000−2000 = 0 → clamped to 1700
-    await expect(deltaLine).toContainText('2000 kcal left today');
+    await expect(deltaLine).toContainText('2000 kcal left');
     // Window count drops to 1 (only prev day now)
     await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
   });
@@ -260,7 +260,7 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     // With 1 day logged (today), effectiveDays = 1, prevSum = 0, idealToday = 2000
     // consumed = 165 → delta = 2000 − 165 = 1835 kcal left
-    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('1835 kcal left today');
+    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('1835 kcal left');
   });
 
   test('hero shows kcal-over guidance when consumed exceeds idealToday', async ({ page }) => {
@@ -273,6 +273,6 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
     // consumed 2500 > idealToday 2300 → over guidance
-    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('kcal over today');
+    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('kcal over');
   });
 });

@@ -9,47 +9,58 @@ import * as $ from './utils.js';
  * }} BeforeInstallPromptEvent
  */
 
+/** @type {BeforeInstallPromptEvent|null} */
+let _deferredPrompt = null;
+
+/** @returns {boolean} */
+export function isPWAInstalled() {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+        /** @type {any} */ (window.navigator).standalone === true;
+}
+
+/** @returns {boolean} */
+export function canInstallPWA() {
+    return _deferredPrompt !== null;
+}
+
+/** @returns {Promise<boolean>} */
+export async function promptInstall() {
+    if (!_deferredPrompt) { return false; }
+    _deferredPrompt.prompt();
+    const { outcome } = await _deferredPrompt.userChoice;
+    _deferredPrompt = null;
+    return outcome === 'accepted';
+}
+
 export function setupPWA(){
-    /** @type {BeforeInstallPromptEvent|null} */
-    let deferredPrompt;
-    const installBtn = $.sel('#installBtn');
     window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = /** @type {BeforeInstallPromptEvent} */ (e);
-      installBtn.classList.remove('hidden');
-    });
-    installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) {return;}
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome) {installBtn.classList.add('hidden');}
-        deferredPrompt = null;
+        e.preventDefault();
+        _deferredPrompt = /** @type {BeforeInstallPromptEvent} */ (e);
     });
 
-        // Register SW; with registerType 'prompt' we decide when to reload.
-        const updateSW = registerSW({
-            immediate: true,
-            onNeedRefresh() {
-                $.toast('A new version is available.', {
-                    duration: 10000,
-                    action: {
-                        label: 'Reload',
-                        callback: () => navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' }),
-                    },
-                });
-            },
-            onOfflineReady() {
-                console.log('App ready to work offline.');
-            },
-            onRegisteredSW(swScriptUrl, registration) {
-                console.log('SW registered', swScriptUrl, registration?.scope);
-            }
-        });
+    const updateSW = registerSW({
+        immediate: true,
+        onNeedRefresh() {
+            $.toast('A new version is available.', {
+                duration: 10000,
+                action: {
+                    label: 'Reload',
+                    callback: () => navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' }),
+                },
+            });
+        },
+        onOfflineReady() {
+            console.log('App ready to work offline.');
+        },
+        onRegisteredSW(swScriptUrl, registration) {
+            console.log('SW registered', swScriptUrl, registration?.scope);
+        }
+    });
 
-        // Visibility regain: when user returns to tab, perform a check for freshness.
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                updateSW().catch((e) => console.warn('SW update check failed', e));
-            }
-        });
+    // Visibility regain: when user returns to tab, perform a check for freshness.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            updateSW().catch((e) => console.warn('SW update check failed', e));
+        }
+    });
 }
