@@ -5,6 +5,17 @@
 export async function loadPouchDB(_page) {}
 
 /**
+ * Returns today's date as YYYY-MM-DD in the *local* timezone.
+ * Use this instead of new Date().toISOString().slice(0,10), which returns UTC
+ * and can be one day ahead/behind in UTC± timezones.
+ * @returns {string}
+ */
+export function localIsoToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
  * Destroy and recreate the diet DB. Must be called after page.goto() so the
  * app bundle has run and window.__testDB is available.
  * @param {import('@playwright/test').Page} page

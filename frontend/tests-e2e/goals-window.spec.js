@@ -16,7 +16,7 @@ const CHICKEN = { name: 'Chicken', refLabel: '100 g', kcal: 165, prot: 31, carbs
 function isoOffset(n) {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** @param {import('@playwright/test').Page} page */

@@ -138,6 +138,8 @@ test.describe('Food form validation UI', () => {
 
 		// Act
 		await page.locator('#saveFoodBtn').click();
+		// Wait for the async save to complete — form resets to empty on success
+		await expect(page.locator('#foodName')).toHaveValue('');
 
 		// Assert: food saved — boundary value is valid
 		const foods = await getAllFromStore(page, 'foods');

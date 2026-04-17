@@ -39,7 +39,10 @@ test.describe('Cardinality smoke tests: large datasets', () => {
 
   test('renders 50 meals for one day and shows correct aggregate totals', async ({ page }) => {
     // Arrange: seed 50 meals (multiplier=1, kcal=100 each) for today's date
-    const isoToday = await page.evaluate(() => new Date().toISOString().slice(0, 10));
+    const isoToday = await page.evaluate(() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    });
     const perMeal = { kcal: 100, prot: 10, carbs: 20, fats: 5 };
     await insertMeals(page, Array.from({ length: 50 }, () => ({ date: isoToday, ...perMeal })));
 

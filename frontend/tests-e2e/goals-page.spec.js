@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { resetDB, loadPouchDB } from './playwright-helpers.js';
+import { resetDB, loadPouchDB, localIsoToday } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -74,7 +74,7 @@ test.describe('Goals page: heatmap', () => {
   test("today's cell is empty when no meals logged", async ({ page }) => {
     // Arrange
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-    const isoToday = new Date().toISOString().slice(0, 10);
+    const isoToday = localIsoToday();
 
     // Act
     await page.locator('.tab', { hasText: 'Goals' }).click();
@@ -87,7 +87,7 @@ test.describe('Goals page: heatmap', () => {
     // Arrange: set goals well above what rice provides so status is 'bad'
     await createFood(page, RICE);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-    const isoToday = new Date().toISOString().slice(0, 10);
+    const isoToday = localIsoToday();
 
     // Act: log a meal and navigate to goals
     await page.locator('.tab', { hasText: 'Meals' }).click();
@@ -105,7 +105,7 @@ test.describe('Goals page: heatmap', () => {
     // Arrange
     await createFood(page, RICE);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
-    const isoToday = new Date().toISOString().slice(0, 10);
+    const isoToday = localIsoToday();
 
     // Act: log a meal, navigate to goals, hover today's cell (desktop shows tooltip on hover)
     await page.locator('.tab', { hasText: 'Meals' }).click();
