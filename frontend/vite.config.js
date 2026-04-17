@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// When GITHUB_PAGES=true the app is served from a subpath (e.g. /diet/).
+const base = process.env.GITHUB_PAGES ? '/diet/' : '/';
+
 export default defineConfig({
+  base,
   plugins: [
     VitePWA({
       registerType: 'prompt', // user-triggered update flow
@@ -11,14 +15,13 @@ export default defineConfig({
       manifest: {
         name: 'Diet',
         short_name: 'Diet',
-        // Use absolute root so install shortcuts open correctly regardless of path depth.
-        start_url: '/',
-        scope: '/',
-        id: 'lame-diet',
+        start_url: base,
+        scope: base,
+        id: 'diet',
         display: 'standalone',
         background_color: '#0b1220',
         theme_color: '#0ea5e9',
-        description: 'Offline-first meal logger PWA',
+        description: 'Offline-first meal logger',
         icons: [
           { src: '/icons/app-icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/app-icon-512.png', sizes: '512x512', type: 'image/png' },
