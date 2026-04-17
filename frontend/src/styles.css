@@ -312,6 +312,10 @@ label{ font-size:12px; color:var(--muted) }
 .cal-tt-warn { color: var(--warn); }
 .cal-tt-bad  { color: var(--bad); }
 
+/* Foods page — keep form at natural height; let list scroll */
+#page-foods .card.cols-2{ align-items: start }
+#foodsList{ overflow-y: auto; max-height: 60vh }
+
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
