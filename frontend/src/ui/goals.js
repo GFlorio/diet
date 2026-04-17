@@ -3,7 +3,7 @@ import * as Goals from '../data-goals.js';
 import * as $ from '../utils.js';
 
 /**
- * @typedef {import('../data-goals.js').Goals} GoalsType
+ * @typedef {import('../data-goals.js').GoalRecord} GoalRecord
  */
 
 export function setupGoals() {
@@ -15,13 +15,16 @@ export function setupGoals() {
   // -------------------------------------------------------------------------
 
   async function refreshGoals() {
-    const goals = await Goals.get();
-    renderGoalsCard(goals);
+    const [goals, allRecords] = await Promise.all([Goals.getActive(), Goals.list()]);
+    renderGoalsCard(goals, allRecords);
     await renderHeatmap();
   }
 
-  /** @param {GoalsType | null} goals */
-  function renderGoalsCard(goals) {
+  /**
+   * @param {GoalRecord | null} goals
+   * @param {GoalRecord[]} allRecords
+   */
+  function renderGoalsCard(goals, allRecords) {
     if (!goals) {
       goalsCard.innerHTML = `
         <div class="goals-view-header">
@@ -31,10 +34,17 @@ export function setupGoals() {
         <button class="btn small" id="goalsEditBtn" data-testid="goalsEditBtn">Set daily targets</button>`;
     } else {
       const g = Goals.derivedGrams(goals);
+      const historyBtn = allRecords.length > 0
+        ? `<button class="btn small ghost" id="goalHistoryBtn" data-testid="goalHistoryBtn"
+             aria-label="Goal history" title="Goal history" style="min-width:36px;min-height:36px;padding:4px 8px;font-size:16px">&#x23F1;</button>`
+        : '';
       goalsCard.innerHTML = `
         <div class="goals-view-header">
           <span class="goals-view-title">Daily goals</span>
-          <button class="btn small ghost right" id="goalsEditBtn" data-testid="goalsEditBtn">Edit</button>
+          <div style="display:flex;gap:6px;margin-left:auto">
+            ${historyBtn}
+            <button class="btn small ghost" id="goalsEditBtn" data-testid="goalsEditBtn">Edit</button>
+          </div>
         </div>
         <div class="goals-view-hero">
           <div class="goals-view-hero-label">Daily calorie target</div>
@@ -62,9 +72,10 @@ export function setupGoals() {
         </div>`;
     }
     goalsCard.querySelector('#goalsEditBtn')?.addEventListener('click', () => renderGoalsEditForm(goals));
+    goalsCard.querySelector('#goalHistoryBtn')?.addEventListener('click', () => openHistoryPanel());
   }
 
-  /** @param {GoalsType | null} existingGoals */
+  /** @param {GoalRecord | null} existingGoals */
   function renderGoalsEditForm(existingGoals) {
     const snap5 = (/** @type {number} */ n) => Math.round(n / 5) * 5;
     const maintenance = existingGoals?.maintenanceKcal ?? existingGoals?.kcal ?? '';
@@ -351,7 +362,7 @@ export function setupGoals() {
   /** @param {HTMLElement} dayEl */
   function showTooltip(dayEl) {
     if (!tooltipEl) { return; }
-    const { iso, status, kcal, goal } = dayEl.dataset;
+    const { iso, status, kcal, goal, goalSince } = dayEl.dataset;
     const date    = new Date(`${iso ?? ''}T00:00:00`);
     const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
     const STATUS_LABELS = /** @type {Record<string,string>} */ ({ ok: 'On target', warn: 'Close', bad: 'Off target' });
@@ -367,6 +378,11 @@ export function setupGoals() {
       }
       if (STATUS_LABELS[status ?? '']) {
         body += `<div class="cal-tt-status cal-tt-${status}">${STATUS_LABELS[status ?? '']}</div>`;
+      }
+      if (goalSince) {
+        const sinceDate = new Date(`${goalSince}T00:00:00`);
+        const sinceStr  = sinceDate.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
+        body += `<div class="cal-tt-muted">Goal since ${$.esc(sinceStr)}</div>`;
       }
     } else {
       body = '<div class="cal-tt-muted">No data</div>';
@@ -398,8 +414,9 @@ export function setupGoals() {
   });
 
   async function renderHeatmap() {
-    const goals     = await Goals.get();
+    const allGoalRecords = await Goals.list();
     const today     = $.isoToday();
+    const todayGoal = Goals.goalForDate(allGoalRecords, today);
     const NUM_WEEKS = 16;
 
     // Find the Monday of the week that started NUM_WEEKS-1 weeks ago
@@ -418,7 +435,7 @@ export function setupGoals() {
       kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + m.foodSnapshot.kcal * m.multiplier;
     }
 
-    /** @type {Array<Array<{iso:string, status:string, kcal:number|null}>>} */
+    /** @type {Array<Array<{iso:string, status:string, kcal:number|null, cellGoal: import('../data-goals.js').GoalRecord|null}>>} */
     const weeks = [];
     for (let w = 0; w < NUM_WEEKS; w++) {
       const week = [];
@@ -428,13 +445,14 @@ export function setupGoals() {
         const iso      = $.toISO(date);
         const isFuture = iso > today;
         const kcal     = kcalByDay[iso] ?? null;
+        const cellGoal = Goals.goalForDate(allGoalRecords, iso);
         let status     = 'empty';
         if (isFuture) {
           status = 'future';
         } else if (kcal !== null) {
-          status = goals ? Goals.computeStatus(kcal, goals.kcal) : 'logged';
+          status = Goals.computeStatus(kcal, cellGoal?.kcal ?? null);
         }
-        week.push({ iso, status, kcal });
+        week.push({ iso, status, kcal, cellGoal });
       }
       weeks.push(week);
     }
@@ -454,10 +472,14 @@ export function setupGoals() {
     // One row per day of week; one square per week column
     const dayRowsHtml = DAY_LABELS.map((label, d) => {
       const squares = weeks.map(week => {
-        const { iso, status, kcal } = week[d];
-        const dataKcal = kcal !== null ? ` data-kcal="${Math.round(kcal)}"` : '';
-        const dataGoal = goals ? ` data-goal="${goals.kcal}"` : '';
-        return `<div class="cal-day cal-day-${status}" data-iso="${$.esc(iso)}" data-status="${status}"${dataKcal}${dataGoal}></div>`;
+        const { iso, status, kcal, cellGoal } = week[d];
+        const dataKcal    = kcal !== null ? ` data-kcal="${Math.round(kcal)}"` : '';
+        const dataGoal    = cellGoal ? ` data-goal="${cellGoal.kcal}"` : '';
+        // Show "Goal since" hint only when this cell's goal differs from today's active goal
+        const dataGoalSince = (cellGoal && cellGoal.id !== todayGoal?.id)
+          ? ` data-goal-since="${$.esc(cellGoal.effectiveFrom)}"`
+          : '';
+        return `<div class="cal-day cal-day-${status}" data-iso="${$.esc(iso)}" data-status="${status}"${dataKcal}${dataGoal}${dataGoalSince}></div>`;
       }).join('');
       return `<div class="cal-day-row"><div class="cal-dlabel">${label}</div>${squares}</div>`;
     }).join('');
@@ -480,7 +502,7 @@ export function setupGoals() {
       </div>
       ${legendHtml}
       <div class="cal-tooltip hidden" id="calTooltip"></div>
-      ${!goals ? '<p class="muted" style="margin:10px 0 0;font-size:12px">Set daily targets above to see goal adherence.</p>' : ''}`;
+      ${allGoalRecords.length === 0 ? '<p class="muted" style="margin:10px 0 0;font-size:12px">Set daily targets above to see goal adherence.</p>' : ''}`;
 
     tooltipEl = $.html($.id('calTooltip'));
     activeDay = null;
@@ -512,6 +534,142 @@ export function setupGoals() {
         return;
       }
       showTooltip(/** @type {HTMLElement} */ (day));
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Goal history panel
+  // -------------------------------------------------------------------------
+
+  function openHistoryPanel() {
+    let panelEl = /** @type {HTMLDialogElement|null} */ (document.getElementById('goalHistoryPanel'));
+    if (!panelEl) {
+      panelEl = document.createElement('dialog');
+      panelEl.id = 'goalHistoryPanel';
+      panelEl.className = 'goal-history-dialog';
+      document.body.appendChild(panelEl);
+
+      // Close on backdrop click
+      panelEl.addEventListener('click', e => {
+        if (e.target === panelEl) { panelEl?.close(); }
+      });
+    }
+    void renderHistoryPanel(panelEl);
+    panelEl.showModal();
+  }
+
+  /** @param {HTMLDialogElement} panelEl */
+  async function renderHistoryPanel(panelEl) {
+    const records = await Goals.list();
+
+    /** @param {GoalRecord} r @param {boolean} isActive @param {boolean} isLast */
+    const rowHtml = (r, isActive, isLast) => {
+      const g = Goals.derivedGrams(r);
+      const badge = isActive
+        ? '<span class="goal-history-badge">Active</span>'
+        : '';
+      return `
+        <div class="goal-history-row" data-id="${$.esc(r.id)}">
+          <div class="goal-history-row-header">
+            ${badge}
+            <label class="goal-history-from-label">From</label>
+            <input type="date" class="goal-history-date" value="${$.esc(r.effectiveFrom)}" data-original="${$.esc(r.effectiveFrom)}" />
+            <button class="btn small ghost goal-history-delete" aria-label="Delete goal" title="Delete"
+              style="margin-left:auto;min-width:36px;min-height:36px;color:var(--muted)"
+              ${isLast ? 'data-last="true"' : ''}>🗑</button>
+          </div>
+          <div class="goal-history-summary">${$.fmtNum(r.kcal, 0)} kcal · ${r.protPct}P / ${r.carbsPct}C / ${r.fatPct}F · ${g.protG}g prot</div>
+          <div class="goal-history-date-error hidden" style="font-size:12px;color:var(--bad);margin-top:4px"></div>
+        </div>`;
+    };
+
+    const todayISO = $.isoToday();
+    const activeId = Goals.goalForDate(records, todayISO)?.id ?? null;
+    const rowsHtml = records.map((r, i) =>
+      rowHtml(r, r.id === activeId, records.length === 1 && i === 0)
+    ).join('<hr class="goal-history-sep">');
+
+    panelEl.innerHTML = `
+      <div class="goal-history-inner">
+        <div class="goal-history-header">
+          <span class="goal-history-title">Goal history</span>
+          <button class="btn small ghost goal-history-close" aria-label="Close" style="min-width:36px;min-height:36px">✕</button>
+        </div>
+        <div class="goal-history-list" data-testid="goalHistoryList">
+          ${rowsHtml || '<p style="color:var(--muted);font-size:14px;margin:0">No goal history.</p>'}
+        </div>
+        <div class="goal-history-footer">
+          <button class="btn ghost goal-history-remove-all" data-testid="goalHistoryRemoveAll"
+            style="font-size:13px;color:var(--muted);width:100%">Remove all goals</button>
+        </div>
+      </div>`;
+
+    panelEl.querySelector('.goal-history-close')?.addEventListener('click', () => panelEl.close());
+
+    // Date change handlers
+    panelEl.querySelectorAll('.goal-history-date').forEach(inputEl => {
+      const input = /** @type {HTMLInputElement} */ (inputEl);
+      const row   = /** @type {HTMLElement} */ (input.closest('.goal-history-row'));
+      const errEl = /** @type {HTMLElement} */ (row.querySelector('.goal-history-date-error'));
+      input.addEventListener('change', async () => {
+        const id         = row.dataset.id ?? '';
+        const newDate    = input.value;
+        const original   = input.dataset.original ?? '';
+        try {
+          await Goals.updateEffectiveFrom(id, newDate);
+          input.dataset.original = newDate;
+          errEl.textContent = '';
+          errEl.classList.add('hidden');
+          await renderHistoryPanel(panelEl);
+          await renderHeatmap();
+        } catch (e) {
+          input.value = original;
+          errEl.textContent = /** @type {Error} */ (e).message;
+          errEl.classList.remove('hidden');
+        }
+      });
+    });
+
+    // Delete handlers
+    panelEl.querySelectorAll('.goal-history-delete').forEach(btnEl => {
+      const btn = /** @type {HTMLElement} */ (btnEl);
+      const row = /** @type {HTMLElement} */ (btn.closest('.goal-history-row'));
+      btn.addEventListener('click', async () => {
+        const id     = row.dataset.id ?? '';
+        const isLast = btn.dataset.last === 'true';
+        if (isLast) {
+          // Inline confirmation for last record
+          const confirmEl = row.querySelector('.goal-history-confirm');
+          if (confirmEl) {
+            confirmEl.remove();
+            return;
+          }
+          const div  = document.createElement('div');
+          div.className = 'goal-history-confirm';
+          div.style.cssText = 'font-size:13px;color:var(--muted);margin-top:8px;display:flex;gap:8px;align-items:center';
+          div.innerHTML = '<span>This will remove all your goals.</span><button class="btn small ghost" style="color:var(--bad)">Confirm</button>';
+          div.querySelector('button')?.addEventListener('click', async () => {
+            await Goals.deleteRecord(id);
+            panelEl.close();
+            await refreshGoals();
+          });
+          row.appendChild(div);
+          return;
+        }
+        await Goals.deleteRecord(id);
+        await renderHistoryPanel(panelEl);
+        await renderHeatmap();
+      });
+    });
+
+    // Remove all
+    panelEl.querySelector('.goal-history-remove-all')?.addEventListener('click', async () => {
+      const all = await Goals.list();
+      for (const r of all) {
+        await Goals.deleteRecord(r.id);
+      }
+      panelEl.close();
+      await refreshGoals();
     });
   }
 

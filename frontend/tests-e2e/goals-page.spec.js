@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loadPouchDB, localIsoToday, resetDB } from './playwright-helpers.js';
+import { insertGoals, insertMeals, loadPouchDB, localIsoToday, resetDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -118,5 +118,157 @@ test.describe('Goals page: heatmap', () => {
     const tooltip = page.locator('#calTooltip');
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toContainText('kcal');
+  });
+});
+
+test.describe('Goals page: history panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await loadPouchDB(page);
+    await page.goto('/');
+    await resetDB(page);
+    await page.reload();
+  });
+
+  test('history button is visible after setting goals', async ({ page }) => {
+    // Arrange
+    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
+
+    // Assert
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await expect(page.locator('[data-testid="goalHistoryBtn"]')).toBeVisible();
+  });
+
+  test('history button is not visible when no goals are set', async ({ page }) => {
+    // Act
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+
+    // Assert
+    await expect(page.locator('[data-testid="goalHistoryBtn"]')).not.toBeVisible();
+  });
+
+  test('history panel opens when clock button is clicked', async ({ page }) => {
+    // Arrange
+    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
+
+    // Act
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+
+    // Assert: panel is open with history list visible
+    await expect(page.locator('[data-testid="goalHistoryList"]')).toBeVisible();
+    await expect(page.locator('#goalHistoryPanel')).toBeVisible();
+  });
+
+  test('history panel shows active badge on the current goal', async ({ page }) => {
+    // Arrange
+    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
+
+    // Act
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+
+    // Assert
+    await expect(page.locator('.goal-history-badge')).toContainText('Active');
+  });
+
+  test('history panel closes when X button is clicked', async ({ page }) => {
+    // Arrange
+    await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+    await expect(page.locator('#goalHistoryPanel')).toBeVisible();
+
+    // Act
+    await page.locator('.goal-history-close').click();
+
+    // Assert
+    await expect(page.locator('#goalHistoryPanel')).not.toBeVisible();
+  });
+
+  test('delete non-last record removes it from the panel', async ({ page }) => {
+    // Arrange: seed two goal records via DB
+    const isoToday = localIsoToday();
+    const lastMonth = `${isoToday.slice(0, 7)}-01`;
+    const olderDate = lastMonth < isoToday ? lastMonth : '2024-01-01';
+    await insertGoals(page, [
+      { id: 'goal:newer', effectiveFrom: isoToday, kcal: 2000, maintenanceKcal: 2000, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 2000 },
+      { id: 'goal:older', effectiveFrom: olderDate, kcal: 1800, maintenanceKcal: 1800, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 1000 },
+    ]);
+    await page.reload();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+
+    // Act: delete the older record (second delete button)
+    const deleteButtons = page.locator('.goal-history-delete');
+    await deleteButtons.nth(1).click();
+
+    // Assert: only one record remains
+    await expect(page.locator('.goal-history-row')).toHaveCount(1);
+  });
+
+  test('deleting last record shows inline confirmation', async ({ page }) => {
+    // Arrange: exactly one goal record
+    const isoToday = localIsoToday();
+    await insertGoals(page, [
+      { id: 'goal:only', effectiveFrom: isoToday, kcal: 2000, maintenanceKcal: 2000, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 1000 },
+    ]);
+    await page.reload();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+
+    // Act: click delete on the only record
+    await page.locator('.goal-history-delete').click();
+
+    // Assert: inline confirmation appears, panel still open
+    await expect(page.locator('.goal-history-confirm')).toBeVisible();
+    await expect(page.locator('#goalHistoryPanel')).toBeVisible();
+  });
+
+  test('confirming delete of last record closes panel and shows no-goals state', async ({ page }) => {
+    // Arrange
+    const isoToday = localIsoToday();
+    await insertGoals(page, [
+      { id: 'goal:only', effectiveFrom: isoToday, kcal: 2000, maintenanceKcal: 2000, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 1000 },
+    ]);
+    await page.reload();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+    await page.click('[data-testid="goalHistoryBtn"]');
+    await page.locator('.goal-history-delete').click();
+
+    // Act: confirm deletion
+    await page.locator('.goal-history-confirm button').click();
+
+    // Assert: panel closes, goals card shows no-goals state
+    await expect(page.locator('#goalHistoryPanel')).not.toBeVisible();
+    await expect(page.locator('[data-testid="goalsCard"]')).toContainText('No daily targets');
+  });
+
+  test('heatmap cells use the goal active on their date, not the current goal', async ({ page }) => {
+    // Arrange: two goals — older with 1800 kcal, newer with 2200 kcal
+    // Seed meals: one in the older period (130 kcal → bad vs 1800, also bad vs 2200)
+    // and one in the newer period (1800 kcal → ok vs 1800, bad vs 2200)
+    const isoToday = localIsoToday();
+    // older period: 30 days ago
+    const olderDate = new Date(isoToday);
+    olderDate.setDate(olderDate.getDate() - 30);
+    const olderISO = olderDate.toISOString().slice(0, 10);
+    // newer goal started 15 days ago
+    const newerGoalDate = new Date(isoToday);
+    newerGoalDate.setDate(newerGoalDate.getDate() - 15);
+    const newerGoalISO = newerGoalDate.toISOString().slice(0, 10);
+
+    await insertGoals(page, [
+      { id: 'goal:older', effectiveFrom: olderISO, kcal: 1800, maintenanceKcal: 1800, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 1000 },
+      { id: 'goal:newer', effectiveFrom: newerGoalISO, kcal: 2200, maintenanceKcal: 2200, calMode: 'deficit', calMagnitude: 0, protPct: 30, carbsPct: 45, fatPct: 25, createdAt: 2000 },
+    ]);
+    // Meal in older period: 1800 kcal (ok vs 1800, bad vs 2200)
+    await insertMeals(page, [{ date: olderISO, kcal: 1800, prot: 135, carbs: 202, fats: 50 }]);
+
+    await page.reload();
+    await page.locator('.tab', { hasText: 'Goals' }).click();
+
+    // Assert: the older cell is 'ok' (evaluated against 1800 kcal goal, not 2200)
+    const olderCell = page.locator(`.cal-day[data-iso="${olderISO}"]`);
+    await expect(olderCell).toHaveClass(/cal-day-ok/);
   });
 });

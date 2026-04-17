@@ -80,7 +80,7 @@ test.describe('Goals: settings UI', () => {
     // Assert: check DB
     const records = await getAllFromStore(page, 'goals');
     expect(records).toHaveLength(1);
-    expect(records[0].id).toBe('goals:1');
+    expect(records[0].id).toMatch(/^goal:/);
     expect(records[0].kcal).toBe(1800);
     expect(records[0].maintenanceKcal).toBe(1800);
     expect(records[0].calMode).toBe('deficit');

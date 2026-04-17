@@ -3,7 +3,7 @@ import * as db from './db.js';
 import * as $ from './utils.js';
 
 /**
- * @typedef {import('./db.js').Goals} Goals
+ * @typedef {import('./db.js').GoalRecord} GoalRecord
  *
  * @typedef {{
  *   windowDays: number,
@@ -23,29 +23,91 @@ import * as $ from './utils.js';
  * }} MacroWindow
  */
 
-const GOALS_KEY = 'goals:1';
-
 /**
- * @returns {Promise<Goals|null>}
+ * Returns all goal records sorted by effectiveFrom descending (newest first).
+ * @returns {Promise<GoalRecord[]>}
  */
-export async function get() {
-  const result = await db.get('goals', GOALS_KEY);
-  return result ?? null;
+export async function list() {
+  const all = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
+  return all.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
 }
 
 /**
- * Upsert the singleton goals record.
+ * Returns the goal record active on the given date, or null if none.
+ * @param {string} [dateISO]
+ * @returns {Promise<GoalRecord|null>}
+ */
+export async function getActive(dateISO = $.isoToday()) {
+  const all = await list();
+  return all.find(r => r.effectiveFrom <= dateISO) ?? null;
+}
+
+/**
+ * Saves a new goal version effective from today. If a record already exists for today,
+ * it is overwritten in place (preserving its id and createdAt).
  * @param {{ maintenanceKcal: number, calMode: 'surplus'|'deficit', calMagnitude: number, protPct: number, carbsPct: number, fatPct: number }} fields
+ * @returns {Promise<GoalRecord>}
  */
 export async function save(fields) {
-  const sign = fields.calMode === 'surplus' ? 1 : -1;
-  const kcal = fields.maintenanceKcal + sign * fields.calMagnitude;
-  await db.put('goals', { id: GOALS_KEY, ...fields, kcal, updatedAt: $.now() });
+  const today   = $.isoToday();
+  const all     = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
+  const existing = all.find(r => r.effectiveFrom === today);
+  const sign    = fields.calMode === 'surplus' ? 1 : -1;
+  const kcal    = fields.maintenanceKcal + sign * fields.calMagnitude;
+  /** @type {GoalRecord} */
+  const record  = {
+    id:            existing?.id ?? `goal:${crypto.randomUUID()}`,
+    effectiveFrom: today,
+    kcal,
+    createdAt:     existing?.createdAt ?? Date.now(),
+    ...fields,
+  };
+  await db.put('goals', record);
+  return record;
 }
 
-/** Delete the singleton goals record. */
+/** Delete the currently active goal record. */
 export async function remove() {
-  await db.del('goals', GOALS_KEY);
+  const active = await getActive();
+  if (active) {
+    await db.del('goals', active.id);
+  }
+}
+
+/**
+ * Updates the effectiveFrom date of a goal record.
+ * Throws if another record already has the same effectiveFrom date.
+ * @param {string} id
+ * @param {string} newDateISO
+ * @returns {Promise<void>}
+ */
+export async function updateEffectiveFrom(id, newDateISO) {
+  const all   = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
+  const clash = all.find(r => r.id !== id && r.effectiveFrom === newDateISO);
+  if (clash) { throw new Error('Another goal already starts on this date'); }
+  const record = all.find(r => r.id === id);
+  if (!record) { throw new Error('Goal record not found'); }
+  await db.put('goals', { ...record, effectiveFrom: newDateISO });
+}
+
+/**
+ * Deletes a goal record by id.
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+export async function deleteRecord(id) {
+  await db.del('goals', id);
+}
+
+/**
+ * Returns the goal active for the given date from a pre-fetched sorted list.
+ * Records must be sorted by effectiveFrom descending (newest first).
+ * @param {GoalRecord[]} records
+ * @param {string} dateISO
+ * @returns {GoalRecord|null}
+ */
+export function goalForDate(records, dateISO) {
+  return records.find(r => r.effectiveFrom <= dateISO) ?? null;
 }
 
 /**
@@ -65,7 +127,7 @@ export function computeStatus(consumed, target) {
 
 /**
  * Derive gram targets from goal percentages.
- * @param {Goals} goals
+ * @param {GoalRecord} goals
  * @returns {{ protG: number, carbsG: number, fatG: number }}
  */
 export function derivedGrams(goals) {
@@ -80,7 +142,7 @@ export function derivedGrams(goals) {
  * Compute the 7-day sliding window view model.
  * Returns null if goals are not set or no meals exist in the window.
  * @param {string} todayISO
- * @param {Goals | null} goals
+ * @param {GoalRecord | null} goals
  * @returns {Promise<WindowVM | null>}
  */
 export async function computeWindowVM(todayISO, goals) {

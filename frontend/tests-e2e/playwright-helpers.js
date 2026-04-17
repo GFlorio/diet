@@ -50,3 +50,12 @@ export async function insertMeals(page, meals) {
 export async function insertFoods(page, foods) {
   await page.evaluate((f) => window.__testDB.insertFoods(f), foods);
 }
+
+/**
+ * Insert raw goal records, bypassing the UI. Requires the app to be loaded.
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<Partial<import('../src/db.js').GoalRecord>>} goals
+ */
+export async function insertGoals(page, goals) {
+  await page.evaluate((g) => window.__testDB.insertGoals(g), goals);
+}

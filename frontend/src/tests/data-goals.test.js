@@ -4,11 +4,13 @@ vi.mock('../db.js', () => ({
   get: vi.fn(),
   put: vi.fn(),
   del: vi.fn(),
+  getAll: vi.fn(),
 }));
 
 vi.mock('../utils.js', () => ({
   now: vi.fn(() => 1000),
   toISO: vi.fn((d) => d.toISOString().slice(0, 10)),
+  isoToday: vi.fn(() => '2024-02-07'),
 }));
 
 vi.mock('../data-meals.js', () => ({
@@ -17,12 +19,29 @@ vi.mock('../data-meals.js', () => ({
   },
 }));
 
-import { computeStatus, computeWindowVM, derivedGrams, get, remove, save } from '../data-goals.js';
+import {
+  computeStatus,
+  computeWindowVM,
+  deleteRecord,
+  derivedGrams,
+  getActive,
+  goalForDate,
+  list,
+  remove,
+  save,
+  updateEffectiveFrom,
+} from '../data-goals.js';
 import { Meals } from '../data-meals.js';
 import * as db from '../db.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: no migration needed (no old singleton)
+  vi.mocked(db.get).mockResolvedValue(undefined);
+  // Default: empty goals store
+  vi.mocked(db.getAll).mockResolvedValue([]);
+  vi.mocked(db.put).mockResolvedValue('goal:test');
+  vi.mocked(db.del).mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -71,7 +90,7 @@ describe('computeStatus', () => {
 // ---------------------------------------------------------------------------
 describe('derivedGrams', () => {
   test('computes gram targets from percentages', () => {
-    const goals = { id: 'goals:1', kcal: 2000, maintenanceKcal: 2500, calMode: /** @type {'deficit'} */ ('deficit'), calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25, updatedAt: 0 };
+    const goals = makeGoal('2024-02-07', { kcal: 2000, protPct: 30, carbsPct: 45, fatPct: 25 });
     const g = derivedGrams(goals);
     expect(g.protG).toBe(150);   // 2000 * 0.30 / 4 = 150
     expect(g.carbsG).toBe(225);  // 2000 * 0.45 / 4 = 225
@@ -79,66 +98,198 @@ describe('derivedGrams', () => {
   });
 
   test('handles zero percentage (target 0 g)', () => {
-    const goals = { id: 'goals:1', kcal: 2000, maintenanceKcal: 2000, calMode: /** @type {'deficit'} */ ('deficit'), calMagnitude: 0, protPct: 0, carbsPct: 55, fatPct: 45, updatedAt: 0 };
+    const goals = makeGoal('2024-02-07', { kcal: 2000, protPct: 0, carbsPct: 55, fatPct: 45 });
     const g = derivedGrams(goals);
     expect(g.protG).toBe(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// get / save / remove
+// goalForDate (pure function)
 // ---------------------------------------------------------------------------
-describe('get', () => {
-  test('returns Goals when record exists', async () => {
-    const record = /** @type {import('../db.js').Goals} */ ({ id: 'goals:1', kcal: 2000, maintenanceKcal: 2500, calMode: 'deficit', calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25, updatedAt: 1 });
-    vi.mocked(db.get).mockResolvedValue(record);
-    const result = await get();
-    expect(result).toEqual(record);
-    expect(db.get).toHaveBeenCalledWith('goals', 'goals:1');
+describe('goalForDate', () => {
+  test('returns null for empty array', () => {
+    expect(goalForDate([], '2024-02-07')).toBeNull();
   });
 
-  test('returns null when no record exists', async () => {
-    vi.mocked(db.get).mockResolvedValue(undefined);
-    const result = await get();
-    expect(result).toBeNull();
+  test('returns null when date is before all records', () => {
+    const records = [makeGoal('2024-02-01')];
+    expect(goalForDate(records, '2024-01-31')).toBeNull();
+  });
+
+  test('returns record when date matches effectiveFrom exactly', () => {
+    const r = makeGoal('2024-02-01');
+    expect(goalForDate([r], '2024-02-01')).toEqual(r);
+  });
+
+  test('returns record when date is after effectiveFrom', () => {
+    const r = makeGoal('2024-02-01');
+    expect(goalForDate([r], '2024-02-15')).toEqual(r);
+  });
+
+  test('returns the more recent record when date is between two records (sorted desc)', () => {
+    const older = makeGoal('2024-01-01');
+    const newer = makeGoal('2024-02-01');
+    // list() sorts desc, so newer first
+    expect(goalForDate([newer, older], '2024-02-15')).toEqual(newer);
+    expect(goalForDate([newer, older], '2024-01-15')).toEqual(older);
   });
 });
 
+// ---------------------------------------------------------------------------
+// list
+// ---------------------------------------------------------------------------
+describe('list', () => {
+  test('returns empty array when no records exist', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([]);
+    const result = await list();
+    expect(result).toEqual([]);
+  });
+
+  test('returns records sorted by effectiveFrom descending', async () => {
+    const r1 = makeGoal('2024-01-01');
+    const r2 = makeGoal('2024-03-01');
+    const r3 = makeGoal('2024-02-01');
+    vi.mocked(db.getAll).mockResolvedValue([r1, r3, r2]);
+    const result = await list();
+    expect(result.map(r => r.effectiveFrom)).toEqual(['2024-03-01', '2024-02-01', '2024-01-01']);
+  });
+
+});
+
+// ---------------------------------------------------------------------------
+// getActive
+// ---------------------------------------------------------------------------
+describe('getActive', () => {
+  test('returns null when no records exist', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([]);
+    expect(await getActive('2024-02-07')).toBeNull();
+  });
+
+  test('returns null when date is before all records', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([makeGoal('2024-02-01')]);
+    expect(await getActive('2024-01-31')).toBeNull();
+  });
+
+  test('returns record when date matches effectiveFrom exactly', async () => {
+    const r = makeGoal('2024-02-01');
+    vi.mocked(db.getAll).mockResolvedValue([r]);
+    expect(await getActive('2024-02-01')).toEqual(r);
+  });
+
+  test('returns most recent record whose effectiveFrom <= date', async () => {
+    const older = makeGoal('2024-01-01');
+    const newer = makeGoal('2024-02-01');
+    vi.mocked(db.getAll).mockResolvedValue([newer, older]);
+    expect(await getActive('2024-02-15')).toEqual(newer);
+    expect(await getActive('2024-01-15')).toEqual(older);
+  });
+
+  test('defaults to today when no dateISO given', async () => {
+    const r = makeGoal('2024-02-07');
+    vi.mocked(db.getAll).mockResolvedValue([r]);
+    expect(await getActive()).toEqual(r); // mocked isoToday returns '2024-02-07'
+  });
+});
+
+// ---------------------------------------------------------------------------
+// save
+// ---------------------------------------------------------------------------
 describe('save', () => {
-  test('computes kcal from maintenance minus deficit and stores all fields', async () => {
-    vi.mocked(db.put).mockResolvedValue('goals:1');
-    await save({ maintenanceKcal: 2500, calMode: 'deficit', calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 });
-    expect(db.put).toHaveBeenCalledWith('goals', {
-      id: 'goals:1',
-      maintenanceKcal: 2500,
-      calMode: 'deficit',
-      calMagnitude: 500,
+  test('creates new record with effectiveFrom: today when no existing record for today', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([]);
+    const fields = { maintenanceKcal: 2500, calMode: /** @type {'deficit'} */ ('deficit'), calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 };
+    await save(fields);
+    expect(db.put).toHaveBeenCalledWith('goals', expect.objectContaining({
+      effectiveFrom: '2024-02-07',
       kcal: 2000,
-      protPct: 30,
-      carbsPct: 45,
-      fatPct: 25,
-      updatedAt: 1000,
-    });
+      maintenanceKcal: 2500,
+    }));
   });
 
   test('surplus adds magnitude to maintenance', async () => {
-    vi.mocked(db.put).mockResolvedValue('goals:1');
+    vi.mocked(db.getAll).mockResolvedValue([]);
     await save({ maintenanceKcal: 2000, calMode: 'surplus', calMagnitude: 300, protPct: 30, carbsPct: 45, fatPct: 25 });
     expect(db.put).toHaveBeenCalledWith('goals', expect.objectContaining({ kcal: 2300 }));
   });
 
   test('magnitude 0 stores kcal equal to maintenance', async () => {
-    vi.mocked(db.put).mockResolvedValue('goals:1');
+    vi.mocked(db.getAll).mockResolvedValue([]);
     await save({ maintenanceKcal: 1800, calMode: 'deficit', calMagnitude: 0, protPct: 25, carbsPct: 50, fatPct: 25 });
     expect(db.put).toHaveBeenCalledWith('goals', expect.objectContaining({ kcal: 1800 }));
   });
+
+  test('overwrites same-day record preserving id and createdAt', async () => {
+    const existing = makeGoal('2024-02-07', { id: 'goal:abc', createdAt: 999 });
+    vi.mocked(db.getAll).mockResolvedValue([existing]);
+    await save({ maintenanceKcal: 2500, calMode: 'deficit', calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 });
+    expect(db.put).toHaveBeenCalledWith('goals', expect.objectContaining({
+      id: 'goal:abc',
+      createdAt: 999,
+      effectiveFrom: '2024-02-07',
+    }));
+  });
+
+  test('creates new record (different id) when existing record has different date', async () => {
+    const existing = makeGoal('2024-02-06', { id: 'goal:old' });
+    vi.mocked(db.getAll).mockResolvedValue([existing]);
+    await save({ maintenanceKcal: 2500, calMode: 'deficit', calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 });
+    const putCall = vi.mocked(db.put).mock.calls[0][1];
+    expect(/** @type {any} */ (putCall).id).not.toBe('goal:old');
+    expect(/** @type {any} */ (putCall).effectiveFrom).toBe('2024-02-07');
+  });
 });
 
+// ---------------------------------------------------------------------------
+// remove
+// ---------------------------------------------------------------------------
 describe('remove', () => {
-  test('deletes the singleton record by key 1', async () => {
-    vi.mocked(db.del).mockResolvedValue(undefined);
+  test('deletes the currently active record', async () => {
+    const r = makeGoal('2024-02-01', { id: 'goal:xyz' });
+    vi.mocked(db.getAll).mockResolvedValue([r]);
     await remove();
-    expect(db.del).toHaveBeenCalledWith('goals', 'goals:1');
+    expect(db.del).toHaveBeenCalledWith('goals', 'goal:xyz');
+  });
+
+  test('does nothing when no active record', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([]);
+    await remove();
+    expect(db.del).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateEffectiveFrom
+// ---------------------------------------------------------------------------
+describe('updateEffectiveFrom', () => {
+  test('updates effectiveFrom for the target record', async () => {
+    const r = makeGoal('2024-02-01', { id: 'goal:a' });
+    vi.mocked(db.getAll).mockResolvedValue([r]);
+    await updateEffectiveFrom('goal:a', '2024-02-10');
+    expect(db.put).toHaveBeenCalledWith('goals', { ...r, effectiveFrom: '2024-02-10' });
+  });
+
+  test('throws when another record has the same effectiveFrom', async () => {
+    const r1 = makeGoal('2024-02-01', { id: 'goal:a' });
+    const r2 = makeGoal('2024-03-01', { id: 'goal:b' });
+    vi.mocked(db.getAll).mockResolvedValue([r1, r2]);
+    await expect(updateEffectiveFrom('goal:a', '2024-03-01')).rejects.toThrow('Another goal already starts on this date');
+    expect(db.put).not.toHaveBeenCalled();
+  });
+
+  test('throws when record not found', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([]);
+    await expect(updateEffectiveFrom('goal:nonexistent', '2024-02-10')).rejects.toThrow('Goal record not found');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deleteRecord
+// ---------------------------------------------------------------------------
+describe('deleteRecord', () => {
+  test('deletes record by id', async () => {
+    await deleteRecord('goal:abc');
+    expect(db.del).toHaveBeenCalledWith('goals', 'goal:abc');
   });
 });
 
@@ -147,7 +298,7 @@ describe('remove', () => {
 // ---------------------------------------------------------------------------
 describe('computeWindowVM', () => {
   // goals: 2000 kcal, 30% prot → 150 g, 45% carbs → 225 g, 25% fat → 56 g
-  const goals = { id: 'goals:1', kcal: 2000, maintenanceKcal: 2500, calMode: /** @type {'deficit'} */ ('deficit'), calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25, updatedAt: 0 };
+  const goals = makeGoal('2024-01-01', { kcal: 2000, maintenanceKcal: 2500, calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 });
 
   /**
    * Build a meal record for a given date.
@@ -268,8 +419,6 @@ describe('computeWindowVM', () => {
     expect(result?.dataWarning).toBe(false);
     expect(result?.calories.avgConsumed).toBeCloseTo(2000);
     expect(result?.calories.status).toBe('ok');
-    // effectiveDays = 7 (today logged), prevSum = 6×2000 = 12000
-    // idealToday = 7×2000 − 12000 = 2000
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
@@ -282,28 +431,24 @@ describe('computeWindowVM', () => {
   });
 
   test('status is ok when avg is 5% under goal', async () => {
-    // 5% under 2000 = 1900
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1900)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('ok');
   });
 
   test('status is warn when avg is 8% below goal', async () => {
-    // 8% under 2000 = 1840
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1840)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('warn');
   });
 
   test('status is bad when avg is 20% below goal', async () => {
-    // 20% under 2000 = 1600
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1600)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('bad');
   });
 
   test('status is bad when avg is 15% above goal', async () => {
-    // 15% over 2000 = 2300
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2300)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('bad');
@@ -312,44 +457,36 @@ describe('computeWindowVM', () => {
   // --- idealToday / effectiveDays -------------------------------------------
 
   test('idealToday = goal when today is logged at goal (effectiveDays = windowDays)', async () => {
-    // Only today logged at goal → effectiveDays = 1, prevSum = 0 → ideal = 1×2000−0 = 2000
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
   test('idealToday = goal when only prev days logged at goal (effectiveDays = windowDays + 1)', async () => {
-    // 1 prev day at goal → effectiveDays = 2, prevSum = 2000 → ideal = 2×2000−2000 = 2000
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
   test('idealToday is clamped to goal×1.15 when far below cumulative target', async () => {
-    // 1 prev day at 200 kcal → effectiveDays = 2
-    // ideal = 2×2000−200 = 3800, clamped to 2000×1.15 = 2300
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 200)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.idealToday).toBeCloseTo(2300);
   });
 
   test('idealToday is clamped to goal×0.85 when far above cumulative target', async () => {
-    // 1 prev day at 5000 kcal → effectiveDays = 2
-    // ideal = 2×2000−5000 = −1000, clamped to 2000×0.85 = 1700
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 5000)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.idealToday).toBeCloseTo(1700);
   });
 
   test('idealToday for today-logged vs today-empty stays the same when prev is at goal', async () => {
-    // today logged at goal (effectiveDays = 2, prevSum = 2000): ideal = 2×2000−2000 = 2000
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06'),
       makeMeal('2024-02-07'),
     ]);
     const withToday = await computeWindowVM('2024-02-07', goals);
 
-    // today not logged (effectiveDays = 2, prevSum = 2000): ideal = 2×2000−2000 = 2000
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
     const withoutToday = await computeWindowVM('2024-02-07', goals);
 
@@ -359,9 +496,6 @@ describe('computeWindowVM', () => {
   // --- macro averages and idealToday ----------------------------------------
 
   test('computes protein/carbs/fat averages and status independently', async () => {
-    // Protein at goal (150g) → ok
-    // Carbs 7% over goal (241g vs 225g) → warn
-    // Fat at goal (56g) → ok
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2000, 150, 241, 56)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.protein.avgConsumed).toBeCloseTo(150, 0);
@@ -373,8 +507,6 @@ describe('computeWindowVM', () => {
   });
 
   test('macro idealToday tracks each macro target independently', async () => {
-    // 1 prev day at goal for all macros → effectiveDays = 2
-    // Each macro: ideal = 2×target − target = target
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.protein.idealToday).toBeCloseTo(150);
@@ -383,11 +515,35 @@ describe('computeWindowVM', () => {
   });
 
   test('macro idealToday is clamped independently per macro', async () => {
-    // Fat way over (200g vs 56g goal) → fat ideal = 2×56−200 = −88, clamped to 56×0.85 ≈ 48
-    // Protein at goal → protein ideal = 2×150−150 = 150 (no clamp)
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 2000, 150, 225, 200)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.fat.idealToday).toBeCloseTo(56 * 0.85, 0);
     expect(result?.protein.idealToday).toBeCloseTo(150);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a GoalRecord for tests.
+ * @param {string} effectiveFrom
+ * @param {Partial<import('../db.js').GoalRecord>} [overrides]
+ * @returns {import('../db.js').GoalRecord}
+ */
+function makeGoal(effectiveFrom, overrides = {}) {
+  return {
+    id:             `goal:${effectiveFrom}`,
+    effectiveFrom,
+    kcal:           2000,
+    maintenanceKcal: 2500,
+    calMode:        /** @type {'deficit'} */ ('deficit'),
+    calMagnitude:   500,
+    protPct:        30,
+    carbsPct:       45,
+    fatPct:         25,
+    createdAt:      0,
+    ...overrides,
+  };
+}

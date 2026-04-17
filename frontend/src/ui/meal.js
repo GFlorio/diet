@@ -7,7 +7,7 @@ import * as V from '../validation.js';
  * @typedef {import('../data.js').Food} Food
  * @typedef {import('../data.js').Meal} Meal
  * @typedef {import('../data.js').Macros} Macros
- * @typedef {import('../data-goals.js').Goals} GoalsType
+ * @typedef {import('../data-goals.js').GoalRecord} GoalsType
  * @typedef {import('../data-goals.js').WindowVM} WindowVM
  * @typedef {{ consumed: number, target: number|null, remaining: number|null, status: 'none'|'ok'|'warn'|'bad' }} MacroVM
  */
@@ -601,7 +601,7 @@ export function setupMeals(){
   async function renderMeals(animateFirst = false){
     [currentMeals, currentGoals] = await Promise.all([
       /** @type {Promise<Meal[]>} */ (Meals.listByDate(curDate)),
-      Goals.get(),
+      Goals.getActive(),
     ]);
     currentWindowVM = await Goals.computeWindowVM(curDate, currentGoals);
     mealsUiState.goalsEnabled = currentGoals !== null;

@@ -44,23 +44,24 @@ import PouchDB from 'pouchdb-browser';
  */
 
 /**
- * User nutrition goals (singleton record, id always 'goals:1').
+ * One snapshot in the goal history log.
  * @typedef {{
- *   id: string,
- *   kcal: number,
+ *   id:             string,
+ *   effectiveFrom:  string,
+ *   kcal:           number,
  *   maintenanceKcal: number,
- *   calMode: 'surplus' | 'deficit',
- *   calMagnitude: number,
- *   protPct: number,
- *   carbsPct: number,
- *   fatPct: number,
- *   updatedAt: number
- * }} Goals
+ *   calMode:        'surplus' | 'deficit',
+ *   calMagnitude:   number,
+ *   protPct:        number,
+ *   carbsPct:       number,
+ *   fatPct:         number,
+ *   createdAt:      number,
+ * }} GoalRecord
  */
 
 /**
  * Maps every store name to its record type.
- * @typedef {{ foods: Food, meals: Meal, goals: Goals }} StoreMap
+ * @typedef {{ foods: Food, meals: Meal, goals: GoalRecord }} StoreMap
  */
 
 /**
@@ -92,7 +93,7 @@ function requestPersistentStorage() {
 function newId(store, record) {
   if (store === 'foods') {return `food:${record.id ?? Date.now()}`;}
   if (store === 'meals') {return `meal:${record.date}:${String(record.id ?? Date.now()).padStart(13, '0')}`;}
-  if (store === 'goals') {return 'goals:1';}
+  if (store === 'goals') { return `goal:${crypto.randomUUID()}`; }
   throw new Error(`newId: unknown store ${store}`);
 }
 
@@ -165,12 +166,8 @@ export const getAll = async (storeName, dateRange) => {
   }
 
   if (storeName === 'goals') {
-    try {
-      return /** @type {any} */ ([strip(await db.get('goals:1'))]);
-    } catch (e) {
-      if (/** @type {any} */ (e).status === 404) {return [];}
-      throw e;
-    }
+    const result = await db.allDocs({ startkey: 'goal:', endkey: 'goal:\uffff', include_docs: true });
+    return /** @type {any} */ (result.rows.map((r) => strip(r.doc)));
   }
 
   if (storeName === 'meals') {
@@ -234,6 +231,15 @@ export const resetDB = async () => {
   insertFoods: async (foods) => {
     for (const f of foods) {
       await put('foods', f);
+    }
+  },
+  /**
+   * Insert raw goal records directly, bypassing the UI.
+   * @param {Array<Partial<GoalRecord>>} goals
+   */
+  insertGoals: async (goals) => {
+    for (const g of goals) {
+      await put('goals', g);
     }
   },
 };
