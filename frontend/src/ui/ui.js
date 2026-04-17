@@ -1,5 +1,6 @@
 import { canInstallPWA, isPWAInstalled, promptInstall } from '../pwa.js';
 import * as $ from '../utils.js'
+import * as db from '../db.js';
 import { setupFoods } from './foods.js';
 import { setupGoals } from './goals.js';
 import { setupMeals } from './meal.js';
@@ -78,6 +79,15 @@ export function setupConfigModal(){
 	// Close on backdrop click
 	dialog.addEventListener('click', (e) => {
 		if (e.target === dialog) { dialog.close(); }
+	});
+
+	// Danger zone: reset DB
+	const resetBtn = $.button($.id('resetDBBtn'));
+	resetBtn.addEventListener('click', async () => {
+		if (!confirm('Delete all data permanently? This cannot be undone.')) { return; }
+		await db.resetDB();
+		dialog.close();
+		window.location.reload();
 	});
 }
 

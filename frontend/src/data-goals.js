@@ -56,7 +56,7 @@ export async function save(fields) {
   const kcal    = fields.maintenanceKcal + sign * fields.calMagnitude;
   /** @type {GoalRecord} */
   const record  = {
-    id:            existing?.id ?? `goal:${crypto.randomUUID()}`,
+    id:            existing?.id ?? `goal:${$.randomUUID()}`,
     effectiveFrom: today,
     kcal,
     createdAt:     existing?.createdAt ?? Date.now(),

@@ -1,4 +1,5 @@
 import PouchDB from 'pouchdb-browser';
+import * as $ from './utils.js';
 
 /**
  * Macro nutrient fields.
@@ -93,7 +94,7 @@ function requestPersistentStorage() {
 function newId(store, record) {
   if (store === 'foods') {return `food:${record.id ?? Date.now()}`;}
   if (store === 'meals') {return `meal:${record.date}:${String(record.id ?? Date.now()).padStart(13, '0')}`;}
-  if (store === 'goals') { return `goal:${crypto.randomUUID()}`; }
+  if (store === 'goals') { return `goal:${$.randomUUID()}`; }
   throw new Error(`newId: unknown store ${store}`);
 }
 

@@ -11,6 +11,7 @@ vi.mock('../utils.js', () => ({
   now: vi.fn(() => 1000),
   toISO: vi.fn((d) => d.toISOString().slice(0, 10)),
   isoToday: vi.fn(() => '2024-02-07'),
+  randomUUID: vi.fn(() => 'test-uuid'),
 }));
 
 vi.mock('../data-meals.js', () => ({

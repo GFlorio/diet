@@ -245,6 +245,7 @@ export function setupGoals() {
     });
 
     maintenanceInput.addEventListener('input', updateForm);
+    maintenanceInput.addEventListener('change', updateForm);
 
     // Magnitude stepper
     $.button($.id('goalsMagMinus')).addEventListener('click', () => {
@@ -319,15 +320,20 @@ export function setupGoals() {
     });
 
     saveBtn.addEventListener('click', async () => {
-      await Goals.save({
-        maintenanceKcal: Number(maintenanceInput.value),
-        calMode:         getMode(),
-        calMagnitude:    magnitude,
-        protPct,
-        carbsPct,
-        fatPct,
-      });
-      await refreshGoals();
+      try {
+        await Goals.save({
+          maintenanceKcal: Number(maintenanceInput.value),
+          calMode:         getMode(),
+          calMagnitude:    magnitude,
+          protPct,
+          carbsPct,
+          fatPct,
+        });
+        await refreshGoals();
+      } catch (e) {
+        $.toast('Failed to save goals — please try again.', { type: 'error' });
+        throw e;
+      }
     });
 
     cancelBtn.addEventListener('click', () => refreshGoals());
@@ -598,10 +604,6 @@ export function setupGoals() {
         <div class="goal-history-list" data-testid="goalHistoryList">
           ${rowsHtml || '<p style="color:var(--muted);font-size:14px;margin:0">No goal history.</p>'}
         </div>
-        <div class="goal-history-footer">
-          <button class="btn ghost goal-history-remove-all" data-testid="goalHistoryRemoveAll"
-            style="font-size:13px;color:var(--muted);width:100%">Remove all goals</button>
-        </div>
       </div>`;
 
     panelEl.querySelector('.goal-history-close')?.addEventListener('click', () => panelEl.close());
@@ -662,15 +664,6 @@ export function setupGoals() {
       });
     });
 
-    // Remove all
-    panelEl.querySelector('.goal-history-remove-all')?.addEventListener('click', async () => {
-      const all = await Goals.list();
-      for (const r of all) {
-        await Goals.deleteRecord(r.id);
-      }
-      panelEl.close();
-      await refreshGoals();
-    });
   }
 
   window.addEventListener('goals-activate', () => {
