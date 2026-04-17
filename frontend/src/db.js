@@ -205,6 +205,34 @@ export const resetDB = async () => {
   db = new PouchDB(DB_NAME);
 };
 
+/**
+ * Exports all data from all stores as a plain serialisable object.
+ * @returns {Promise<{version: number, exportedAt: string, foods: Food[], meals: Meal[], goals: GoalRecord[]}>}
+ */
+export const exportDB = async () => {
+  const [foods, meals, goals] = await Promise.all([
+    getAll('foods'),
+    getAll('meals'),
+    getAll('goals'),
+  ]);
+  return { version: 1, exportedAt: new Date().toISOString(), foods, meals, goals };
+};
+
+/**
+ * Replaces the entire database with data from an export file.
+ * @param {{ version: number, exportedAt?: string, foods: Food[], meals: Meal[], goals: GoalRecord[] }} data
+ * @returns {Promise<void>}
+ */
+export const importDB = async (data) => {
+  if (!data || data.version !== 1 || !Array.isArray(data.foods) || !Array.isArray(data.meals) || !Array.isArray(data.goals)) {
+    throw new Error('Invalid backup file format.');
+  }
+  await resetDB();
+  for (const f of data.foods) { await put('foods', f); }
+  for (const m of data.meals) { await put('meals', m); }
+  for (const g of data.goals) { await put('goals', g); }
+};
+
 // Expose a minimal test API on window (safe for this offline PWA).
 /** @type {any} */ (window).__testDB = {
   reset: () => resetDB(),

@@ -81,6 +81,42 @@ export function setupConfigModal(){
 		if (e.target === dialog) { dialog.close(); }
 	});
 
+	// Export database
+	$.button($.id('exportDBBtn')).addEventListener('click', async () => {
+		const data = await db.exportDB();
+		const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		const date = new Date().toISOString().slice(0, 10);
+		a.href = url;
+		a.download = `diet-backup-${date}.json`;
+		a.click();
+		URL.revokeObjectURL(url);
+	});
+
+	// Import database
+	const importFileInput = /** @type {HTMLInputElement} */ ($.id('importDBFile'));
+	$.button($.id('importDBBtn')).addEventListener('click', () => {
+		importFileInput.value = '';
+		importFileInput.click();
+	});
+	importFileInput.addEventListener('change', async () => {
+		const file = importFileInput.files?.[0];
+		if (!file) { return; }
+		const text = await file.text();
+		let data;
+		try {
+			data = JSON.parse(text);
+		} catch {
+			alert('Could not read file — make sure it is a valid diet backup.');
+			return;
+		}
+		if (!confirm('Replace all current data with this backup? This cannot be undone.')) { return; }
+		await db.importDB(data);
+		dialog.close();
+		window.location.reload();
+	});
+
 	// Danger zone: reset DB
 	const resetBtn = $.button($.id('resetDBBtn'));
 	resetBtn.addEventListener('click', async () => {

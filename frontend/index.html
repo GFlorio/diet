@@ -62,11 +62,22 @@
           </div>
         </div>
       </div>
+      <div>
+        <div class="config-label">Data</div>
+        <button type="button" class="btn" id="exportDBBtn">Export database</button>
+      </div>
       <details class="config-danger-details">
         <summary class="config-danger-summary">Danger Zone</summary>
         <div class="config-danger-body">
-          <button type="button" class="btn danger" id="resetDBBtn">Delete all data</button>
-          <span class="config-danger-note">Permanently deletes all foods, meals, and goals.</span>
+          <div>
+            <button type="button" class="btn danger" id="importDBBtn">Import database</button>
+            <input type="file" id="importDBFile" accept=".json" class="hidden">
+            <div class="config-danger-note">Replaces all data with a backup file. Cannot be undone.</div>
+          </div>
+          <div>
+            <button type="button" class="btn danger" id="resetDBBtn">Delete all data</button>
+            <div class="config-danger-note">Permanently deletes all foods, meals, and goals.</div>
+          </div>
         </div>
       </details>
     </div>
