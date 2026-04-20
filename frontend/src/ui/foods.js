@@ -112,6 +112,7 @@ export function setupFoods(){
         <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
         <div class="actions">
           <button class="btn small ghost edit">✏️ Edit</button>
+          <button class="btn small ghost share">🔗 Share</button>
           <button class="btn small ghost ${archiveClass}">${archiveLabel}</button>
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
@@ -129,6 +130,15 @@ export function setupFoods(){
     if (target.classList.contains('edit')){
       setFoodForm(f);
       window.scrollTo({top:0, behavior:'smooth'});
+      return;
+    }
+    if (target.classList.contains('share')){
+      if (!f) { return; }
+      const data = { n: f.name, r: f.refLabel, k: f.kcal, p: f.prot, c: f.carbs, f: f.fats };
+      const encoded = btoa(JSON.stringify(data));
+      const url = `${location.origin}${location.pathname}?f=${encoded}`;
+      await navigator.clipboard.writeText(url);
+      $.toast('Link copied!');
       return;
     }
     if (target.classList.contains('archive')){
@@ -261,4 +271,38 @@ export function setupFoods(){
   });
 
   void renderFoods();
+
+  /**
+   * Pre-fill the food form from a ?food= base64 URL param, switching to edit
+   * mode if a food with the same name already exists.
+   */
+  async function handleFoodFromURL(){
+    const param = new URLSearchParams(location.search).get('f');
+    if (!param) { return; }
+    history.replaceState(null, '', location.pathname);
+    let data;
+    try {
+      data = JSON.parse(atob(param));
+    } catch {
+      console.warn('Invalid food share param — could not decode');
+      return;
+    }
+    $.showPage('foods');
+    const name = String(data.n ?? '');
+    const matches = await Foods.list({ search: name, status: 'all' });
+    const existing = matches.find(f => f.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (existing) {
+      setFoodForm(existing);
+    } else {
+      clearFoodForm();
+      foodName.value = name;
+      foodRefLabel.value = String(data.r ?? '');
+      foodKcal.value = data.k != null ? String(data.k) : '';
+      foodProt.value = data.p != null ? String(data.p) : '';
+      foodCarb.value = data.c != null ? String(data.c) : '';
+      foodFat.value = data.f != null ? String(data.f) : '';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  void handleFoodFromURL();
 }
