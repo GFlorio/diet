@@ -52,17 +52,6 @@ def make_base_icon(size: int = 1024) -> Image.Image:
     # Arc covers 330° of the circle (clockwise from arc_start to arc_end)
     draw.arc(bbox, start=arc_start, end=arc_end, fill=BRAND_PRIMARY, width=ring_thickness)
 
-    # Round end-caps at both arc termini for a clean finish
-    cap_r = ring_thickness // 2
-    for angle_deg in (arc_start, arc_end):
-        angle_rad = math.radians(angle_deg)
-        cap_x = cx + ring_r * math.cos(angle_rad)
-        cap_y = cy + ring_r * math.sin(angle_rad)
-        draw.ellipse(
-            (cap_x - cap_r, cap_y - cap_r, cap_x + cap_r, cap_y + cap_r),
-            fill=BRAND_PRIMARY,
-        )
-
     return im
 
 
