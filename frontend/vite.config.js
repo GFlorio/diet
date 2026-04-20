@@ -23,10 +23,10 @@ export default defineConfig({
         theme_color: '#0ea5e9',
         description: 'Offline-first meal logger',
         icons: [
-          { src: '/icons/app-icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/app-icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-          { src: '/icons/favicon.ico', sizes: '64x64 32x32 24x24', type: 'image/x-icon' }
+          { src: `${base}icons/app-icon-192.png`, sizes: '192x192', type: 'image/png' },
+          { src: `${base}icons/app-icon-512.png`, sizes: '512x512', type: 'image/png' },
+          { src: `${base}icons/maskable-512.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: `${base}icons/favicon.ico`, sizes: '64x64 32x32 24x24', type: 'image/x-icon' }
         ]
       },
       // Explicitly include static icon assets so they are copied to dist and not served via SPA fallback.
