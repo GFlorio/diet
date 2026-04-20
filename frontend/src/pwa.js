@@ -45,7 +45,7 @@ export function setupPWA(){
                 duration: 10000,
                 action: {
                     label: 'Reload',
-                    callback: () => navigator.serviceWorker?.controller?.postMessage({ type: 'SKIP_WAITING' }),
+                    callback: () => updateSW(true),
                 },
             });
         },
