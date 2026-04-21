@@ -137,6 +137,14 @@ export const isoToday = () => localISO(new Date());
 export const toISO = (d) => localISO(new Date(d));
 
 /**
+ * Convert an ISO date string (YYYY-MM-DD) to a local midnight Date object.
+ * Use this instead of `new Date(\`${iso}T00:00:00\`)` throughout the codebase.
+ * @param {string} iso
+ * @returns {Date}
+ */
+export const localDate = (iso) => new Date(`${iso}T00:00:00`);
+
+/**
  * Returns the current timestamp in milliseconds.
  * @returns {number}
  */
@@ -167,6 +175,30 @@ export const esc = (s = '') => (`${s}`).replace(/[&<>"']/g, c => ({
 	"'": '&#39;'
 }[c] || ''));
 
+/** Media query: device supports hover (i.e. not a touch-only device). */
+export const MEDIA_HOVER = '(hover: hover)';
+/** Media query: device uses a coarse pointer (touch screen). */
+export const MEDIA_COARSE_POINTER = '(pointer: coarse)';
+
+/**
+ * Returns a zero-initialized macros accumulator object.
+ * @returns {{ kcal: number, prot: number, carbs: number, fats: number }}
+ */
+export const zeroMacros = () => ({ kcal: 0, prot: 0, carbs: 0, fats: 0 });
+
+/**
+ * Add a snapshot's macros scaled by multiplier into an accumulator in place.
+ * @param {{ kcal: number, prot: number, carbs: number, fats: number }} acc
+ * @param {{ kcal: number, prot: number, carbs: number, fats: number }} macros
+ * @param {number} multiplier
+ */
+export function addScaledMacros(acc, macros, multiplier) {
+  acc.kcal  += macros.kcal  * multiplier;
+  acc.prot  += macros.prot  * multiplier;
+  acc.carbs += macros.carbs * multiplier;
+  acc.fats  += macros.fats  * multiplier;
+}
+
 /**
  * @typedef {{ label: string, callback: () => void }} ToastAction
  */
@@ -190,7 +222,7 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
   if (action) {
     const btn = document.createElement('button');
     btn.className = 'btn small';
-    const isDesktop = window.matchMedia('(hover: hover)').matches;
+    const isDesktop = window.matchMedia(MEDIA_HOVER).matches;
     btn.textContent = isDesktop ? `${action.label} (Y)` : action.label;
     btn.addEventListener('click', () => {
       action.callback();

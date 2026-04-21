@@ -12,6 +12,18 @@ vi.mock('../utils.js', () => ({
   toISO: vi.fn((d) => d.toISOString().slice(0, 10)),
   isoToday: vi.fn(() => '2024-02-07'),
   randomUUID: vi.fn(() => 'test-uuid'),
+  localDate: (/** @type {string} */ iso) => new Date(`${iso}T00:00:00`),
+  zeroMacros: () => ({ kcal: 0, prot: 0, carbs: 0, fats: 0 }),
+  addScaledMacros: (
+    /** @type {{ kcal: number, prot: number, carbs: number, fats: number }} */ acc,
+    /** @type {{ kcal: number, prot: number, carbs: number, fats: number }} */ macros,
+    /** @type {number} */ multiplier,
+  ) => {
+    acc.kcal  += macros.kcal  * multiplier;
+    acc.prot  += macros.prot  * multiplier;
+    acc.carbs += macros.carbs * multiplier;
+    acc.fats  += macros.fats  * multiplier;
+  },
 }));
 
 vi.mock('../data-meals.js', () => ({

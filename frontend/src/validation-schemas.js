@@ -9,6 +9,11 @@ import {
     validateAndCollect,
 } from './validation-core.js';
 
+const NAME_MAX_LEN   = 120;
+const KCAL_MAX       = 5000;
+const MACRO_G_MAX    = 1000;
+const MULTIPLIER_MAX = 100;
+
 /** @param {unknown} v */
 function nonEmptyString(v) {
     return string(v, { minLen: 1 });
@@ -16,10 +21,10 @@ function nonEmptyString(v) {
 
 /** @param {unknown} val */
 const validateName = (val) => string(val, {
-    minLen: 1, maxLen: 120, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u,
+    minLen: 1, maxLen: NAME_MAX_LEN, pattern: /^[\p{L}\p{N}\s'\-_.()]+$/u,
 });
 /** @param {unknown} val */
-const validateRefLabel = (val) => string(val, { minLen: 1, maxLen: 120 });
+const validateRefLabel = (val) => string(val, { minLen: 1, maxLen: NAME_MAX_LEN });
 
 /**
  * @typedef {import('./data.js').Food} Food
@@ -42,10 +47,10 @@ function macros(v){
     }
     const o = /** @type {Record<string, unknown>} */ (v);
     const res = validateAndCollect({
-        kcal: () => Math.round(number(o.kcal, { min: 0, max: 5000 })),
-        prot: () => number(o.prot, { min: 0, max: 1000 }),
-        carbs: () => number(o.carbs, { min: 0, max: 1000 }),
-        fats: () => number(o.fats, { min: 0, max: 1000 }),
+        kcal: () => Math.round(number(o.kcal, { min: 0, max: KCAL_MAX })),
+        prot: () => number(o.prot, { min: 0, max: MACRO_G_MAX }),
+        carbs: () => number(o.carbs, { min: 0, max: MACRO_G_MAX }),
+        fats: () => number(o.fats, { min: 0, max: MACRO_G_MAX }),
     });
     return /** @type {Macros} */ (res);
 }
@@ -161,7 +166,7 @@ function meal(v){
     try { out.foodSnapshot = foodSnapshot(o.foodSnapshot); }
     catch (e) { collectFieldsFromError(e, bad, 'foodSnapshot'); }
 
-    try { out.multiplier = number(o.multiplier, { min: 0, max: 100 }); }
+    try { out.multiplier = number(o.multiplier, { min: 0, max: MULTIPLIER_MAX }); }
     catch (e) { collectFieldsFromError(e, bad, 'multiplier'); }
 
     try { out.date = isoDate(o.date); }
@@ -192,7 +197,7 @@ function mealCreate(v){
     try { out.food = food(o.food); }
     catch (e) { collectFieldsFromError(e, bad, 'food'); }
 
-    try { out.multiplier = number(o.multiplier, { min: 0, max: 100 }); }
+    try { out.multiplier = number(o.multiplier, { min: 0, max: MULTIPLIER_MAX }); }
     catch (e) { collectFieldsFromError(e, bad, 'multiplier'); }
 
     try { out.date = isoDate(o.date); }
@@ -218,10 +223,10 @@ function foodPatch(patch){
     const validators = /** @type {Record<string, () => any>} */({});
     if ('name' in p) {validators.name = () => validateName(p.name);}
     if ('refLabel' in p) {validators.refLabel = () => validateRefLabel(p.refLabel);}
-    if ('kcal' in p) {validators.kcal = () => Math.round(number(p.kcal, { min: 0, max: 5000 }));}
-    if ('prot' in p) {validators.prot = () => number(p.prot, { min: 0, max: 1000 });}
-    if ('carbs' in p) {validators.carbs = () => number(p.carbs, { min: 0, max: 1000 });}
-    if ('fats' in p) {validators.fats = () => number(p.fats, { min: 0, max: 1000 });}
+    if ('kcal' in p) {validators.kcal = () => Math.round(number(p.kcal, { min: 0, max: KCAL_MAX }));}
+    if ('prot' in p) {validators.prot = () => number(p.prot, { min: 0, max: MACRO_G_MAX });}
+    if ('carbs' in p) {validators.carbs = () => number(p.carbs, { min: 0, max: MACRO_G_MAX });}
+    if ('fats' in p) {validators.fats = () => number(p.fats, { min: 0, max: MACRO_G_MAX });}
     if ('archived' in p) {validators.archived = () => boolean(p.archived);}
     return /** @type {Partial<Food>} */ (validateAndCollect(validators, 'Invalid fields'));
 }

@@ -2,6 +2,23 @@ import { Meals } from './data-meals.js';
 import * as db from './db.js';
 import * as $ from './utils.js';
 
+/** % deviation at which status transitions from ok → warn. */
+export const STATUS_OK_PCT   = 0.05;
+/** % deviation at which status transitions from warn → bad. */
+export const STATUS_WARN_PCT = 0.10;
+
+/** Kcal per gram of protein (and carbohydrate). */
+export const KCAL_PER_G_PROTEIN = 4;
+/** Kcal per gram of carbohydrate. */
+export const KCAL_PER_G_CARBS   = 4;
+/** Kcal per gram of fat. */
+export const KCAL_PER_G_FAT     = 9;
+
+/** Number of days in the sliding average window. */
+export const WINDOW_DAYS = 7;
+/** Minimum logged days before the data-warning flag is cleared. */
+const WINDOW_MIN_DAYS = 4;
+
 /**
  * @typedef {import('./db.js').GoalRecord} GoalRecord
  *
@@ -120,8 +137,8 @@ export function computeStatus(consumed, target) {
   if (target === null) { return 'none'; }
   if (target === 0) { return consumed === 0 ? 'ok' : 'bad'; }
   const pct = Math.abs(consumed - target) / target;
-  if (pct <= 0.05) { return 'ok'; }
-  if (pct <= 0.10) { return 'warn'; }
+  if (pct <= STATUS_OK_PCT)   { return 'ok'; }
+  if (pct <= STATUS_WARN_PCT) { return 'warn'; }
   return 'bad';
 }
 
@@ -132,9 +149,9 @@ export function computeStatus(consumed, target) {
  */
 export function derivedGrams(goals) {
   return {
-    protG:  Math.round((goals.kcal * goals.protPct  / 100) / 4),
-    carbsG: Math.round((goals.kcal * goals.carbsPct / 100) / 4),
-    fatG:   Math.round((goals.kcal * goals.fatPct   / 100) / 9),
+    protG:  Math.round((goals.kcal * goals.protPct  / 100) / KCAL_PER_G_PROTEIN),
+    carbsG: Math.round((goals.kcal * goals.carbsPct / 100) / KCAL_PER_G_CARBS),
+    fatG:   Math.round((goals.kcal * goals.fatPct   / 100) / KCAL_PER_G_FAT),
   };
 }
 
@@ -148,8 +165,8 @@ export function derivedGrams(goals) {
 export async function computeWindowVM(todayISO, goals) {
   if (!goals) { return null; }
 
-  const d = new Date(`${todayISO}T00:00:00`);
-  d.setDate(d.getDate() - 6);
+  const d = $.localDate(todayISO);
+  d.setDate(d.getDate() - (WINDOW_DAYS - 1));
   const fromISO = $.toISO(d);
 
   const meals = await Meals.listRange(fromISO, todayISO);
@@ -157,39 +174,26 @@ export async function computeWindowVM(todayISO, goals) {
   /** @type {Record<string, import('./db.js').Macros>} */
   const byDay = {};
   for (const m of meals) {
-    if (!byDay[m.date]) { byDay[m.date] = { kcal: 0, prot: 0, carbs: 0, fats: 0 }; }
-    byDay[m.date].kcal  += m.foodSnapshot.kcal  * m.multiplier;
-    byDay[m.date].prot  += m.foodSnapshot.prot  * m.multiplier;
-    byDay[m.date].carbs += m.foodSnapshot.carbs * m.multiplier;
-    byDay[m.date].fats  += m.foodSnapshot.fats  * m.multiplier;
+    if (!byDay[m.date]) { byDay[m.date] = $.zeroMacros(); }
+    $.addScaledMacros(byDay[m.date], m.foodSnapshot, m.multiplier);
   }
 
   const dayKeys = Object.keys(byDay);
   const windowDays = dayKeys.length;
   if (windowDays === 0) { return null; }
 
-  // Separate today's intake from the previous 6 days.
+  // Separate today's intake from the previous days.
   // prevSum uses 0 for any prior day with no meals logged.
-  const todayMacros = byDay[todayISO] ?? { kcal: 0, prot: 0, carbs: 0, fats: 0 };
-  const prevSum = dayKeys
-    .filter(k => k !== todayISO)
-    .reduce(
-      (a, k) => ({
-        kcal:  a.kcal  + byDay[k].kcal,
-        prot:  a.prot  + byDay[k].prot,
-        carbs: a.carbs + byDay[k].carbs,
-        fats:  a.fats  + byDay[k].fats,
-      }),
-      { kcal: 0, prot: 0, carbs: 0, fats: 0 },
-    );
+  const todayMacros = byDay[todayISO] ?? $.zeroMacros();
+  const prevSum = $.zeroMacros();
+  for (const k of dayKeys) {
+    if (k !== todayISO) { $.addScaledMacros(prevSum, byDay[k], 1); }
+  }
 
   // Average uses only logged days as the denominator (days with no meals are excluded).
-  const totalSum = {
-    kcal:  prevSum.kcal  + todayMacros.kcal,
-    prot:  prevSum.prot  + todayMacros.prot,
-    carbs: prevSum.carbs + todayMacros.carbs,
-    fats:  prevSum.fats  + todayMacros.fats,
-  };
+  const totalSum = $.zeroMacros();
+  $.addScaledMacros(totalSum, prevSum, 1);
+  $.addScaledMacros(totalSum, todayMacros, 1);
   const avg = {
     kcal:  totalSum.kcal  / windowDays,
     prot:  totalSum.prot  / windowDays,
@@ -207,18 +211,18 @@ export async function computeWindowVM(todayISO, goals) {
   // clamped to ±15% of the daily target so the suggestion stays reasonable.
   // If today has no meals yet, eating today adds a new day, so the effective
   // denominator is windowDays + 1 rather than windowDays.
-  const CLAMP = 0.15;
+  const IDEAL_CLAMP = 0.15;
   const todayLogged = todayISO in byDay;
   const effectiveDays = todayLogged ? windowDays : windowDays + 1;
   /** @param {number} prevSumVal @param {number} target @returns {number} */
   const idealToday = (prevSumVal, target) => {
     const ideal = effectiveDays * target - prevSumVal;
-    return Math.max(target * (1 - CLAMP), Math.min(target * (1 + CLAMP), ideal));
+    return Math.max(target * (1 - IDEAL_CLAMP), Math.min(target * (1 + IDEAL_CLAMP), ideal));
   };
 
   return {
     windowDays,
-    dataWarning: windowDays < 4,
+    dataWarning: windowDays < WINDOW_MIN_DAYS,
     calories: { avgConsumed: avg.kcal,  target: goals.kcal, status: computeStatus(avg.kcal,  goals.kcal), pctOff: pctOff(avg.kcal,  goals.kcal), idealToday: idealToday(prevSum.kcal,  goals.kcal)  },
     protein:  { avgConsumed: avg.prot,  target: g.protG,    status: computeStatus(avg.prot,  g.protG),    pctOff: pctOff(avg.prot,  g.protG),    idealToday: idealToday(prevSum.prot,  g.protG)    },
     carbs:    { avgConsumed: avg.carbs, target: g.carbsG,   status: computeStatus(avg.carbs, g.carbsG),   pctOff: pctOff(avg.carbs, g.carbsG),   idealToday: idealToday(prevSum.carbs, g.carbsG)   },

@@ -12,6 +12,10 @@ import * as V from '../validation.js';
  * @typedef {{ consumed: number, target: number|null, remaining: number|null, status: 'none'|'ok'|'warn'|'bad' }} MacroVM
  */
 
+const SWIPE_ANIM_MS   = 260;
+const FRECENCY_DAYS   = 90;
+const QUICK_LIST_LIMIT = 3;
+
 /** Initialize meals page UI and handlers. */
 export function setupMeals(){
   const dayLabel    = $.html($.id('dayLabel'));
@@ -25,7 +29,6 @@ export function setupMeals(){
   const mealsPage   = $.html($.id('page-meals'));
   const quickAddCard = $.html($.id('quickAddCard'));
   const mealsCard   = $.html($.id('mealsCard'));
-  const SWIPE_ANIM_MS = 260;
 
   const mealsUiState = {
     mode: /** @type {'overview'|'entry'|'spacious'} */ ('overview'),
@@ -56,14 +59,13 @@ export function setupMeals(){
    * @returns {string}
    */
   function fmtHuman(iso){
-    const d = new Date(`${iso}T00:00:00`);
-    return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    return $.localDate(iso).toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
 
   function updateHeader(){
     dayLabel.dataset.iso  = curDate;
     dayLabel.textContent  = fmtHuman(curDate);
-    const d    = new Date(`${curDate}T00:00:00`);
+    const d    = $.localDate(curDate);
     const prev = new Date(d); prev.setDate(d.getDate()-1);
     const next = new Date(d); next.setDate(d.getDate()+1);
     prevDayBox.textContent = fmtHuman($.toISO(prev));
@@ -82,7 +84,7 @@ export function setupMeals(){
   }
 
   function shiftDate(/** @type {number} */ delta){
-    const d = new Date(`${curDate}T00:00:00`);
+    const d = $.localDate(curDate);
     d.setDate(d.getDate() + delta);
     curDate = $.toISO(d);
     updateHeader();
@@ -131,11 +133,9 @@ export function setupMeals(){
     if (document.visibilityState === 'visible') { updateTodayBtn(); }
   });
 
-  const FRECENCY_DAYS = 90;
-
   /**
    * Build quantity-adjusted macro contribution line HTML.
-   * Each segment is colored: green up to 5% over goal, yellow up to 15%, red beyond.
+   * Each segment is colored: green up to 5% over goal, yellow up to 10%, red beyond.
    * @param {import('../data.js').Food} f
    * @param {number} qty
    * @param {Macros} totals
@@ -152,8 +152,8 @@ export function setupMeals(){
     const statusFor = (consumed, delta, goal) => {
       if (!goal) {return 'none';}
       const after = consumed + delta;
-      if (after <= goal * 1.05) {return 'ok';}
-      if (after <= goal * 1.15) {return 'warn';}
+      if (after <= goal * (1 + Goals.STATUS_OK_PCT))   {return 'ok';}
+      if (after <= goal * (1 + Goals.STATUS_WARN_PCT))  {return 'warn';}
       return 'bad';
     };
 
@@ -184,14 +184,14 @@ export function setupMeals(){
   async function renderQuickList(){
     const q        = quickSearch.value.trim();
     const todayISO = $.isoToday();
-    const sinceDate = new Date(`${todayISO}T00:00:00`);
+    const sinceDate = $.localDate(todayISO);
     sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
     const sinceISO = $.toISO(sinceDate);
     const scores   = await Meals.frecencyScores(sinceISO, todayISO);
     const foods    = await Foods.list({ search: q, status: 'active', scores });
     const totals   = computeTotals(currentMeals);
 
-    quickList.innerHTML = foods.slice(0, 3).map(f => `
+    quickList.innerHTML = foods.slice(0, QUICK_LIST_LIMIT).map(f => `
       <div class="item food-card" data-id="${f.id}">
         <div class="food-card-header">
           <button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button>
@@ -233,7 +233,7 @@ export function setupMeals(){
 
   quickSearch.addEventListener('focus', () => {
     mealsUiState.quickSearchFocused = true;
-    const touchDevice    = window.matchMedia('(pointer: coarse)').matches;
+    const touchDevice    = window.matchMedia($.MEDIA_COARSE_POINTER).matches;
     const quickAddBottom = quickAddCard.getBoundingClientRect().bottom;
     if (!touchDevice && quickAddBottom <= window.innerHeight) {
       setMealsMode('spacious');
@@ -367,13 +367,9 @@ export function setupMeals(){
    * @returns {Macros}
    */
   function computeTotals(meals){
-    return meals.reduce((a, m)=>{
-      a.kcal  += m.foodSnapshot.kcal  * m.multiplier;
-      a.prot  += m.foodSnapshot.prot  * m.multiplier;
-      a.carbs += m.foodSnapshot.carbs * m.multiplier;
-      a.fats  += m.foodSnapshot.fats  * m.multiplier;
-      return a;
-    }, {kcal:0,prot:0,carbs:0,fats:0});
+    const total = $.zeroMacros();
+    for (const m of meals) { $.addScaledMacros(total, m.foodSnapshot, m.multiplier); }
+    return total;
   }
 
   /**
@@ -437,7 +433,7 @@ export function setupMeals(){
           <span class="unit">kcal avg</span>
         </div>`;
       heroExtras = `
-        <div class="summary-hero-subtext status-warn">${wvm.windowDays}/7 days logged</div>
+        <div class="summary-hero-subtext status-warn">${wvm.windowDays}/${Goals.WINDOW_DAYS} days logged</div>
         <div class="summary-hero-subtext"><span class="muted">${$.fmtNum(vm.calories.consumed, 0)} kcal today</span> · ${deltaStr(calDelta, 'kcal')}</div>
         <div class="summary-hero-bar">
           <div class="summary-hero-bar-fill ${st}" style="width:${todayPct}%"></div>
@@ -509,7 +505,7 @@ export function setupMeals(){
       return `
         <div class="macro-card ${cls}">
           <div class="macro-label">${label}</div>
-          <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+          <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> g</span></div>
         </div>`;
     };
 

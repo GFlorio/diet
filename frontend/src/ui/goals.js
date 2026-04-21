@@ -2,6 +2,8 @@ import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
 import * as $ from '../utils.js';
 
+const NUM_WEEKS = 16;
+
 /**
  * @typedef {import('../data-goals.js').GoalRecord} GoalRecord
  */
@@ -207,9 +209,9 @@ export function setupGoals() {
       fatPctEl.textContent   = `${fatPct}%`;
 
       if (maintenanceVal > 0) {
-        protGEl.textContent  = `${Math.round(targetKcal * protPct  / 100 / 4)} g`;
-        carbsGEl.textContent = `${Math.round(targetKcal * carbsPct / 100 / 4)} g`;
-        fatGEl.textContent   = `${Math.round(targetKcal * fatPct   / 100 / 9)} g`;
+        protGEl.textContent  = `${Math.round(targetKcal * protPct  / 100 / Goals.KCAL_PER_G_PROTEIN)} g`;
+        carbsGEl.textContent = `${Math.round(targetKcal * carbsPct / 100 / Goals.KCAL_PER_G_CARBS)} g`;
+        fatGEl.textContent   = `${Math.round(targetKcal * fatPct   / 100 / Goals.KCAL_PER_G_FAT)} g`;
       } else {
         protGEl.textContent = carbsGEl.textContent = fatGEl.textContent = '— g';
       }
@@ -369,7 +371,7 @@ export function setupGoals() {
   function showTooltip(dayEl) {
     if (!tooltipEl) { return; }
     const { iso, status, kcal, goal, goalSince } = dayEl.dataset;
-    const date    = new Date(`${iso ?? ''}T00:00:00`);
+    const date    = $.localDate(iso ?? '');
     const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
     const STATUS_LABELS = /** @type {Record<string,string>} */ ({ ok: 'On target', warn: 'Close', bad: 'Off target' });
 
@@ -386,7 +388,7 @@ export function setupGoals() {
         body += `<div class="cal-tt-status cal-tt-${status}">${STATUS_LABELS[status ?? '']}</div>`;
       }
       if (goalSince) {
-        const sinceDate = new Date(`${goalSince}T00:00:00`);
+        const sinceDate = $.localDate(goalSince);
         const sinceStr  = sinceDate.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
         body += `<div class="cal-tt-muted">Goal since ${$.esc(sinceStr)}</div>`;
       }
@@ -423,10 +425,9 @@ export function setupGoals() {
     const allGoalRecords = await Goals.list();
     const today     = $.isoToday();
     const todayGoal = Goals.goalForDate(allGoalRecords, today);
-    const NUM_WEEKS = 16;
 
     // Find the Monday of the week that started NUM_WEEKS-1 weeks ago
-    const todayDate       = new Date(`${today}T00:00:00`);
+    const todayDate       = $.localDate(today);
     const dayOfWeek       = todayDate.getDay(); // 0=Sun…6=Sat
     const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const startDate       = new Date(todayDate);
@@ -468,7 +469,7 @@ export function setupGoals() {
     // Month header row: one cell per week column, label shown when month changes
     let lastMonth = '';
     const monthCells = weeks.map(week => {
-      const monthName  = new Date(`${week[0].iso}T00:00:00`).toLocaleString('en', { month: 'short' });
+      const monthName  = $.localDate(week[0].iso).toLocaleString('en', { month: 'short' });
       const monthLabel = monthName !== lastMonth ? monthName : '';
       lastMonth = monthName;
       return `<div class="cal-month-cell">${$.esc(monthLabel)}</div>`;
@@ -517,7 +518,7 @@ export function setupGoals() {
     if (!grid) { return; }
 
     // Desktop: hover (only on devices that support hover, to avoid synthetic mouse events on touch)
-    if (window.matchMedia('(hover: hover)').matches) {
+    if (window.matchMedia($.MEDIA_HOVER).matches) {
       grid.addEventListener('mouseover', e => {
         const day = /** @type {HTMLElement} */ (e.target).closest('.cal-day[data-iso]');
         if (day) { showTooltip(/** @type {HTMLElement} */ (day)); }
