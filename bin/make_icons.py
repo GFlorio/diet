@@ -82,6 +82,7 @@ def main() -> None:
         "favicon-32.png": (32, False),
         "favicon-16.png": (16, False),
         "maskable-512.png": (512, False),
+        "maskable-192.png": (192, False),
     }
 
     for name, (size, opaque) in outputs.items():
