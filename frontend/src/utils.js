@@ -51,7 +51,7 @@ export function showPage(page){
  * @param {number} fats
  */
 export function nutrMeta(kcal, prot, carbs, fats){
-  return `${fmtNum(kcal,0)} kcal · Prot ${fmtNum(prot)}g · Carbs ${fmtNum(carbs)}g · Fat ${fmtNum(fats)}g`;
+  return `${fmtNum(kcal,0)} kcal · Protein ${fmtNum(prot)} g · Carbs ${fmtNum(carbs)} g · Fat ${fmtNum(fats)} g`;
 }
 
 /**

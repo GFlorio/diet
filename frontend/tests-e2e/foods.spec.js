@@ -56,7 +56,7 @@ test.describe('Foods page', () => {
       const updatedFoods = await getAllFromStore(page, 'foods');
       expect(updatedFoods[0].prot).toBe(32);
     }).toPass();
-    await expect(page.locator('#foodsList')).toContainText('Prot 32g');
+    await expect(page.locator('#foodsList')).toContainText('Protein 32 g');
   });
 
   test('archive food with no meals prompts to delete permanently, and undo restores it', async ({ page }) => {

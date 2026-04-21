@@ -172,9 +172,9 @@ export function setupMeals(){
 
     return [
       seg(dKcal, ' kcal', kcalSt),
-      seg(dProt, 'g protein', protSt),
-      seg(dCarbs, 'g carbs', carbsSt),
-      seg(dFats, 'g fat', fatSt),
+      seg(dProt, ' g protein', protSt),
+      seg(dCarbs, ' g carbs', carbsSt),
+      seg(dFats, ' g fat', fatSt),
     ].join('');
   }
 

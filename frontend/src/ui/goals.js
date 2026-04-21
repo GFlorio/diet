@@ -585,7 +585,7 @@ export function setupGoals() {
               style="margin-left:auto;min-width:36px;min-height:36px;color:var(--muted)"
               ${isLast ? 'data-last="true"' : ''}>🗑</button>
           </div>
-          <div class="goal-history-summary">${$.fmtNum(r.kcal, 0)} kcal · ${r.protPct}P / ${r.carbsPct}C / ${r.fatPct}F · ${g.protG}g prot</div>
+          <div class="goal-history-summary">${$.fmtNum(r.kcal, 0)} kcal · ${r.protPct}P / ${r.carbsPct}C / ${r.fatPct}F · ${g.protG} g protein</div>
           <div class="goal-history-date-error hidden" style="font-size:12px;color:var(--bad);margin-top:4px"></div>
         </div>`;
     };
