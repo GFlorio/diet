@@ -1,4 +1,4 @@
-import { canInstallPWA, isPWAInstalled, promptInstall } from '../pwa.js';
+import { canInstallPWA, isPWAInstalled, onInstallabilityChange, promptInstall } from '../pwa.js';
 import * as $ from '../utils.js'
 import * as db from '../db.js';
 import { setupFoods } from './foods.js';
@@ -25,7 +25,6 @@ export function setupConfigModal(){
 	const configBtn = $.button($.id('configBtn'));
 	const closeBtn = $.button($.id('configModalClose'));
 	const installBtn = $.button($.id('installPWABtn'));
-	const installNote = $.html($.id('installPWANote'));
 
 	// Apply stored theme on load
 	applyTheme(getStoredTheme());
@@ -42,20 +41,23 @@ export function setupConfigModal(){
 
 	// PWA install button
 	installBtn.addEventListener('click', async () => {
-		const accepted = await promptInstall();
-		if (accepted) {
-			await refreshStatus();
+		if (canInstallPWA()) {
+			const accepted = await promptInstall();
+			if (accepted) { await refreshStatus(); }
+		} else {
+			$.toast('To install: use the install icon in your browser\'s address bar, or the browser menu → "Install app" / "Add to Home Screen".');
 		}
 	});
+
+	// Refresh install status whenever the browser changes install availability
+	onInstallabilityChange(() => void refreshStatus());
 
 	async function refreshStatus() {
 		// PWA installed status
 		const pwaDot = /** @type {HTMLElement} */ ($.id('statusPWA').querySelector('.status-dot'));
-		const installed = isPWAInstalled();
+		const installed = await isPWAInstalled();
 		pwaDot.className = `status-dot ${installed ? 'ok' : 'bad'}`;
-		const canInstall = canInstallPWA();
-		installBtn.classList.toggle('hidden', installed || !canInstall);
-		installNote.classList.toggle('hidden', installed || canInstall);
+		installBtn.classList.toggle('hidden', installed);
 
 		// Persistent storage status
 		const storageDot = /** @type {HTMLElement} */ ($.id('statusStorage').querySelector('.status-dot'));

@@ -11,16 +11,39 @@ import * as $ from './utils.js';
 
 /** @type {BeforeInstallPromptEvent|null} */
 let _deferredPrompt = null;
+/** @type {(() => void)|null} */
+let _onInstallabilityChange = null;
 
-/** @returns {boolean} */
-export function isPWAInstalled() {
-    return window.matchMedia('(display-mode: standalone)').matches ||
-        /** @type {any} */ (window.navigator).standalone === true;
+/** @returns {Promise<boolean>} */
+export async function isPWAInstalled() {
+    if (window.matchMedia('(display-mode: standalone)').matches ||
+        /** @type {any} */ (window.navigator).standalone === true) {
+        return true;
+    }
+    // Detect install even when running in a browser tab (Chrome/Edge desktop+Android).
+    if ('getInstalledRelatedApps' in navigator) {
+        try {
+            const apps = await /** @type {any} */ (navigator).getInstalledRelatedApps();
+            if (apps.length > 0) { return true; }
+        } catch {
+            // API unavailable in this context (e.g. non-HTTPS), fall through.
+        }
+    }
+    return false;
 }
 
 /** @returns {boolean} */
 export function canInstallPWA() {
     return _deferredPrompt !== null;
+}
+
+/**
+ * Register a callback to be called whenever install availability changes
+ * (i.e. when beforeinstallprompt or appinstalled fires).
+ * @param {() => void} cb
+ */
+export function onInstallabilityChange(cb) {
+    _onInstallabilityChange = cb;
 }
 
 /** @returns {Promise<boolean>} */
@@ -36,6 +59,14 @@ export function setupPWA(){
     window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         _deferredPrompt = /** @type {BeforeInstallPromptEvent} */ (e);
+        _onInstallabilityChange?.();
+    });
+
+    // User installed via browser UI (not through our prompt button) — clear the
+    // deferred prompt so the install button is hidden on next status refresh.
+    window.addEventListener('appinstalled', () => {
+        _deferredPrompt = null;
+        _onInstallabilityChange?.();
     });
 
     const updateSW = registerSW({
