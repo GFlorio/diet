@@ -11,12 +11,24 @@ function getStoredTheme() {
 	return v === 'light' || v === 'dark' || v === 'auto' ? v : 'auto';
 }
 
+const THEME_COLOR_DARK = '#121214';
+const THEME_COLOR_LIGHT = '#f7fafc';
+
+function syncThemeColor() {
+	const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+	const t = getStoredTheme();
+	const dark = t === 'dark' || (t === 'auto' && isDark);
+	const meta = /** @type {HTMLMetaElement|null} */ (document.querySelector('meta[name="theme-color"]'));
+	if (meta) { meta.content = dark ? THEME_COLOR_DARK : THEME_COLOR_LIGHT; }
+}
+
 /** @param {'auto'|'light'|'dark'} t */
 function applyTheme(t) {
 	document.documentElement.setAttribute('data-theme', t);
 	$.arr('.config-theme-btn').forEach(btn => {
 		$.html(btn).classList.toggle('active', $.html(btn).dataset.theme === t);
 	});
+	syncThemeColor();
 }
 
 /** Setup config modal: theme selection and status report */
@@ -28,6 +40,9 @@ export function setupConfigModal(){
 
 	// Apply stored theme on load
 	applyTheme(getStoredTheme());
+
+	// Keep theme-color in sync when system preference changes (matters for auto mode)
+	window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeColor);
 
 	// Theme buttons
 	$.arr('.config-theme-btn').forEach(btn => {
