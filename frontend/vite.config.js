@@ -3,6 +3,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // When GITHUB_PAGES=true the app is served from a subpath (e.g. /diet/).
 const base = process.env.GITHUB_PAGES ? '/diet/' : '/';
+const siteOrigin = process.env.SITE_ORIGIN ?? '';
 
 export default defineConfig({
   base,
@@ -27,7 +28,12 @@ export default defineConfig({
           { src: `${base}icons/app-icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: `${base}icons/maskable-192.png`, sizes: '192x192', type: 'image/png', purpose: 'maskable' },
           { src: `${base}icons/maskable-512.png`, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ]
+        ],
+        ...(siteOrigin && {
+          related_applications: [
+            { platform: 'webapp', url: `${siteOrigin}${base}manifest.webmanifest` }
+          ]
+        })
       },
       // Explicitly include static icon assets so they are copied to dist and not served via SPA fallback.
       includeAssets: [

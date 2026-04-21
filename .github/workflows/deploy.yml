@@ -33,6 +33,7 @@ jobs:
         run: npm --workspace frontend run build
         env:
           GITHUB_PAGES: 'true'
+          SITE_ORIGIN: 'https://www.gabrielflorio.com'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
