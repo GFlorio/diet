@@ -321,6 +321,16 @@ export function setupMeals(){
       }
     }
   });
+  // Prevent focus from leaving quickSearch when tapping buttons/links in the
+  // quick list. Without this, Chrome closes and reopens the keyboard on every
+  // button tap. HTMLInputElement targets (qty fields) are excluded so they can
+  // still receive focus normally.
+  quickList.addEventListener('mousedown', (e) => {
+    if (!(e.target instanceof HTMLInputElement)) {
+      e.preventDefault();
+    }
+  });
+
   quickList.addEventListener('refresh', renderQuickList);
 
   window.addEventListener('keydown', (e) => {
