@@ -2,6 +2,61 @@ import * as db from './db.js';
 import * as $ from './utils.js';
 
 /**
+ * Minimum Jaccard trigram similarity for a fuzzy word match.
+ * Raise to reduce false positives; lower to catch more typos.
+ */
+const FUZZY_THRESHOLD = 0.4;
+
+/**
+ * Returns the set of all 3-char n-grams in a (pre-lowercased) string,
+ * padded with a leading and trailing space for better boundary matching.
+ * @param {string} str
+ * @returns {Set<string>}
+ */
+function trigrams(str) {
+  const s = ` ${str} `;
+  const grams = new Set();
+  for (let i = 0; i < s.length - 2; i++) {
+    grams.add(s.slice(i, i + 3));
+  }
+  return grams;
+}
+
+/**
+ * Jaccard similarity between two trigram sets (0–1).
+ * @param {Set<string>} a
+ * @param {Set<string>} b
+ * @returns {number}
+ */
+function trigramSimilarity(a, b) {
+  if (a.size === 0 || b.size === 0) { return 0; }
+  let shared = 0;
+  for (const gram of a) { if (b.has(gram)) { shared++; } }
+  return shared / (a.size + b.size - shared);
+}
+
+/**
+ * Scores how well a food haystack matches the given query words.
+ * - 2: all query words appear as direct substrings (word-order tolerant)
+ * - 1: all query words fuzzy-match at least one haystack word via trigrams
+ * - 0: no match
+ * @param {string[]} queryWords  - lowercased tokens from the search query
+ * @param {string}   haystack    - lowercased `name + ' ' + refLabel`
+ * @param {string[]} haystackWords - lowercased word tokens from haystack
+ * @returns {0|1|2}
+ */
+function foodMatchScore(queryWords, haystack, haystackWords) {
+  if (queryWords.every(w => haystack.includes(w))) { return 2; }
+  const haystackGrams = haystackWords.map(trigrams);
+  const allFuzzy = queryWords.every(qw => {
+    if (haystack.includes(qw)) { return true; }
+    const qg = trigrams(qw);
+    return haystackGrams.some(hg => trigramSimilarity(qg, hg) >= FUZZY_THRESHOLD);
+  });
+  return allFuzzy ? 1 : 0;
+}
+
+/**
  * @typedef {import('./db.js').Food} Food
  * @typedef {import('./db.js').Macros} Macros
  */
@@ -48,7 +103,15 @@ export const Foods = {
     if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
     if (search) {
       const q = search.trim().toLowerCase();
-      xs = xs.filter((f) => (`${f.name} ${f.refLabel}`).toLowerCase().includes(q));
+      const queryWords = q.split(/\s+/).filter(Boolean);
+      const withTiers = xs.map(f => {
+        const haystack = `${f.name} ${f.refLabel}`.toLowerCase();
+        const haystackWords = haystack.split(/\W+/).filter(Boolean);
+        return { food: f, tier: foodMatchScore(queryWords, haystack, haystackWords) };
+      }).filter(({ tier }) => tier > 0);
+      // Stable sort: tier-2 (direct) before tier-1 (fuzzy); frecency order preserved within each tier.
+      withTiers.sort((a, b) => b.tier - a.tier);
+      xs = withTiers.map(({ food }) => food);
     }
     return xs;
   },

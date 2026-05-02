@@ -141,6 +141,49 @@ describe('Foods.list — frecency scoring', () => {
   });
 });
 
+describe('Foods.list — fuzzy search', () => {
+  test('matches all query words regardless of order', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Pizza - Cheese', archived: false }),
+      makeFood({ id: 'food:2', name: 'Margherita Pizza', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'cheese pizza', status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('food:1');
+  });
+
+  test('matches foods with small typos via trigram similarity', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Chicken Breast', archived: false }),
+      makeFood({ id: 'food:2', name: 'Beef Steak', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'chiken', status: 'active' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('food:1');
+  });
+
+  test('ranks direct matches before fuzzy matches', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      // food:1 has a typo ("Chiken"), so it is a fuzzy match despite high frecency
+      makeFood({ id: 'food:1', name: 'Chiken Thigh', archived: false }),
+      // food:2 is a direct match with lower frecency
+      makeFood({ id: 'food:2', name: 'Chicken Breast', archived: false }),
+    ]);
+    const scores = new Map([['food:1', 10.0], ['food:2', 1.0]]);
+    const result = await Foods.list({ search: 'chicken', status: 'active', scores });
+    expect(result[0].id).toBe('food:2');
+    expect(result[1].id).toBe('food:1');
+  });
+
+  test('excludes foods with no match even under fuzzy scoring', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Banana', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'steak', status: 'active' });
+    expect(result).toHaveLength(0);
+  });
+});
+
 describe('Foods.byId', () => {
   test('returns undefined when food does not exist', async () => {
     vi.mocked(db.get).mockResolvedValue(undefined);
