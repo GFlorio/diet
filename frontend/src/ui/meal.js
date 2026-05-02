@@ -231,27 +231,45 @@ export function setupMeals(){
     });
   }
 
+  // On mobile, tapping a tabindex="-1" button doesn't shift focus to it, so the
+  // blur→overview timer fires before quickSearch.focus() is restored by the click
+  // handler. Track pointerdown on the card to suppress that spurious mode reset.
+  let blurSuppressed = false;
+  quickAddCard.addEventListener('pointerdown', (e) => {
+    if (e.target !== quickSearch) {
+      blurSuppressed = true;
+      setTimeout(() => { blurSuppressed = false; }, 400);
+    }
+  });
+
   quickSearch.addEventListener('focus', () => {
+    blurSuppressed = false;
     mealsUiState.quickSearchFocused = true;
     const touchDevice    = window.matchMedia($.MEDIA_COARSE_POINTER).matches;
     const quickAddBottom = quickAddCard.getBoundingClientRect().bottom;
     if (!touchDevice && quickAddBottom <= window.innerHeight) {
       setMealsMode('spacious');
     } else {
+      const wasEntry = mealsUiState.mode === 'entry';
       setMealsMode('entry');
-      if (touchDevice && window.visualViewport) {
-        window.visualViewport.addEventListener('resize', () => {
+      // Only scroll into position when first entering entry mode. On re-focus
+      // (e.g. after tapping a quick-add button) the keyboard is already up and
+      // the user's scroll position should be left alone.
+      if (!wasEntry) {
+        if (touchDevice && window.visualViewport) {
+          window.visualViewport.addEventListener('resize', () => {
+            dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, { once: true });
+        } else {
           dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, { once: true });
-      } else {
-        dayTotals.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
     }
   });
   quickSearch.addEventListener('blur', () => {
     mealsUiState.quickSearchFocused = false;
     window.setTimeout(() => {
-      if (!mealsUiState.quickSearchFocused && !quickAddCard.contains(document.activeElement)) {
+      if (!mealsUiState.quickSearchFocused && !quickAddCard.contains(document.activeElement) && !blurSuppressed) {
         setMealsMode('overview');
       }
     }, 120);
