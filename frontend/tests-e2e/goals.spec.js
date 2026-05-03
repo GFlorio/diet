@@ -191,7 +191,7 @@ test.describe('Goals: daily status on Meals page', () => {
     // Assert: protein card shows a status class (any of ok/warn/bad)
     const protCard = page.locator('.macro-card.macro-protein');
     const cls = await protCard.getAttribute('class');
-    expect(cls).toMatch(/status-ok|status-warn|status-bad/);
+    expect(cls).toMatch(/status-low|status-ok|status-warn|status-bad/);
   });
 
   test('hero progress bar is visible when goals are set', async ({ page }) => {
@@ -246,7 +246,7 @@ test.describe('Goals: impact preview in quick-add list', () => {
     await page.fill('#quickSearch', 'chi');
 
     // Assert: no status color spans without goals
-    await expect(page.locator('.food-card-macros .status-ok, .food-card-macros .status-warn, .food-card-macros .status-bad')).toHaveCount(0);
+    await expect(page.locator('.food-card-macros .status-low, .food-card-macros .status-ok, .food-card-macros .status-warn, .food-card-macros .status-bad')).toHaveCount(0);
   });
 
   test('shows status-colored macros when goals are set', async ({ page }) => {
@@ -258,8 +258,8 @@ test.describe('Goals: impact preview in quick-add list', () => {
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await page.fill('#quickSearch', 'chi');
 
-    // Assert: kcal contribution colored ok (165 kcal << 2000 goal)
-    await expect(page.locator('.food-card-macros .status-ok').first()).toContainText('+165 kcal');
+    // Assert: kcal contribution colored low (165 kcal << 2000 goal)
+    await expect(page.locator('.food-card-macros .status-low').first()).toContainText('+165 kcal');
   });
 });
 

@@ -373,7 +373,7 @@ export function setupGoals() {
     const { iso, status, kcal, goal, goalSince } = dayEl.dataset;
     const date    = $.localDate(iso ?? '');
     const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
-    const STATUS_LABELS = /** @type {Record<string,string>} */ ({ ok: 'On target', warn: 'Close', bad: 'Off target' });
+    const STATUS_LABELS = /** @type {Record<string,string>} */ ({ low: 'Under target', ok: 'On target', warn: 'Close', bad: 'Off target' });
 
     let body = '';
     if (status === 'future') {
@@ -457,7 +457,10 @@ export function setupGoals() {
         if (isFuture) {
           status = 'future';
         } else if (kcal !== null) {
-          status = Goals.computeStatus(kcal, cellGoal?.kcal ?? null);
+          const target = cellGoal
+            ? Goals.idealForDay(kcalByDay, iso, cellGoal.kcal)
+            : null;
+          status = Goals.computeStatus(kcal, target);
         }
         week.push({ iso, status, kcal, cellGoal });
       }
@@ -493,6 +496,7 @@ export function setupGoals() {
 
     const legendHtml = `
       <div class="cal-legend">
+        <div class="cal-day cal-day-low"></div><span>Under</span>
         <div class="cal-day cal-day-ok"></div><span>On target</span>
         <div class="cal-day cal-day-warn"></div><span>Close</span>
         <div class="cal-day cal-day-bad"></div><span>Off</span>

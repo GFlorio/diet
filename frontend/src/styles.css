@@ -10,9 +10,11 @@
   --surface-2: #202228;
   --shadow-soft: 0 6px 16px rgba(0,0,0,.14);
 
+  --low: #60a5fa;
   --ok-bg: color-mix(in oklab, var(--ok) 16%, transparent);
   --warn-bg: color-mix(in oklab, var(--warn) 16%, transparent);
   --bad-bg: color-mix(in oklab, var(--bad) 16%, transparent);
+  --low-bg: color-mix(in oklab, var(--low) 16%, transparent);
 }
 @media (prefers-color-scheme: light){
   :root{ --bg:#f7fafc; --fg:#0f172a; --muted:#475569; --card:#ffffff; --surface-2:#f1f5f9; --border:#e2e8f0; --shadow:0 10px 20px rgba(2,6,23,.06); --shadow-soft:0 4px 12px rgba(2,6,23,.08); }
@@ -178,27 +180,33 @@ label{ font-size:12px; color:var(--muted) }
 .totalBlock .value .unit{ font-size:10px; font-weight:400 }
 .totalBlock:first-child .value .unit{ font-size:11px; color:var(--muted) }
 .macro-subtext{ font-size:11px; color:var(--muted) }
-.macro-bar{ height:6px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden }
-.macro-bar-fill{ width:0%; height:100%; border-radius:999px; background:var(--brand) }
-.macro-card.macro-protein .macro-bar-fill{ background:var(--prot) }
+.macro-bar{ height:6px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; display:flex }
+.macro-bar-fill{ height:100%; flex-shrink:0 }
+.macro-bar-fill:first-child{ border-radius:999px 0 0 999px }
+.macro-bar-fill:last-child{ border-radius:0 999px 999px 0 }
+.macro-bar-fill:only-child{ border-radius:999px }
+.macro-bar-ok  { background:var(--ok) }
+.macro-bar-low { background:var(--low) }
+.macro-bar-warn{ background:var(--warn) }
+.macro-bar-bad { background:var(--bad) }
 
 /* Compact summary text */
 .compact-primary{ font-size:16px; font-weight:700 }
 .compact-secondary{ font-size:12px; color:var(--muted) }
 
 /* Status color system — activated only when goals feature is implemented */
+.status-low{ color:var(--low) }
 .status-ok{ color:var(--ok) }
 .status-warn{ color:var(--warn) }
 .status-bad{ color:var(--bad) }
+.summary-hero-value.status-low .num { color:var(--low) }
 .summary-hero-value.status-ok .num  { color:var(--ok) }
 .summary-hero-value.status-warn .num{ color:var(--warn) }
 .summary-hero-value.status-bad .num { color:var(--bad) }
+.macro-card.status-low{ background:var(--low-bg) }
 .macro-card.status-ok{ background:var(--ok-bg) }
 .macro-card.status-warn{ background:var(--warn-bg) }
 .macro-card.status-bad{ background:var(--bad-bg) }
-.macro-card.status-ok .macro-bar-fill{ background:var(--ok) }
-.macro-card.status-warn .macro-bar-fill{ background:var(--warn) }
-.macro-card.status-bad .macro-bar-fill{ background:var(--bad) }
 
 /* Meals logged list — lighter than the food search results */
 .meals-list{ display:grid }
@@ -228,8 +236,12 @@ label{ font-size:12px; color:var(--muted) }
 #quickAddCard{ box-shadow:none }
 
 /* Hero progress bar */
-.summary-hero-bar{ height:8px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; margin-top:6px }
-.summary-hero-bar-fill{ height:100%; border-radius:999px; background:var(--brand-soft) }
+.summary-hero-bar{ height:8px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; margin-top:6px; display:flex }
+.summary-hero-bar-fill{ height:100%; flex-shrink:0 }
+.summary-hero-bar-fill:first-child{ border-radius:999px 0 0 999px }
+.summary-hero-bar-fill:last-child{ border-radius:0 999px 999px 0 }
+.summary-hero-bar-fill:only-child{ border-radius:999px }
+.summary-hero-bar-fill.low { background:var(--low) }
 .summary-hero-bar-fill.ok  { background:var(--ok) }
 .summary-hero-bar-fill.warn{ background:var(--warn) }
 .summary-hero-bar-fill.bad { background:var(--bad) }
@@ -300,6 +312,7 @@ label{ font-size:12px; color:var(--muted) }
 .cal-day-empty  { background: color-mix(in oklab, var(--border) 60%, transparent); cursor: default; }
 .cal-day-future { background: color-mix(in oklab, var(--border) 30%, transparent); cursor: default; }
 .cal-day-logged { background: var(--brand); opacity: .6; }
+.cal-day-low  { background: var(--low); }
 .cal-day-ok   { background: var(--ok); }
 .cal-day-warn { background: var(--warn); }
 .cal-day-bad  { background: var(--bad); }
@@ -316,6 +329,7 @@ label{ font-size:12px; color:var(--muted) }
 .cal-tt-kcal { font-size: 13px; font-weight: 600; }
 .cal-tt-muted { opacity: .65; font-size: 11px; }
 .cal-tt-status { font-size: 11px; font-weight: 600; }
+.cal-tt-low  { color: var(--low); }
 .cal-tt-ok   { color: var(--ok); }
 .cal-tt-warn { color: var(--warn); }
 .cal-tt-bad  { color: var(--bad); }
