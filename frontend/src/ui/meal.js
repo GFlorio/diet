@@ -531,8 +531,10 @@ export function setupMeals(){
         return `
           <div class="macro-card ${cls} status-${macroWin.status}">
             <div class="macro-label">${label}</div>
-            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-            <div class="macro-subtext status-${macroWin.status}">${deltaStr(d, 'g')}</div>
+            <div class="macro-value-row">
+              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+              <div class="macro-subtext status-${macroWin.status}">${deltaStr(d, 'g')}</div>
+            </div>
             ${barHtml(macroVM.consumed, macroWin.idealToday, macroWin.status)}
           </div>`;
       }
@@ -544,8 +546,10 @@ export function setupMeals(){
         return `
           <div class="macro-card ${cls} status-${macroVM.status}">
             <div class="macro-label">${label}</div>
-            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-            <div class="macro-subtext status-${macroVM.status}">${subtext}</div>
+            <div class="macro-value-row">
+              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+              <div class="macro-subtext status-${macroVM.status}">${subtext}</div>
+            </div>
             ${barHtml(macroVM.consumed, macroVM.target ?? 0, macroVM.status)}
           </div>`;
       }
@@ -622,8 +626,8 @@ export function setupMeals(){
       <div class="meal-row" data-id="${m.id}">
         <div class="meal-row-body">
           <span class="meal-name">${$.esc(snap.name)}</span>
-          <span class="chip">×${$.fmtNum(mul)}</span>
-          <span class="meal-row-meta">${$.esc(snap.refLabel)} · ${mealMeta}</span>
+          <span class="meal-row-qty">${$.esc(snap.refLabel)} <span class="meal-row-mul">×${$.fmtNum(mul)}</span></span>
+          <span class="meal-row-meta">${mealMeta}</span>
         </div>
         <button class="btn small ghost del" title="Delete">🗑️</button>
       </div>`;

@@ -175,6 +175,7 @@ label{ font-size:12px; color:var(--muted) }
 .summary-macros{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px }
 .macro-card{ border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-2); padding:10px; display:grid; gap:6px }
 .macro-label{ font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:600 }
+.macro-value-row{ display:flex; align-items:baseline; gap:8px; justify-content:space-between }
 .macro-value{ font-size:18px; font-weight:700; line-height:1.1 }
 .macro-value .unit{ font-size:11px; color:var(--muted); font-weight:500; margin-left:2px }
 .totalBlock .value .unit{ font-size:10px; font-weight:400 }
@@ -212,8 +213,10 @@ label{ font-size:12px; color:var(--muted) }
 .meals-list{ display:grid }
 .meal-row{ display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--border) }
 .meal-row:last-child{ border-bottom:none }
-.meal-row-body{ flex:1; min-width:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px }
+.meal-row-body{ flex:1; min-width:0; display:grid; gap:2px }
 .meal-name{ font-weight:600 }
+.meal-row-qty{ font-size:12px; color:var(--muted) }
+.meal-row-mul{ font-weight:700; color:var(--fg) }
 .meal-row-meta{ font-size:12px; color:var(--muted) }
 @keyframes mealRowIn{ from{ opacity:0; transform:translateY(-6px) } to{ opacity:1; transform:translateY(0) } }
 .meal-row-added{ animation: mealRowIn .22s ease-out }
