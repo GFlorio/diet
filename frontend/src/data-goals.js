@@ -255,26 +255,48 @@ export function statusForDay(kcalByDay, dateISO, goalKcal) {
  * Returned percentages always sum to ≤ 100 so the bar never overflows.
  * When consumed > target the segments are scaled down proportionally,
  * preserving the visual ratio between base/warn/bad bands.
+ *
+ * The `status` parameter caps which bands can appear so the bar never
+ * shows a severity that contradicts the computed status:
+ *   - 'ok'/'low'/'none' → base only (no warn/bad bands)
+ *   - 'warn'            → base + warn (bad is folded into warn)
+ *   - 'bad'             → base + warn + bad (uncapped)
+ *
  * @param {number} consumed
  * @param {number} target
+ * @param {'none'|'low'|'ok'|'warn'|'bad'} status
  * @returns {{ basePct: number, warnPct: number, badPct: number }}
  */
-export function barSegments(consumed, target) {
+export function barSegments(consumed, target, status) {
   if (target <= 0) { return { basePct: 0, warnPct: 0, badPct: 0 }; }
   if (consumed <= target) {
     return { basePct: consumed / target * 100, warnPct: 0, badPct: 0 };
   }
+
+  // Status caps which segments are visible.
+  const allowWarn = status === 'warn' || status === 'bad';
+  const allowBad  = status === 'bad';
+
+  if (!allowWarn) {
+    // Everything is base — consumed exceeds target but status says ok/low.
+    return { basePct: 100, warnPct: 0, badPct: 0 };
+  }
+
   // Raw segments relative to target (basePct is always target-sized)
   const warnLimit = target * (1 + STATUS_WARN_PCT);
   const rawWarn   = Math.min(consumed, warnLimit) - target;
   const rawBad    = consumed > warnLimit ? consumed - warnLimit : 0;
-  const rawTotal  = target + rawWarn + rawBad;       // = consumed
-  // Scale everything so the total is exactly 100%
-  const scale     = 100 / rawTotal;
+
+  // Fold bad into warn when status is only 'warn'.
+  const effectiveWarn = allowBad ? rawWarn : rawWarn + rawBad;
+  const effectiveBad  = allowBad ? rawBad  : 0;
+
+  const rawTotal = target + effectiveWarn + effectiveBad; // = consumed
+  const scale    = 100 / rawTotal;
   return {
-    basePct: target  * scale,
-    warnPct: rawWarn * scale,
-    badPct:  rawBad  * scale,
+    basePct: target        * scale,
+    warnPct: effectiveWarn * scale,
+    badPct:  effectiveBad  * scale,
   };
 }
 

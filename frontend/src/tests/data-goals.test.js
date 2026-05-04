@@ -193,14 +193,14 @@ describe('statusForDay', () => {
 // ---------------------------------------------------------------------------
 describe('barSegments', () => {
   test('under target: basePct proportional, no warn/bad', () => {
-    const s = barSegments(80, 100);
+    const s = barSegments(80, 100, 'ok');
     expect(s.basePct).toBe(80);
     expect(s.warnPct).toBe(0);
     expect(s.badPct).toBe(0);
   });
 
   test('at target: basePct is 100, no warn/bad', () => {
-    const s = barSegments(100, 100);
+    const s = barSegments(100, 100, 'ok');
     expect(s.basePct).toBe(100);
     expect(s.warnPct).toBe(0);
     expect(s.badPct).toBe(0);
@@ -209,7 +209,7 @@ describe('barSegments', () => {
   test('in warn zone: segments normalized to 100%', () => {
     // consumed 108 / target 100 → raw: base=100, warn=8, total=108
     // scaled: base=100/108*100 ≈ 92.6, warn=8/108*100 ≈ 7.4
-    const s = barSegments(108, 100);
+    const s = barSegments(108, 100, 'warn');
     expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
     expect(s.basePct).toBeCloseTo(92.59, 1);
     expect(s.warnPct).toBeCloseTo(7.41, 1);
@@ -218,7 +218,7 @@ describe('barSegments', () => {
 
   test('in bad zone: all three segments normalized to 100%', () => {
     // consumed 115 / target 100 → raw: base=100, warn=10, bad=5, total=115
-    const s = barSegments(115, 100);
+    const s = barSegments(115, 100, 'bad');
     expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
     expect(s.basePct).toBeCloseTo(86.96, 1);
     expect(s.warnPct).toBeCloseTo(8.70, 1);
@@ -226,15 +226,39 @@ describe('barSegments', () => {
   });
 
   test('extreme overshoot: segments still sum to 100%', () => {
-    const s = barSegments(300, 100);
+    const s = barSegments(300, 100, 'bad');
     expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
     // base portion shrinks as overshoot grows
     expect(s.basePct).toBeCloseTo(100 / 3, 1);
   });
 
   test('zero target returns all zeros', () => {
-    const s = barSegments(50, 0);
+    const s = barSegments(50, 0, 'ok');
     expect(s.basePct).toBe(0);
+    expect(s.warnPct).toBe(0);
+    expect(s.badPct).toBe(0);
+  });
+
+  // --- status capping: bar never shows a severity beyond the status ---
+
+  test('status ok: over-target consumption shows only base (no warn/bad)', () => {
+    const s = barSegments(120, 100, 'ok');
+    expect(s.basePct).toBe(100);
+    expect(s.warnPct).toBe(0);
+    expect(s.badPct).toBe(0);
+  });
+
+  test('status warn: bad band folded into warn', () => {
+    // consumed 115 / target 100 → would have bad band, but status is warn
+    const s = barSegments(115, 100, 'warn');
+    expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
+    expect(s.badPct).toBe(0);
+    expect(s.warnPct).toBeGreaterThan(0);
+  });
+
+  test('status low: over-target consumption shows only base', () => {
+    const s = barSegments(105, 100, 'low');
+    expect(s.basePct).toBe(100);
     expect(s.warnPct).toBe(0);
     expect(s.badPct).toBe(0);
   });

@@ -457,7 +457,7 @@ export function setupMeals(){
      * @returns {string}
      */
     const barHtml = (consumed, target, status) => {
-      const seg = Goals.barSegments(consumed, target);
+      const seg = Goals.barSegments(consumed, target, status);
       const baseClass = status === 'low' ? 'macro-bar-low' : 'macro-bar-ok';
       return `<div class="macro-bar">`
         + `<div class="macro-bar-fill ${baseClass}" style="width:${seg.basePct}%"></div>`
@@ -473,7 +473,7 @@ export function setupMeals(){
     if (wvm) {
       const st       = wvm.calories.status;
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
-      const heroSeg  = Goals.barSegments(vm.calories.consumed, wvm.calories.idealToday);
+      const heroSeg  = Goals.barSegments(vm.calories.consumed, wvm.calories.idealToday, st);
       const heroBaseClass = st === 'low' ? 'low' : 'ok';
       heroValueHtml = `
         <div class="summary-hero-value status-${st}">
@@ -494,7 +494,7 @@ export function setupMeals(){
         ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)} kcal left` : `${$.fmtNum(Math.abs(remaining), 0)} kcal over`)
         : '';
       const fallbackTarget = vm.calories.target ?? 0;
-      const fallbackSeg    = Goals.barSegments(vm.calories.consumed, fallbackTarget);
+      const fallbackSeg    = Goals.barSegments(vm.calories.consumed, fallbackTarget, vm.calories.status);
       const fallbackBase   = vm.calories.status === 'low' ? 'low' : 'ok';
 
       heroValueHtml = `
