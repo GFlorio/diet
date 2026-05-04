@@ -71,13 +71,12 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     // Act: navigate to Meals tab (today)
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
-    // Assert: hero switches to avg mode because yesterday has data
-    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    // Assert: hero shows delta guidance (window is active, idealToday computed from prior day)
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('kcal left');
   });
 
-  test('windowDays increments as meals are added to distinct days', async ({ page }) => {
-    // Arrange: two prev days with meals
+  test('window adjusts idealToday as meals are added to distinct days', async ({ page }) => {
+    // Arrange: two prev days with meals at goal
     await setGoals(page, GOALS);
     await insertMeals(page, [
       { date: isoOffset(-2), ...AT_GOAL },
@@ -86,12 +85,12 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
-    // Assert: two logged days in window
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2/7 days logged');
+    // Assert: idealToday = 2000, consumed = 0 → 2000 kcal left
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
   });
 
-  test('multiple meals on the same day count as one day in the window', async ({ page }) => {
-    // Arrange: two insertions for the same past day
+  test('multiple meals on the same day are summed correctly', async ({ page }) => {
+    // Arrange: two insertions for the same past day summing to AT_GOAL
     await setGoals(page, GOALS);
     await insertMeals(page, [
       { date: isoOffset(-1), kcal: 1000, prot: 75, carbs: 112, fats: 28 },
@@ -100,8 +99,8 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
-    // Two meals → still only 1 day
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    // Two meals sum to 2000 kcal (at goal) → idealToday = 2000 → 2000 kcal left
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
   });
 
   // --- window boundary -------------------------------------------------------
@@ -113,8 +112,8 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
-    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    // Window is active → delta guidance visible; idealToday = 2000 → 2000 kcal left
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
   });
 
   test('meal logged 7 days ago is excluded from today\'s window', async ({ page }) => {
@@ -139,13 +138,15 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
       { date: isoOffset(-1), ...AT_GOAL },
     ]);
 
-    // Viewing today: window is [T−6, T] → only T−1 is in range → 1 day
+    // Viewing today: window is [T−6, T] → only T−1 in range (1 prev day)
+    // idealToday = 2×2000 − 2000 = 2000 → 2000 kcal left
     await page.locator('.tab', { hasText: 'Meals' }).click();
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
 
-    // Navigate to yesterday: window becomes [T−7, T−1] → both T−1 and T−7 in range → 2 days
+    // Navigate to yesterday: window becomes [T−7, T−1] → T−1 and T−7 in range
+    // Yesterday has 2000 kcal consumed, idealToday = 2×2000 − 2000 = 2000 → 0 kcal left
     await page.click('#prevDayBox');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2/7 days logged');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('0 kcal left');
   });
 
   test('meal on a future date is included in that date\'s own window', async ({ page }) => {
@@ -158,9 +159,8 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Tomorrow's meal is todayMacros in tomorrow's window → avg mode active
-    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    // Tomorrow's meal is todayMacros in tomorrow's window → delta guidance active
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText(/kcal (left|over)/);
   });
 
   test('future meal does not appear in today\'s window', async ({ page }) => {
@@ -181,7 +181,7 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
   // --- add / remove meals across dates ---------------------------------------
 
-  test('adding meals to past days via navigation updates the window count', async ({ page }) => {
+  test('adding meals to past days via navigation updates the window', async ({ page }) => {
     await createFood(page, CHICKEN);
     await setGoals(page, GOALS);
 
@@ -198,9 +198,10 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Navigate back to today: 2 past days have meals → 2/7 days logged
+    // Navigate back to today: 2 past days with chicken (165 kcal each = 330 prevSum)
+    // idealToday = 3×2000 − 330 = 5670 → clamped to 2000×1.15 = 2300 → 2300 kcal left
     await page.click('#nextDayBox');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2/7 days logged');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2300 kcal left');
   });
 
   test('deleting today\'s last meal keeps idealToday stable', async ({ page }) => {
@@ -216,8 +217,8 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.click('#quickList .item .add');
 
     // Before deletion: idealToday = 2×2000−2000 = 2000; consumed = 165 → delta = 1835
-    const deltaLine = page.locator('.summary-hero-subtext').nth(1);
-    await expect(deltaLine).toContainText('kcal left');
+    const deltaLine = page.locator('.summary-hero-subtext').first();
+    await expect(deltaLine).toContainText('1835 kcal left');
 
     // Delete today's meal
     await page.locator('#mealsList .meal-row .del').click();
@@ -225,8 +226,6 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     // After deletion: effectiveDays = 1+1 = 2, prevSum = 2000, idealToday = 2000; consumed = 0
     // The bug would have set effectiveDays = windowDays (1) → ideal = 1×2000−2000 = 0 → clamped to 1700
     await expect(deltaLine).toContainText('2000 kcal left');
-    // Window count drops to 1 (only prev day now)
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
   });
 
   test('undoing a meal deletion restores window state', async ({ page }) => {
@@ -242,10 +241,9 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
     await page.getByRole('button', { name: 'Undo' }).click();
 
-    // Meal is restored → window re-activates with today logged
+    // Meal is restored → window re-activates, delta guidance returns
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
-    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1/7 days logged');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText(/kcal (left|over)/);
   });
 
   // --- idealToday guidance --------------------------------------------------
@@ -260,7 +258,7 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     // With 1 day logged (today), effectiveDays = 1, prevSum = 0, idealToday = 2000
     // consumed = 165 → delta = 2000 − 165 = 1835 kcal left
-    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('1835 kcal left');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('1835 kcal left');
   });
 
   test('hero shows kcal-over guidance when consumed exceeds idealToday', async ({ page }) => {
@@ -273,6 +271,6 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.locator('.tab', { hasText: 'Meals' }).click();
 
     // consumed 2500 > idealToday 2300 → over guidance
-    await expect(page.locator('.summary-hero-subtext').nth(1)).toContainText('kcal over');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('kcal over');
   });
 });

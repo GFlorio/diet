@@ -457,10 +457,9 @@ export function setupGoals() {
         if (isFuture) {
           status = 'future';
         } else if (kcal !== null) {
-          const target = cellGoal
-            ? Goals.idealForDay(kcalByDay, iso, cellGoal.kcal)
-            : null;
-          status = Goals.computeStatus(kcal, target);
+          status = cellGoal
+            ? Goals.statusForDay(kcalByDay, iso, cellGoal.kcal)
+            : 'none';
         }
         week.push({ iso, status, kcal, cellGoal });
       }

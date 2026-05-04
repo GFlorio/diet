@@ -34,7 +34,7 @@ vi.mock('../data-meals.js', () => ({
 
 import {
   barSegments,
-  computeStatus,
+  computeDayStatus,
   computeWindowVM,
   deleteRecord,
   derivedGrams,
@@ -44,6 +44,7 @@ import {
   list,
   remove,
   save,
+  statusForDay,
   updateEffectiveFrom,
 } from '../data-goals.js';
 import { Meals } from '../data-meals.js';
@@ -60,51 +61,130 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// computeStatus
+// computeDayStatus — rolling-average approach with safety net
 // ---------------------------------------------------------------------------
-describe('computeStatus', () => {
-  test('returns none when target is null', () => {
-    expect(computeStatus(0, null)).toBe('none');
-    expect(computeStatus(500, null)).toBe('none');
+describe('computeDayStatus', () => {
+  test('returns none when goal is null', () => {
+    expect(computeDayStatus(0, 0, 5, null, 0)).toBe('none');
+    expect(computeDayStatus(500, 0, 5, null, 0)).toBe('none');
   });
 
-  test('returns ok when target is 0 and consumed is 0', () => {
-    expect(computeStatus(0, 0)).toBe('ok');
+  test('returns ok/bad when goal is 0', () => {
+    expect(computeDayStatus(0, 0, 5, 0, 0)).toBe('ok');
+    expect(computeDayStatus(1, 0, 5, 0, 0)).toBe('bad');
   });
 
-  test('returns bad when target is 0 and consumed > 0', () => {
-    expect(computeStatus(1, 0)).toBe('bad');
-    expect(computeStatus(100, 0)).toBe('bad');
+  // --- sparse data (< 4 days): ±SAFETY_NET_PCT of idealToday ---------------
+
+  test('sparse: ok within ±10% of idealToday', () => {
+    // 1 day, consumed=95, idealToday=100 → ratio 0.95 → within ±10%
+    expect(computeDayStatus(95, 0, 1, 100, 100)).toBe('ok');
+    expect(computeDayStatus(110, 0, 1, 100, 100)).toBe('ok');
+    expect(computeDayStatus(100, 0, 1, 100, 100)).toBe('ok');
   });
 
-  test('returns ok within ±5% of target', () => {
-    expect(computeStatus(95, 100)).toBe('ok');   // exactly 5% under (boundary)
-    expect(computeStatus(105, 100)).toBe('ok');  // 5% over
-    expect(computeStatus(100, 100)).toBe('ok');  // exact
+  test('sparse: low when more than 10% under idealToday', () => {
+    expect(computeDayStatus(89, 0, 1, 100, 100)).toBe('low');
+    expect(computeDayStatus(0, 0, 1, 100, 100)).toBe('low');
   });
 
-  test('returns low when more than 5% under target', () => {
-    expect(computeStatus(94, 100)).toBe('low');  // 6% under
-    expect(computeStatus(91, 100)).toBe('low');  // 9% under
-    expect(computeStatus(89, 100)).toBe('low');  // 11% under
-    expect(computeStatus(0, 100)).toBe('low');   // far under
+  test('sparse: warn between 10% and 15% over idealToday', () => {
+    expect(computeDayStatus(114, 0, 1, 100, 100)).toBe('warn');
   });
 
-  test('returns warn between 5% and 10% over target', () => {
-    expect(computeStatus(109, 100)).toBe('warn'); // 9% over
+  test('sparse: bad beyond 15% over idealToday', () => {
+    expect(computeDayStatus(116, 0, 1, 100, 100)).toBe('bad');
   });
 
-  test('returns bad beyond 10% over target', () => {
-    expect(computeStatus(111, 100)).toBe('bad'); // 11% over
+  // --- sufficient data (≥ 4 days): rolling average vs raw goal ---------------
+
+  test('ok when rolling average is within ±5% of goal', () => {
+    // 5 days, prevSum=8000, consumed=2000 → avg=10000/5=2000 = goal
+    expect(computeDayStatus(2000, 8000, 5, 2000, 2000)).toBe('ok');
+    // avg = 9500/5 = 1900 = 95% of goal → boundary ok
+    expect(computeDayStatus(1500, 8000, 5, 2000, 2000)).toBe('ok');
   });
 
-  test('boundary: exactly 10% over is warn', () => {
-    expect(computeStatus(110, 100)).toBe('warn');
+  test('low when average is more than 5% under goal', () => {
+    // avg = 9400/5 = 1880 = 94% of goal → low
+    expect(computeDayStatus(1400, 8000, 5, 2000, 2000)).toBe('low');
   });
 
-  test('boundary: exactly 5% under is ok (not low)', () => {
-    // ratio = 0.95, 1 - 0.05 = 0.95, ratio < 0.95 is false → ok
-    expect(computeStatus(95, 100)).toBe('ok');
+  test('warn when average is 5-10% over goal', () => {
+    // avg = 10800/5 = 2160 = 108% of goal → warn
+    expect(computeDayStatus(2800, 8000, 5, 2000, 2000)).toBe('warn');
+  });
+
+  test('bad when average is more than 10% over goal', () => {
+    // avg = 11200/5 = 2240 = 112% of goal → bad
+    expect(computeDayStatus(3200, 8000, 5, 2000, 2000)).toBe('bad');
+  });
+
+  // --- safety net: following idealToday during recovery caps at warn ---------
+
+  test('safety net: bad capped to warn when consumed is within ±10% of idealToday', () => {
+    // prevSum very high (5 prior days ate 2500 each = 12500), effectiveDays=6
+    // avg = (12500 + 1700)/6 ≈ 2367 = 18% over goal → would be 'bad'
+    // But idealToday is 1700 (clamped) and consumed = 1700 → within ±10% → cap at 'warn'
+    expect(computeDayStatus(1700, 12500, 6, 2000, 1700)).toBe('warn');
+  });
+
+  test('safety net: bad stays bad when consumed far from idealToday', () => {
+    // Same scenario but user ate 2500 instead of following idealToday
+    // avg = (12500 + 2500)/6 ≈ 2500 → bad, and 2500/1700 ≈ 1.47 → not within ±10%
+    expect(computeDayStatus(2500, 12500, 6, 2000, 1700)).toBe('bad');
+  });
+
+  test('safety net does not promote warn to ok', () => {
+    // avg is in warn territory and user hit idealToday — stays warn
+    // prevSum = 5*2150 = 10750, consumed=2150, effectiveDays=6
+    // avg = 12900/6 = 2150 = 107.5% → warn; idealToday=2000, 2150/2000=1.075 → within ±10%
+    // safety net only fires on 'bad', so result stays 'warn'
+    expect(computeDayStatus(2150, 10750, 6, 2000, 2000)).toBe('warn');
+  });
+
+  // --- spike tolerance: one-day overshoot dampened by 7-day average ----------
+
+  test('party day: moderate spike stays green when prior days are on target', () => {
+    // 6 prior days at goal: prevSum = 6*2000 = 12000, effectiveDays=7
+    // Party: consumed = 2500 → avg = 14500/7 ≈ 2071 = 3.6% over → ok
+    expect(computeDayStatus(2500, 12000, 7, 2000, 2000)).toBe('ok');
+  });
+
+  test('party day: large spike moves average to warn', () => {
+    // consumed = 3500 → avg = 15500/7 ≈ 2214 = 10.7% over → bad
+    // But idealToday = 2000, 3500/2000 = 1.75 → safety net does not apply → bad
+    expect(computeDayStatus(3500, 12000, 7, 2000, 2000)).toBe('bad');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// statusForDay
+// ---------------------------------------------------------------------------
+describe('statusForDay', () => {
+  test('returns ok when day is at goal with sufficient window data', () => {
+    const kcalByDay = {
+      '2024-02-01': 2000, '2024-02-02': 2000, '2024-02-03': 2000,
+      '2024-02-04': 2000, '2024-02-05': 2000, '2024-02-06': 2000,
+      '2024-02-07': 2000,
+    };
+    expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
+  });
+
+  test('tolerates a moderate spike when other days are on target', () => {
+    const kcalByDay = {
+      '2024-02-01': 2000, '2024-02-02': 2000, '2024-02-03': 2000,
+      '2024-02-04': 2000, '2024-02-05': 2000, '2024-02-06': 2000,
+      '2024-02-07': 2500,
+    };
+    // avg = 14500/7 ≈ 2071 → within ±5%
+    expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
+  });
+
+  test('uses sparse-data path when fewer than 4 days logged', () => {
+    const kcalByDay = { '2024-02-07': 2000 };
+    // 1 day, idealToday = goal, consumed = goal → ok (±10% band)
+    expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
   });
 });
 
@@ -450,7 +530,7 @@ describe('computeWindowVM', () => {
     expect(Meals.listRange).toHaveBeenCalledWith('2024-02-01', '2024-02-07');
   });
 
-  // --- windowDays / dataWarning ---------------------------------------------
+  // --- windowDays -------------------------------------------------------------
 
   test('windowDays is the count of distinct days that have meals', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
@@ -471,111 +551,68 @@ describe('computeWindowVM', () => {
     expect(result?.windowDays).toBe(1);
   });
 
-  test('dataWarning is true when fewer than 4 days have meals', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-05'),
-      makeMeal('2024-02-06'),
-      makeMeal('2024-02-07'),
-    ]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.dataWarning).toBe(true);
-  });
+  // --- idealToday / basic checks --------------------------------------------
 
-  test('dataWarning is false when 4 or more days have meals', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-04'),
-      makeMeal('2024-02-05'),
-      makeMeal('2024-02-06'),
-      makeMeal('2024-02-07'),
-    ]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.dataWarning).toBe(false);
-  });
-
-  // --- average (logged-days denominator) ------------------------------------
-
-  test('avg uses logged-days as denominator, not calendar days', async () => {
-    // Only 2 of the 7 calendar days have meals, both exactly at goal → avg = goal
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-04'),
-      makeMeal('2024-02-07'),
-    ]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000);
-    expect(result?.calories.status).toBe('ok');
-  });
-
-  test('avg sums multiple meals on the same day before dividing', async () => {
-    // Two meals totalling 2000 kcal on today only → avg = 2000/1 = 2000
+  test('two meals on same day: idealToday = goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-07', 1000, 75, 112, 28),
       makeMeal('2024-02-07', 1000, 75, 113, 28),
     ]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000);
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
-  test('avg across two days both at goal is still goal', async () => {
+  test('two days both at goal: status ok, idealToday = goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06'),
       makeMeal('2024-02-07'),
     ]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.windowDays).toBe(2);
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000);
     expect(result?.calories.status).toBe('ok');
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
-  test('full 7-day window all at goal: avg = goal, idealToday = goal', async () => {
+  test('full 7-day window all at goal: status ok, idealToday = goal', async () => {
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06','2024-02-07'];
     vi.mocked(Meals.listRange).mockResolvedValue(days.map(d => makeMeal(d)));
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.windowDays).toBe(7);
-    expect(result?.dataWarning).toBe(false);
-    expect(result?.calories.avgConsumed).toBeCloseTo(2000);
     expect(result?.calories.status).toBe('ok');
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
-  // --- status ---------------------------------------------------------------
+  // --- status (sparse data: < 4 days, uses ±10% idealToday bands) -----------
 
-  test('status is ok when avg is exactly at goal', async () => {
+  test('sparse: ok when consumed is at goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('ok');
   });
 
-  test('status is ok when avg is 5% under goal', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1900)]);
+  test('sparse: ok when consumed is 8% under goal (within ±10%)', async () => {
+    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1840)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('ok');
   });
 
-  test('status is low when avg is 8% below goal', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1840)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.status).toBe('low');
-  });
-
-  test('status is low when avg is 20% below goal', async () => {
+  test('sparse: low when consumed is 20% below goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1600)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('low');
   });
 
-  test('status is bad when today is 15% above adjusted goal', async () => {
+  test('sparse: warn when consumed is 15% above idealToday', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2300)]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.status).toBe('bad');
+    expect(result?.calories.status).toBe('warn');
   });
 
-  test('status is ok when today tracks idealToday despite bad prior day', async () => {
+  test('sparse: ok when today tracks idealToday despite bad prior day', async () => {
     // Yesterday was severely under-goal (1000 kcal vs 2000 target).
     // idealToday is clamped to 2000×1.15 = 2300.
-    // Today the user eats 2300 → status should be 'ok' (tracking the adjusted target),
-    // even though the 2-day average (1650) is far below the raw goal.
+    // Today the user eats 2300, which is within ±10% of idealToday → ok.
+    // (Sparse path: only 2 days of data.)
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06', 1000),
       makeMeal('2024-02-07', 2300),
@@ -624,16 +661,14 @@ describe('computeWindowVM', () => {
     expect(withToday?.calories.idealToday).toBeCloseTo(withoutToday?.calories.idealToday ?? 0);
   });
 
-  // --- macro averages and idealToday ----------------------------------------
+  // --- macro status and idealToday -------------------------------------------
 
-  test('computes protein/carbs/fat averages and status independently', async () => {
+  test('computes protein/carbs/fat status independently (sparse: ±10% bands)', async () => {
+    // 1 day: sparse path. prot=150/150=1.0→ok, carbs=241/225=1.071→ok (within ±10%), fat=56/56=1.0→ok
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2000, 150, 241, 56)]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.protein.avgConsumed).toBeCloseTo(150, 0);
     expect(result?.protein.status).toBe('ok');
-    expect(result?.carbs.avgConsumed).toBeCloseTo(241, 0);
-    expect(result?.carbs.status).toBe('warn');
-    expect(result?.fat.avgConsumed).toBeCloseTo(56, 0);
+    expect(result?.carbs.status).toBe('ok');
     expect(result?.fat.status).toBe('ok');
   });
 

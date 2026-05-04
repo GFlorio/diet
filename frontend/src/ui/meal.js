@@ -149,15 +149,21 @@ export function setupMeals(){
     const g = currentGoals ? Goals.derivedGrams(currentGoals) : null;
 
     const wvm = currentWindowVM;
-    const kcalTarget = wvm ? wvm.calories.idealToday : (currentGoals ? currentGoals.kcal : null);
-    const protTarget = wvm ? wvm.protein.idealToday  : (g ? g.protG  : null);
-    const carbTarget = wvm ? wvm.carbs.idealToday    : (g ? g.carbsG : null);
-    const fatTarget  = wvm ? wvm.fat.idealToday      : (g ? g.fatG   : null);
 
-    const kcalSt  = Goals.computeStatus(totals.kcal + dKcal,  kcalTarget);
-    const protSt  = Goals.computeStatus(totals.prot + dProt,  protTarget);
-    const carbsSt = Goals.computeStatus(totals.carbs + dCarbs, carbTarget);
-    const fatSt   = Goals.computeStatus(totals.fats + dFats,  fatTarget);
+    /** @param {number} newConsumed @param {import('../data-goals.js').MacroWindow | undefined} mw @param {number | null} rawGoal @returns {'none'|'low'|'ok'|'warn'|'bad'} */
+    const st = (newConsumed, mw, rawGoal) => {
+      if (mw && wvm) {
+        return Goals.computeDayStatus(newConsumed, mw.prevSum, wvm.effectiveDays, mw.target, mw.idealToday);
+      }
+      return rawGoal !== null
+        ? Goals.computeDayStatus(newConsumed, 0, 1, rawGoal, rawGoal)
+        : 'none';
+    };
+
+    const kcalSt  = st(totals.kcal + dKcal,  wvm?.calories, currentGoals?.kcal ?? null);
+    const protSt  = st(totals.prot + dProt,   wvm?.protein,  g?.protG ?? null);
+    const carbsSt = st(totals.carbs + dCarbs,  wvm?.carbs,    g?.carbsG ?? null);
+    const fatSt   = st(totals.fats + dFats,    wvm?.fat,      g?.fatG ?? null);
 
     /** @param {number} v @param {string} unit @param {string} st @returns {string} */
     const seg = (v, unit, st) => {
@@ -419,7 +425,7 @@ export function setupMeals(){
       consumed,
       target,
       remaining: target - consumed,
-      status:    Goals.computeStatus(consumed, target),
+      status:    Goals.computeDayStatus(consumed, 0, 1, target, target),
     });
     return {
       calories: macro(totals.kcal, currentGoals.kcal),
@@ -465,19 +471,17 @@ export function setupMeals(){
     let heroExtras = '';
 
     if (wvm) {
-      // Primary mode: 7-day avg is the signal, delta guides today's eating
       const st       = wvm.calories.status;
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
       const heroSeg  = Goals.barSegments(vm.calories.consumed, wvm.calories.idealToday);
       const heroBaseClass = st === 'low' ? 'low' : 'ok';
       heroValueHtml = `
         <div class="summary-hero-value status-${st}">
-          <span class="num">${$.fmtNum(wvm.calories.avgConsumed, 0)}</span>
-          <span class="unit">kcal avg</span>
+          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
+          <span class="unit">kcal</span>
         </div>`;
       heroExtras = `
-        <div class="summary-hero-subtext status-warn">${wvm.windowDays}/${Goals.WINDOW_DAYS} days logged</div>
-        <div class="summary-hero-subtext"><span class="muted">${$.fmtNum(vm.calories.consumed, 0)} kcal today</span> · ${deltaStr(calDelta, 'kcal')}</div>
+        <div class="summary-hero-subtext status-${st}">${deltaStr(calDelta, 'kcal')}</div>
         <div class="summary-hero-bar">`
           + `<div class="summary-hero-bar-fill ${heroBaseClass}" style="width:${heroSeg.basePct}%"></div>`
           + (heroSeg.warnPct > 0 ? `<div class="summary-hero-bar-fill warn" style="width:${heroSeg.warnPct}%"></div>` : '')
@@ -527,8 +531,8 @@ export function setupMeals(){
         return `
           <div class="macro-card ${cls} status-${macroWin.status}">
             <div class="macro-label">${label}</div>
-            <div class="macro-value">${$.fmtNum(macroWin.avgConsumed, 0)}<span class="unit">g avg</span></div>
-            <div class="macro-subtext"><span class="muted">${$.fmtNum(macroVM.consumed, 0)}g</span> · ${deltaStr(d, 'g')}</div>
+            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
+            <div class="macro-subtext status-${macroWin.status}">${deltaStr(d, 'g')}</div>
             ${barHtml(macroVM.consumed, macroWin.idealToday, macroWin.status)}
           </div>`;
       }

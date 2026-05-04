@@ -2,10 +2,13 @@ import { Meals } from './data-meals.js';
 import * as db from './db.js';
 import * as $ from './utils.js';
 
-/** % deviation at which status transitions from ok → warn. */
+/** % deviation at which the 7-day average transitions from ok → warn. */
 export const STATUS_OK_PCT   = 0.05;
-/** % deviation at which status transitions from warn → bad. */
+/** % deviation at which the 7-day average transitions from warn → bad. */
 export const STATUS_WARN_PCT = 0.10;
+/** ±% of idealToday used as the ok band when data is sparse, and as the
+ *  safety-net override that caps status at 'warn' during recovery. */
+export const SAFETY_NET_PCT  = 0.10;
 
 /** Kcal per gram of protein (and carbohydrate). */
 export const KCAL_PER_G_PROTEIN = 4;
@@ -23,8 +26,8 @@ const WINDOW_MIN_DAYS = 4;
  * @typedef {import('./db.js').GoalRecord} GoalRecord
  *
  * @typedef {{
- *   windowDays: number,
- *   dataWarning: boolean,
+ *   windowDays:    number,
+ *   effectiveDays: number,
  *   calories: MacroWindow,
  *   protein:  MacroWindow,
  *   carbs:    MacroWindow,
@@ -32,11 +35,10 @@ const WINDOW_MIN_DAYS = 4;
  * }} WindowVM
  *
  * @typedef {{
- *   avgConsumed: number,
- *   target:      number | null,
- *   status:      'none'|'low'|'ok'|'warn'|'bad',
- *   pctOff:      number | null,
- *   idealToday:  number,
+ *   target:     number | null,
+ *   status:     'none'|'low'|'ok'|'warn'|'bad',
+ *   idealToday: number,
+ *   prevSum:    number,
  * }} MacroWindow
  */
 
@@ -128,21 +130,57 @@ export function goalForDate(records, dateISO) {
 }
 
 /**
- * Compute status for a consumed value against a target.
- * Direction-aware: being under goal returns 'low' (blue),
- * while being over goal returns 'warn' (amber) or 'bad' (red).
+ * Compute day status using the rolling-average approach with a safety net.
+ *
+ * When enough data exists (≥ WINDOW_MIN_DAYS), the status is determined by
+ * where the rolling average (prevSum + consumed) / effectiveDays sits relative
+ * to the raw goal.  If the result would be 'bad' but the user ate within
+ * ±SAFETY_NET_PCT of idealToday, it is capped at 'warn' (the "did your best
+ * given the clamp" override).
+ *
+ * When data is sparse (< WINDOW_MIN_DAYS), the rolling average is unreliable,
+ * so status is based on consumed vs idealToday with ±SAFETY_NET_PCT bands.
+ *
  * @param {number} consumed
- * @param {number | null} target
+ * @param {number} prevSum     — total consumed on other logged days in the window
+ * @param {number} effectiveDays — logged days (including today or +1 if today is empty)
+ * @param {number | null} goal — raw daily target
+ * @param {number} idealToday  — adjusted daily target (clamped)
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
-export function computeStatus(consumed, target) {
-  if (target === null) { return 'none'; }
-  if (target === 0) { return consumed === 0 ? 'ok' : 'bad'; }
-  const ratio = consumed / target;
-  if (ratio < 1 - STATUS_OK_PCT)    { return 'low'; }
-  if (ratio <= 1 + STATUS_OK_PCT)   { return 'ok'; }
-  if (ratio <= 1 + STATUS_WARN_PCT) { return 'warn'; }
-  return 'bad';
+export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealToday) {
+  if (goal === null) { return 'none'; }
+  if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
+
+  // Sparse data: fall back to idealToday with wider (±10%) bands.
+  if (effectiveDays < WINDOW_MIN_DAYS) {
+    if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
+    const ratio = consumed / idealToday;
+    if (ratio < 1 - SAFETY_NET_PCT)                            { return 'low'; }
+    if (ratio <= 1 + SAFETY_NET_PCT)                            { return 'ok'; }
+    if (ratio <= 1 + SAFETY_NET_PCT + (STATUS_WARN_PCT - STATUS_OK_PCT)) { return 'warn'; }
+    return 'bad';
+  }
+
+  // Primary: rolling-average position relative to the raw goal.
+  const avg   = (prevSum + consumed) / effectiveDays;
+  const ratio = avg / goal;
+  /** @type {'low'|'ok'|'warn'|'bad'} */
+  let status;
+  if (ratio < 1 - STATUS_OK_PCT)    { status = 'low'; }
+  else if (ratio <= 1 + STATUS_OK_PCT)   { status = 'ok'; }
+  else if (ratio <= 1 + STATUS_WARN_PCT) { status = 'warn'; }
+  else                                    { status = 'bad'; }
+
+  // Safety net: following idealToday during recovery should never be 'bad'.
+  if (status === 'bad' && idealToday > 0) {
+    const idealRatio = consumed / idealToday;
+    if (idealRatio >= 1 - SAFETY_NET_PCT && idealRatio <= 1 + SAFETY_NET_PCT) {
+      status = 'warn';
+    }
+  }
+
+  return status;
 }
 
 /** Clamp factor for idealToday: ±15% of the daily target. */
@@ -178,6 +216,38 @@ export function idealForDay(kcalByDay, dateISO, goalKcal) {
   const effectiveDays = todayLogged ? loggedDays : loggedDays + 1;
   const ideal = effectiveDays * goalKcal - prevSum;
   return Math.max(goalKcal * (1 - IDEAL_CLAMP), Math.min(goalKcal * (1 + IDEAL_CLAMP), ideal));
+}
+
+/**
+ * Compute day status for a single day in the kcalByDay map.
+ * Convenience wrapper around idealForDay + computeDayStatus for the heatmap.
+ * @param {Record<string, number>} kcalByDay
+ * @param {string} dateISO
+ * @param {number} goalKcal
+ * @returns {'none'|'low'|'ok'|'warn'|'bad'}
+ */
+export function statusForDay(kcalByDay, dateISO, goalKcal) {
+  const consumed = kcalByDay[dateISO] ?? 0;
+  if (goalKcal <= 0) { return computeDayStatus(consumed, 0, 1, goalKcal, goalKcal); }
+  const d = $.localDate(dateISO);
+  let prevSum    = 0;
+  let loggedDays = 0;
+  for (let i = 1; i < WINDOW_DAYS; i++) {
+    const prev = new Date(d);
+    prev.setDate(d.getDate() - i);
+    const prevISO = $.toISO(prev);
+    if (prevISO in kcalByDay) {
+      prevSum += kcalByDay[prevISO];
+      loggedDays++;
+    }
+  }
+  const todayLogged = dateISO in kcalByDay;
+  if (todayLogged) { loggedDays++; }
+  if (loggedDays === 0) { return computeDayStatus(consumed, 0, 1, goalKcal, goalKcal); }
+  const effectiveDays = todayLogged ? loggedDays : loggedDays + 1;
+  const ideal = effectiveDays * goalKcal - prevSum;
+  const idealToday = Math.max(goalKcal * (1 - IDEAL_CLAMP), Math.min(goalKcal * (1 + IDEAL_CLAMP), ideal));
+  return computeDayStatus(consumed, prevSum, effectiveDays, goalKcal, idealToday);
 }
 
 /**
@@ -256,22 +326,7 @@ export async function computeWindowVM(todayISO, goals) {
     if (k !== todayISO) { $.addScaledMacros(prevSum, byDay[k], 1); }
   }
 
-  // Average uses only logged days as the denominator (days with no meals are excluded).
-  const totalSum = $.zeroMacros();
-  $.addScaledMacros(totalSum, prevSum, 1);
-  $.addScaledMacros(totalSum, todayMacros, 1);
-  const avg = {
-    kcal:  totalSum.kcal  / windowDays,
-    prot:  totalSum.prot  / windowDays,
-    carbs: totalSum.carbs / windowDays,
-    fats:  totalSum.fats  / windowDays,
-  };
-
   const g = derivedGrams(goals);
-
-  /** @param {number} consumed @param {number} target @returns {number | null} */
-  const pctOff = (consumed, target) =>
-    target > 0 ? Math.abs(consumed - target) / target : null;
 
   // How much to eat today to bring the logged-days average back to target,
   // clamped to ±15% of the daily target so the suggestion stays reasonable.
@@ -285,21 +340,21 @@ export async function computeWindowVM(todayISO, goals) {
     return Math.max(target * (1 - IDEAL_CLAMP), Math.min(target * (1 + IDEAL_CLAMP), ideal));
   };
 
-  // Status is based on today's consumption vs the adjusted target (idealToday),
-  // not the average vs the raw goal. This way the user can always reach "green"
-  // by eating close to the adjusted target, even when a prior bad day drags the
-  // average beyond what the ±15% clamp can recover in a single day.
   const calIdeal  = idealToday(prevSum.kcal,  goals.kcal);
   const protIdeal = idealToday(prevSum.prot,  g.protG);
   const carbIdeal = idealToday(prevSum.carbs, g.carbsG);
   const fatIdeal  = idealToday(prevSum.fats,  g.fatG);
 
+  /** @param {number} consumed @param {number} pSum @param {number | null} goal @param {number} ideal */
+  const status = (consumed, pSum, goal, ideal) =>
+    computeDayStatus(consumed, pSum, effectiveDays, goal, ideal);
+
   return {
     windowDays,
-    dataWarning: windowDays < WINDOW_MIN_DAYS,
-    calories: { avgConsumed: avg.kcal,  target: goals.kcal, status: computeStatus(todayMacros.kcal,  calIdeal),  pctOff: pctOff(avg.kcal,  goals.kcal), idealToday: calIdeal  },
-    protein:  { avgConsumed: avg.prot,  target: g.protG,    status: computeStatus(todayMacros.prot,  protIdeal), pctOff: pctOff(avg.prot,  g.protG),    idealToday: protIdeal },
-    carbs:    { avgConsumed: avg.carbs, target: g.carbsG,   status: computeStatus(todayMacros.carbs, carbIdeal), pctOff: pctOff(avg.carbs, g.carbsG),   idealToday: carbIdeal },
-    fat:      { avgConsumed: avg.fats,  target: g.fatG,     status: computeStatus(todayMacros.fats,  fatIdeal),  pctOff: pctOff(avg.fats,  g.fatG),     idealToday: fatIdeal  },
+    effectiveDays,
+    calories: { target: goals.kcal, status: status(todayMacros.kcal,  prevSum.kcal,  goals.kcal, calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal  },
+    protein:  { target: g.protG,    status: status(todayMacros.prot,  prevSum.prot,  g.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot  },
+    carbs:    { target: g.carbsG,   status: status(todayMacros.carbs, prevSum.carbs, g.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs },
+    fat:      { target: g.fatG,     status: status(todayMacros.fats,  prevSum.fats,  g.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats  },
   };
 }

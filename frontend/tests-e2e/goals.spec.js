@@ -280,7 +280,7 @@ test.describe('Goals: 7-day window', () => {
     await expect(page.locator('.summary-hero-subtext')).toHaveCount(0);
   });
 
-  test('hero shows 7-day avg and delta after goals are set and a meal is logged', async ({ page }) => {
+  test('hero shows today kcal and delta after goals are set and a meal is logged', async ({ page }) => {
     // Arrange: create food, set goals, log a meal
     await createFood(page, CHICKEN);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
@@ -288,15 +288,12 @@ test.describe('Goals: 7-day window', () => {
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Assert: hero shows avg label and a status line
-    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal avg');
-
-    // Assert: second subtext line shows today's delta guidance
-    const deltaLine = page.locator('.summary-hero-subtext').nth(1);
-    await expect(deltaLine).toContainText(/kcal (left|over)/);
+    // Assert: hero shows today's kcal and delta guidance
+    await expect(page.locator('.summary-hero-value .unit')).toHaveText('kcal');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText(/kcal (left|over)/);
   });
 
-  test('macro cards show avg value and delta after goals are set and a meal is logged', async ({ page }) => {
+  test('macro cards show today value and delta after goals are set and a meal is logged', async ({ page }) => {
     // Arrange
     await createFood(page, CHICKEN);
     await setGoals(page, { kcal: 2000, prot: 30, carbs: 45, fat: 25 });
@@ -304,9 +301,9 @@ test.describe('Goals: 7-day window', () => {
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Assert: macro cards show "g avg" unit and per-macro delta subtext
+    // Assert: macro cards show "g" unit and per-macro delta subtext
     const proteinCard = page.locator('.macro-protein');
-    await expect(proteinCard.locator('.macro-value .unit')).toHaveText('g avg');
+    await expect(proteinCard.locator('.macro-value .unit')).toHaveText('g');
     await expect(proteinCard.locator('.macro-subtext')).toContainText(/g (left|over)/);
   });
 
