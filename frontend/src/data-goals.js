@@ -135,31 +135,32 @@ const IDEAL_CLAMP = 0.15;
 /**
  * Compute day status.
  *
- * Two modes:
- * - idealToday-relative (sparse data OR clamped window): status is based on
- *   consumed vs idealToday with ±SAFETY_NET_PCT bands.  Used when data is too
- *   sparse for a reliable average, or when the window has been pushed to the
- *   ±IDEAL_CLAMP boundary — in both cases the rolling average against the raw
- *   goal is too far from achievable to give actionable feedback.
- * - Rolling-average (dense, unclamped window): status is determined by where
- *   (prevSum + consumed) / effectiveDays sits relative to the raw goal.
+ * Three modes depending on window state:
+ *
+ * - Sparse (< WINDOW_MIN_DAYS): symmetric ±SAFETY_NET_PCT bands around idealToday.
+ *   No reliable history yet, so direction is unknown.
+ *
+ * - Clamped below (overeating — rawIdeal < goal×0.85): idealToday is a ceiling.
+ *   ok band is [ideal×0.9, ideal]; anything above ideal is immediately 'bad'.
+ *
+ * - Clamped above (undereating — rawIdeal > goal×1.15): idealToday is a floor.
+ *   Below ideal is 'low'; ok band is [ideal, ideal×1.1]; then 'warn', then 'bad'.
+ *
+ * - Dense, unclamped: rolling-average (prevSum + consumed) / effectiveDays vs raw goal.
  *
  * @param {number} consumed
- * @param {number} prevSum     — total consumed on other logged days in the window
+ * @param {number} prevSum       — total consumed on other logged days in the window
  * @param {number} effectiveDays — logged days (including today or +1 if today is empty)
- * @param {number | null} goal — raw daily target
- * @param {number} idealToday  — adjusted daily target (clamped)
+ * @param {number | null} goal   — raw daily target
+ * @param {number} idealToday    — adjusted daily target (clamped to ±IDEAL_CLAMP of goal)
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
 export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealToday) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
-  const rawIdeal = effectiveDays * goal - prevSum;
-  const isClamped = rawIdeal < goal * (1 - IDEAL_CLAMP) || rawIdeal > goal * (1 + IDEAL_CLAMP);
-
-  // Sparse data or clamped window: base status on consumed vs idealToday.
-  if (effectiveDays < WINDOW_MIN_DAYS || isClamped) {
+  // Sparse: symmetric bands — no directional history yet.
+  if (effectiveDays < WINDOW_MIN_DAYS) {
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
     if (ratio < 1 - SAFETY_NET_PCT)                                      { return 'low'; }
@@ -168,7 +169,30 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
     return 'bad';
   }
 
-  // Dense, unclamped window: rolling-average position relative to the raw goal.
+  const rawIdeal = effectiveDays * goal - prevSum;
+
+  if (rawIdeal < goal * (1 - IDEAL_CLAMP)) {
+    // Clamped below: idealToday is a ceiling — green only extends downward.
+    // Ok window is 2×SAFETY_NET_PCT wide, sitting below idealToday.
+    if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
+    const ratio = consumed / idealToday;
+    if (ratio < 1 - 2 * SAFETY_NET_PCT) { return 'low'; }
+    if (ratio <= 1)                      { return 'ok'; }
+    return 'bad';
+  }
+
+  if (rawIdeal > goal * (1 + IDEAL_CLAMP)) {
+    // Clamped above: idealToday is a floor — green only extends upward.
+    // Ok window is 2×SAFETY_NET_PCT wide, starting at idealToday.
+    if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
+    const ratio = consumed / idealToday;
+    if (ratio < 1)                                                           { return 'low'; }
+    if (ratio <= 1 + 2 * SAFETY_NET_PCT)                                     { return 'ok'; }
+    if (ratio <= 1 + 2 * SAFETY_NET_PCT + (STATUS_WARN_PCT - STATUS_OK_PCT)) { return 'warn'; }
+    return 'bad';
+  }
+
+  // Dense, unclamped: rolling-average position relative to the raw goal.
   const avg   = (prevSum + consumed) / effectiveDays;
   const ratio = avg / goal;
   if (ratio < 1 - STATUS_OK_PCT)    { return 'low'; }
@@ -253,27 +277,38 @@ export function statusForDay(kcalByDay, dateISO, goalKcal) {
  *   - 'warn'            → base + warn (bad is folded into warn)
  *   - 'bad'             → base + warn + bad (uncapped)
  *
+ * `skipWarnZone` removes the warn band entirely: 'bad' status jumps straight
+ * from base to bad with no yellow segment. Used for clamped-below days where
+ * any amount above idealToday is immediately bad.
+ *
  * @param {number} consumed
  * @param {number} target
  * @param {'none'|'low'|'ok'|'warn'|'bad'} status
+ * @param {boolean} [skipWarnZone]
  * @returns {{ basePct: number, warnPct: number, badPct: number }}
  */
-export function barSegments(consumed, target, status) {
+export function barSegments(consumed, target, status, skipWarnZone = false) {
   if (target <= 0) { return { basePct: 0, warnPct: 0, badPct: 0 }; }
   if (consumed <= target) {
     return { basePct: consumed / target * 100, warnPct: 0, badPct: 0 };
   }
 
   // Status caps which segments are visible.
-  const allowWarn = status === 'warn' || status === 'bad';
   const allowBad  = status === 'bad';
+  const allowWarn = !skipWarnZone && (status === 'warn' || status === 'bad');
 
-  if (!allowWarn) {
-    // Everything is base — consumed exceeds target but status says ok/low.
+  if (!allowWarn && !allowBad) {
+    // consumed exceeds target but status says ok/low — show full base only.
     return { basePct: 100, warnPct: 0, badPct: 0 };
   }
 
-  // Raw segments relative to target (basePct is always target-sized)
+  if (!allowWarn) {
+    // skipWarnZone + bad: everything over target is bad with no yellow band.
+    const scale = 100 / consumed;
+    return { basePct: target * scale, warnPct: 0, badPct: (consumed - target) * scale };
+  }
+
+  // Warn zone present: raw segments relative to target.
   const warnLimit = target * (1 + STATUS_WARN_PCT);
   const rawWarn   = Math.min(consumed, warnLimit) - target;
   const rawBad    = consumed > warnLimit ? consumed - warnLimit : 0;
@@ -309,10 +344,15 @@ export function macroVisuals(consumed, macroWin, effectiveDays, fallbackGoal = n
   /** @type {'none'|'low'|'ok'|'warn'|'bad'} */
   let status;
   let barTarget;
+  let skipWarnZone = false;
 
   if (macroWin) {
     status    = computeDayStatus(consumed, macroWin.prevSum, effectiveDays, macroWin.target, macroWin.idealToday);
     barTarget = macroWin.idealToday;
+    if (macroWin.target !== null && effectiveDays >= WINDOW_MIN_DAYS) {
+      const rawIdeal = effectiveDays * macroWin.target - macroWin.prevSum;
+      skipWarnZone = rawIdeal < macroWin.target * (1 - IDEAL_CLAMP);
+    }
   } else if (fallbackGoal !== null) {
     status    = computeDayStatus(consumed, 0, 1, fallbackGoal, fallbackGoal);
     barTarget = fallbackGoal;
@@ -320,7 +360,7 @@ export function macroVisuals(consumed, macroWin, effectiveDays, fallbackGoal = n
     return { status: 'none', bar: { basePct: 0, warnPct: 0, badPct: 0 } };
   }
 
-  return { status, bar: barSegments(consumed, barTarget, status) };
+  return { status, bar: barSegments(consumed, barTarget, status, skipWarnZone) };
 }
 
 /**

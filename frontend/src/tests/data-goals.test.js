@@ -121,22 +121,65 @@ describe('computeDayStatus', () => {
     expect(computeDayStatus(3200, 8000, 5, 2000, 2000)).toBe('bad');
   });
 
-  // --- clamped window: full idealToday-relative banding ----------------------
+  // --- clamped below (overeating): idealToday is a ceiling -------------------
+  // Ok window is 2×SAFETY_NET_PCT (20%) wide, sitting below idealToday.
 
-  test('clamped: consuming 0 on a bad week shows low', () => {
-    // prevSum = 12500, rawIdeal = 12000 - 12500 = -500 < goal×0.85=1700 → clamped
-    // idealToday = 1700; ratio = 0/1700 = 0 < 0.9 → 'low'
+  test('clamped below: consuming 0 shows low', () => {
+    // prevSum=12500, rawIdeal=12000-12500=-500 < goal×0.85=1700 → clamped below
+    // ratio = 0/1700 = 0 < 0.80 → 'low'
     expect(computeDayStatus(0, 12500, 6, 2000, 1700)).toBe('low');
   });
 
-  test('clamped: consuming idealToday exactly shows ok', () => {
-    // Same clamped scenario; ratio = 1700/1700 = 1.0 ≤ 1.1 → 'ok'
+  test('clamped below: bottom of ok window is at idealToday × 0.80', () => {
+    // ratio = 1360/1700 = 0.80 → 'ok' (lower edge of 20% window)
+    expect(computeDayStatus(1360, 12500, 6, 2000, 1700)).toBe('ok');
+    // ratio = 1359/1700 ≈ 0.799 < 0.80 → 'low'
+    expect(computeDayStatus(1359, 12500, 6, 2000, 1700)).toBe('low');
+  });
+
+  test('clamped below: consuming idealToday exactly shows ok', () => {
+    // ratio = 1700/1700 = 1.0 ≤ 1.0 → 'ok'
     expect(computeDayStatus(1700, 12500, 6, 2000, 1700)).toBe('ok');
   });
 
-  test('clamped: consuming well over idealToday shows bad', () => {
-    // ratio = 2500/1700 ≈ 1.47 > 1.15 → 'bad'
+  test('clamped below: consuming anything above idealToday is instantly bad', () => {
+    // No warn zone: ratio = 1701/1700 > 1.0 → 'bad'
+    expect(computeDayStatus(1701, 12500, 6, 2000, 1700)).toBe('bad');
+  });
+
+  test('clamped below: consuming well over idealToday stays bad', () => {
     expect(computeDayStatus(2500, 12500, 6, 2000, 1700)).toBe('bad');
+  });
+
+  // --- clamped above (undereating): idealToday is a floor --------------------
+  // Ok window is 2×SAFETY_NET_PCT (20%) wide, starting at idealToday.
+
+  test('clamped above: consuming below idealToday shows low', () => {
+    // prevSum=2400, rawIdeal=4×2000-2400=5600 > goal×1.15=2300 → clamped above
+    // idealToday=2300; ratio = 2200/2300 ≈ 0.957 < 1.0 → 'low'
+    expect(computeDayStatus(2200, 2400, 4, 2000, 2300)).toBe('low');
+  });
+
+  test('clamped above: consuming idealToday exactly shows ok', () => {
+    // ratio = 2300/2300 = 1.0 → 'ok'
+    expect(computeDayStatus(2300, 2400, 4, 2000, 2300)).toBe('ok');
+  });
+
+  test('clamped above: top of ok window is at idealToday × 1.20', () => {
+    // ratio = 2760/2300 ≈ 1.20 → 'ok' (upper edge of 20% window)
+    expect(computeDayStatus(2760, 2400, 4, 2000, 2300)).toBe('ok');
+    // ratio = 2761/2300 ≈ 1.200 → 'warn'
+    expect(computeDayStatus(2761, 2400, 4, 2000, 2300)).toBe('warn');
+  });
+
+  test('clamped above: warn zone above ok band', () => {
+    // ratio = 2806/2300 ≈ 1.22 > 1.20, ≤ 1.25 → 'warn'
+    expect(computeDayStatus(2806, 2400, 4, 2000, 2300)).toBe('warn');
+  });
+
+  test('clamped above: bad beyond warn zone', () => {
+    // ratio = 2900/2300 ≈ 1.26 > 1.25 → 'bad'
+    expect(computeDayStatus(2900, 2400, 4, 2000, 2300)).toBe('bad');
   });
 
   test('unclamped dense warn stays warn', () => {
@@ -291,25 +334,36 @@ describe('macroVisuals', () => {
   });
 
   test('bar and status always agree — warn status never produces bad bar', () => {
-    // Clamped window (prevSum=12500 → rawIdeal=-500 < goal×0.85=1700)
-    // consumed=1904, idealToday=1700 → ratio≈1.12, between 1.10 and 1.15 → 'warn'
+    // Clamped above (prevSum=2400 → rawIdeal=5600 > goal×1.15=2300)
+    // consumed=2806, idealToday=2300 → ratio≈1.22 > 1.20, ≤ 1.25 → 'warn'; bar has warn but no bad
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'warn', idealToday: 1700, prevSum: 12500 };
-    const v = macroVisuals(1904, mw, 6);
+    const mw = { target: 2000, status: 'warn', idealToday: 2300, prevSum: 2400 };
+    const v = macroVisuals(2806, mw, 4);
     expect(v.status).toBe('warn');
     expect(v.bar.badPct).toBe(0);
   });
 
   test('bar and status always agree — ok status never produces warn/bad bar', () => {
-    // Rolling avg is ok but today's consumed exceeds idealToday
-    // 6 prior days slightly under → avg stays within 5% of goal
+    // Unclamped: 6 prior days at goal, today slightly over → rolling avg ok
+    // prevSum=12000, rawIdeal=7×2000-12000=2000 ∈ [1700,2300] → not clamped
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'ok', idealToday: 2000, prevSum: 11400 };
-    // avg = (11400+2100)/7 = 1928.6 → 96.4% → ok
+    const mw = { target: 2000, status: 'ok', idealToday: 2000, prevSum: 12000 };
+    // avg = (12000+2100)/7 ≈ 2014 → 100.7% → ok
     const v = macroVisuals(2100, mw, 7);
     expect(v.status).toBe('ok');
     expect(v.bar.warnPct).toBe(0);
     expect(v.bar.badPct).toBe(0);
+  });
+
+  test('clamped below bar has no warn zone — consumed just over idealToday jumps to bad', () => {
+    // Clamped below: prevSum=12500 → rawIdeal=-500 < 1700 → skipWarnZone=true
+    // consumed=1800 > idealToday=1700 → status='bad', warnPct must be 0
+    /** @type {import('../data-goals.js').MacroWindow} */
+    const mw = { target: 2000, status: 'bad', idealToday: 1700, prevSum: 12500 };
+    const v = macroVisuals(1800, mw, 6);
+    expect(v.status).toBe('bad');
+    expect(v.bar.warnPct).toBe(0);
+    expect(v.bar.badPct).toBeGreaterThan(0);
   });
 });
 
