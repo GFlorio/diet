@@ -300,6 +300,38 @@ export function barSegments(consumed, target, status) {
   };
 }
 
+/** @typedef {{ status: 'none'|'low'|'ok'|'warn'|'bad', bar: { basePct: number, warnPct: number, badPct: number } }} MacroVisuals */
+
+/**
+ * Single source of truth for how a macro value should be colored and how
+ * its progress bar should look.  Computes status via the rolling-average /
+ * sparse-data logic and derives bar segments that are guaranteed to stay
+ * consistent with the status (bar never shows a severity beyond status).
+ *
+ * @param {number} consumed
+ * @param {MacroWindow | null | undefined} macroWin - from computeWindowVM; null/undefined = fallback
+ * @param {number} effectiveDays - from WindowVM; ignored when macroWin is null
+ * @param {number | null} [fallbackGoal] - raw daily target when macroWin is unavailable
+ * @returns {MacroVisuals}
+ */
+export function macroVisuals(consumed, macroWin, effectiveDays, fallbackGoal = null) {
+  /** @type {'none'|'low'|'ok'|'warn'|'bad'} */
+  let status;
+  let barTarget;
+
+  if (macroWin) {
+    status    = computeDayStatus(consumed, macroWin.prevSum, effectiveDays, macroWin.target, macroWin.idealToday);
+    barTarget = macroWin.idealToday;
+  } else if (fallbackGoal !== null) {
+    status    = computeDayStatus(consumed, 0, 1, fallbackGoal, fallbackGoal);
+    barTarget = fallbackGoal;
+  } else {
+    return { status: 'none', bar: { basePct: 0, warnPct: 0, badPct: 0 } };
+  }
+
+  return { status, bar: barSegments(consumed, barTarget, status) };
+}
+
 /**
  * Derive gram targets from goal percentages.
  * @param {GoalRecord} goals

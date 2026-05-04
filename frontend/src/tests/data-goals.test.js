@@ -42,6 +42,7 @@ import {
   goalForDate,
   idealForDay,
   list,
+  macroVisuals,
   remove,
   save,
   statusForDay,
@@ -261,6 +262,55 @@ describe('barSegments', () => {
     expect(s.basePct).toBe(100);
     expect(s.warnPct).toBe(0);
     expect(s.badPct).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// macroVisuals — single source of truth for status + bar
+// ---------------------------------------------------------------------------
+describe('macroVisuals', () => {
+  test('returns none with zero bar when no goal context', () => {
+    const v = macroVisuals(100, null, 1);
+    expect(v.status).toBe('none');
+    expect(v.bar).toEqual({ basePct: 0, warnPct: 0, badPct: 0 });
+  });
+
+  test('uses fallbackGoal when macroWin is null', () => {
+    const v = macroVisuals(100, null, 1, 100);
+    expect(v.status).toBe('ok');
+    expect(v.bar.basePct).toBe(100);
+  });
+
+  test('uses macroWin when provided', () => {
+    /** @type {import('../data-goals.js').MacroWindow} */
+    const mw = { target: 100, status: 'ok', idealToday: 100, prevSum: 400 };
+    const v = macroVisuals(100, mw, 5);
+    expect(v.status).toBe('ok');
+    expect(v.bar.basePct).toBe(100);
+  });
+
+  test('bar and status always agree — warn status never produces bad bar', () => {
+    // Safety-net scenario: rolling avg says bad, but consumed/idealToday is within ±10% → warn
+    // prevSum high (5 prior days at 2500 each = 12500), effectiveDays=6
+    // avg = (12500+1700)/6 ≈ 2367 → 18% over goal → would be bad
+    // But idealToday=1700, consumed=1700 → ratio 1.0 → safety net caps to warn
+    /** @type {import('../data-goals.js').MacroWindow} */
+    const mw = { target: 2000, status: 'warn', idealToday: 1700, prevSum: 12500 };
+    const v = macroVisuals(1700, mw, 6);
+    expect(v.status).toBe('warn');
+    expect(v.bar.badPct).toBe(0);
+  });
+
+  test('bar and status always agree — ok status never produces warn/bad bar', () => {
+    // Rolling avg is ok but today's consumed exceeds idealToday
+    // 6 prior days slightly under → avg stays within 5% of goal
+    /** @type {import('../data-goals.js').MacroWindow} */
+    const mw = { target: 2000, status: 'ok', idealToday: 2000, prevSum: 11400 };
+    // avg = (11400+2100)/7 = 1928.6 → 96.4% → ok
+    const v = macroVisuals(2100, mw, 7);
+    expect(v.status).toBe('ok');
+    expect(v.bar.warnPct).toBe(0);
+    expect(v.bar.badPct).toBe(0);
   });
 });
 

@@ -149,21 +149,12 @@ export function setupMeals(){
     const g = currentGoals ? Goals.derivedGrams(currentGoals) : null;
 
     const wvm = currentWindowVM;
+    const ed  = wvm?.effectiveDays ?? 1;
 
-    /** @param {number} newConsumed @param {import('../data-goals.js').MacroWindow | undefined} mw @param {number | null} rawGoal @returns {'none'|'low'|'ok'|'warn'|'bad'} */
-    const st = (newConsumed, mw, rawGoal) => {
-      if (mw && wvm) {
-        return Goals.computeDayStatus(newConsumed, mw.prevSum, wvm.effectiveDays, mw.target, mw.idealToday);
-      }
-      return rawGoal !== null
-        ? Goals.computeDayStatus(newConsumed, 0, 1, rawGoal, rawGoal)
-        : 'none';
-    };
-
-    const kcalSt  = st(totals.kcal + dKcal,  wvm?.calories, currentGoals?.kcal ?? null);
-    const protSt  = st(totals.prot + dProt,   wvm?.protein,  g?.protG ?? null);
-    const carbsSt = st(totals.carbs + dCarbs,  wvm?.carbs,    g?.carbsG ?? null);
-    const fatSt   = st(totals.fats + dFats,    wvm?.fat,      g?.fatG ?? null);
+    const kcalSt  = Goals.macroVisuals(totals.kcal + dKcal,  wvm?.calories, ed, currentGoals?.kcal ?? null).status;
+    const protSt  = Goals.macroVisuals(totals.prot + dProt,   wvm?.protein,  ed, g?.protG ?? null).status;
+    const carbsSt = Goals.macroVisuals(totals.carbs + dCarbs,  wvm?.carbs,    ed, g?.carbsG ?? null).status;
+    const fatSt   = Goals.macroVisuals(totals.fats + dFats,    wvm?.fat,      ed, g?.fatG ?? null).status;
 
     /** @param {number} v @param {string} unit @param {string} st @returns {string} */
     const seg = (v, unit, st) => {
@@ -425,7 +416,7 @@ export function setupMeals(){
       consumed,
       target,
       remaining: target - consumed,
-      status:    Goals.computeDayStatus(consumed, 0, 1, target, target),
+      status:    Goals.macroVisuals(consumed, null, 1, target).status,
     });
     return {
       calories: macro(totals.kcal, currentGoals.kcal),
@@ -449,15 +440,15 @@ export function setupMeals(){
       ? `${$.fmtNum(delta, 0)} ${unit} left`
       : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over`;
 
+    const ed = wvm?.effectiveDays ?? 1;
+
     /**
-     * Render a multi-segment progress bar.
-     * @param {number} consumed
-     * @param {number} target
+     * Render a multi-segment progress bar from pre-computed bar segments.
+     * @param {{ basePct: number, warnPct: number, badPct: number }} seg
      * @param {'none'|'low'|'ok'|'warn'|'bad'} status
      * @returns {string}
      */
-    const barHtml = (consumed, target, status) => {
-      const seg = Goals.barSegments(consumed, target, status);
+    const barHtml = (seg, status) => {
       const baseClass = status === 'low' ? 'macro-bar-low' : 'macro-bar-ok';
       return `<div class="macro-bar">`
         + `<div class="macro-bar-fill ${baseClass}" style="width:${seg.basePct}%"></div>`
@@ -466,36 +457,43 @@ export function setupMeals(){
         + `</div>`;
     };
 
+    /**
+     * Render a hero-sized progress bar from pre-computed bar segments.
+     * @param {{ basePct: number, warnPct: number, badPct: number }} seg
+     * @param {'none'|'low'|'ok'|'warn'|'bad'} status
+     * @returns {string}
+     */
+    const heroBarHtml = (seg, status) => {
+      const baseClass = status === 'low' ? 'low' : 'ok';
+      return `<div class="summary-hero-bar">`
+        + `<div class="summary-hero-bar-fill ${baseClass}" style="width:${seg.basePct}%"></div>`
+        + (seg.warnPct > 0 ? `<div class="summary-hero-bar-fill warn" style="width:${seg.warnPct}%"></div>` : '')
+        + (seg.badPct > 0 ? `<div class="summary-hero-bar-fill bad" style="width:${seg.badPct}%"></div>` : '')
+        + `</div>`;
+    };
+
     // --- Hero section ---
     let heroValueHtml;
     let heroExtras = '';
 
     if (wvm) {
-      const st       = wvm.calories.status;
+      const calVis   = Goals.macroVisuals(vm.calories.consumed, wvm.calories, ed);
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
-      const heroSeg  = Goals.barSegments(vm.calories.consumed, wvm.calories.idealToday, st);
-      const heroBaseClass = st === 'low' ? 'low' : 'ok';
       heroValueHtml = `
-        <div class="summary-hero-value status-${st}">
+        <div class="summary-hero-value status-${calVis.status}">
           <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;
       heroExtras = `
-        <div class="summary-hero-subtext status-${st}">${deltaStr(calDelta, 'kcal')}</div>
-        <div class="summary-hero-bar">`
-          + `<div class="summary-hero-bar-fill ${heroBaseClass}" style="width:${heroSeg.basePct}%"></div>`
-          + (heroSeg.warnPct > 0 ? `<div class="summary-hero-bar-fill warn" style="width:${heroSeg.warnPct}%"></div>` : '')
-          + (heroSeg.badPct > 0 ? `<div class="summary-hero-bar-fill bad" style="width:${heroSeg.badPct}%"></div>` : '')
-        + `</div>`;
+        <div class="summary-hero-subtext status-${calVis.status}">${deltaStr(calDelta, 'kcal')}</div>
+        ${heroBarHtml(calVis.bar, calVis.status)}`;
     } else if (currentGoals) {
       // Fallback: goals set but no window data yet (brand-new user)
+      const calVis    = Goals.macroVisuals(vm.calories.consumed, null, ed, vm.calories.target);
       const remaining = vm.calories.remaining;
       const subtext   = remaining !== null
         ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)} kcal left` : `${$.fmtNum(Math.abs(remaining), 0)} kcal over`)
         : '';
-      const fallbackTarget = vm.calories.target ?? 0;
-      const fallbackSeg    = Goals.barSegments(vm.calories.consumed, fallbackTarget, vm.calories.status);
-      const fallbackBase   = vm.calories.status === 'low' ? 'low' : 'ok';
 
       heroValueHtml = `
         <div class="summary-hero-value">
@@ -503,12 +501,8 @@ export function setupMeals(){
           <span class="unit">kcal</span>
         </div>`;
       heroExtras = `
-        <div class="summary-hero-subtext status-${vm.calories.status}">${subtext}</div>
-        <div class="summary-hero-bar">`
-          + `<div class="summary-hero-bar-fill ${fallbackBase}" style="width:${fallbackSeg.basePct}%"></div>`
-          + (fallbackSeg.warnPct > 0 ? `<div class="summary-hero-bar-fill warn" style="width:${fallbackSeg.warnPct}%"></div>` : '')
-          + (fallbackSeg.badPct > 0 ? `<div class="summary-hero-bar-fill bad" style="width:${fallbackSeg.badPct}%"></div>` : '')
-        + `</div>`;
+        <div class="summary-hero-subtext status-${calVis.status}">${subtext}</div>
+        ${heroBarHtml(calVis.bar, calVis.status)}`;
     } else {
       heroValueHtml = `
         <div class="summary-hero-value">
@@ -527,30 +521,32 @@ export function setupMeals(){
      */
     const macroCard = (label, macroVM, macroWin, cls) => {
       if (wvm && macroWin) {
-        const d = macroWin.idealToday - macroVM.consumed;
+        const vis = Goals.macroVisuals(macroVM.consumed, macroWin, ed);
+        const d   = macroWin.idealToday - macroVM.consumed;
         return `
-          <div class="macro-card ${cls} status-${macroWin.status}">
+          <div class="macro-card ${cls} status-${vis.status}">
             <div class="macro-label">${label}</div>
             <div class="macro-value-row">
               <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-              <div class="macro-subtext status-${macroWin.status}">${deltaStr(d, 'g')}</div>
+              <div class="macro-subtext status-${vis.status}">${deltaStr(d, 'g')}</div>
             </div>
-            ${barHtml(macroVM.consumed, macroWin.idealToday, macroWin.status)}
+            ${barHtml(vis.bar, vis.status)}
           </div>`;
       }
       if (currentGoals) {
+        const vis       = Goals.macroVisuals(macroVM.consumed, null, ed, macroVM.target);
         const remaining = macroVM.remaining;
         const subtext   = remaining !== null
           ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)}g left` : `${$.fmtNum(Math.abs(remaining), 0)}g over`)
           : '';
         return `
-          <div class="macro-card ${cls} status-${macroVM.status}">
+          <div class="macro-card ${cls} status-${vis.status}">
             <div class="macro-label">${label}</div>
             <div class="macro-value-row">
               <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-              <div class="macro-subtext status-${macroVM.status}">${subtext}</div>
+              <div class="macro-subtext status-${vis.status}">${subtext}</div>
             </div>
-            ${barHtml(macroVM.consumed, macroVM.target ?? 0, macroVM.status)}
+            ${barHtml(vis.bar, vis.status)}
           </div>`;
       }
       return `
