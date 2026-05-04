@@ -129,17 +129,20 @@ export function goalForDate(records, dateISO) {
   return records.find(r => r.effectiveFrom <= dateISO) ?? null;
 }
 
+/** Clamp factor for idealToday: ±15% of the daily target. */
+const IDEAL_CLAMP = 0.15;
+
 /**
- * Compute day status using the rolling-average approach with a safety net.
+ * Compute day status.
  *
- * When enough data exists (≥ WINDOW_MIN_DAYS), the status is determined by
- * where the rolling average (prevSum + consumed) / effectiveDays sits relative
- * to the raw goal.  If the result would be 'bad' but the user ate within
- * ±SAFETY_NET_PCT of idealToday, it is capped at 'warn' (the "did your best
- * given the clamp" override).
- *
- * When data is sparse (< WINDOW_MIN_DAYS), the rolling average is unreliable,
- * so status is based on consumed vs idealToday with ±SAFETY_NET_PCT bands.
+ * Two modes:
+ * - idealToday-relative (sparse data OR clamped window): status is based on
+ *   consumed vs idealToday with ±SAFETY_NET_PCT bands.  Used when data is too
+ *   sparse for a reliable average, or when the window has been pushed to the
+ *   ±IDEAL_CLAMP boundary — in both cases the rolling average against the raw
+ *   goal is too far from achievable to give actionable feedback.
+ * - Rolling-average (dense, unclamped window): status is determined by where
+ *   (prevSum + consumed) / effectiveDays sits relative to the raw goal.
  *
  * @param {number} consumed
  * @param {number} prevSum     — total consumed on other logged days in the window
@@ -152,39 +155,27 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
-  // Sparse data: fall back to idealToday with wider (±10%) bands.
-  if (effectiveDays < WINDOW_MIN_DAYS) {
+  const rawIdeal = effectiveDays * goal - prevSum;
+  const isClamped = rawIdeal < goal * (1 - IDEAL_CLAMP) || rawIdeal > goal * (1 + IDEAL_CLAMP);
+
+  // Sparse data or clamped window: base status on consumed vs idealToday.
+  if (effectiveDays < WINDOW_MIN_DAYS || isClamped) {
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
-    if (ratio < 1 - SAFETY_NET_PCT)                            { return 'low'; }
-    if (ratio <= 1 + SAFETY_NET_PCT)                            { return 'ok'; }
+    if (ratio < 1 - SAFETY_NET_PCT)                                      { return 'low'; }
+    if (ratio <= 1 + SAFETY_NET_PCT)                                      { return 'ok'; }
     if (ratio <= 1 + SAFETY_NET_PCT + (STATUS_WARN_PCT - STATUS_OK_PCT)) { return 'warn'; }
     return 'bad';
   }
 
-  // Primary: rolling-average position relative to the raw goal.
+  // Dense, unclamped window: rolling-average position relative to the raw goal.
   const avg   = (prevSum + consumed) / effectiveDays;
   const ratio = avg / goal;
-  /** @type {'low'|'ok'|'warn'|'bad'} */
-  let status;
-  if (ratio < 1 - STATUS_OK_PCT)    { status = 'low'; }
-  else if (ratio <= 1 + STATUS_OK_PCT)   { status = 'ok'; }
-  else if (ratio <= 1 + STATUS_WARN_PCT) { status = 'warn'; }
-  else                                    { status = 'bad'; }
-
-  // Safety net: following idealToday during recovery should never be 'bad'.
-  if (status === 'bad' && idealToday > 0) {
-    const idealRatio = consumed / idealToday;
-    if (idealRatio >= 1 - SAFETY_NET_PCT && idealRatio <= 1 + SAFETY_NET_PCT) {
-      status = 'warn';
-    }
-  }
-
-  return status;
+  if (ratio < 1 - STATUS_OK_PCT)    { return 'low'; }
+  if (ratio <= 1 + STATUS_OK_PCT)   { return 'ok'; }
+  if (ratio <= 1 + STATUS_WARN_PCT) { return 'warn'; }
+  return 'bad';
 }
-
-/** Clamp factor for idealToday: ±15% of the daily target. */
-const IDEAL_CLAMP = 0.15;
 
 /**
  * Compute the adjusted daily target for a given day, based on the 7-day

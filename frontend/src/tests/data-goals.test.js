@@ -121,27 +121,28 @@ describe('computeDayStatus', () => {
     expect(computeDayStatus(3200, 8000, 5, 2000, 2000)).toBe('bad');
   });
 
-  // --- safety net: following idealToday during recovery caps at warn ---------
+  // --- clamped window: full idealToday-relative banding ----------------------
 
-  test('safety net: bad capped to warn when consumed is within ±10% of idealToday', () => {
-    // prevSum very high (5 prior days ate 2500 each = 12500), effectiveDays=6
-    // avg = (12500 + 1700)/6 ≈ 2367 = 18% over goal → would be 'bad'
-    // But idealToday is 1700 (clamped) and consumed = 1700 → within ±10% → cap at 'warn'
-    expect(computeDayStatus(1700, 12500, 6, 2000, 1700)).toBe('warn');
+  test('clamped: consuming 0 on a bad week shows low', () => {
+    // prevSum = 12500, rawIdeal = 12000 - 12500 = -500 < goal×0.85=1700 → clamped
+    // idealToday = 1700; ratio = 0/1700 = 0 < 0.9 → 'low'
+    expect(computeDayStatus(0, 12500, 6, 2000, 1700)).toBe('low');
   });
 
-  test('safety net: bad stays bad when consumed far from idealToday', () => {
-    // Same scenario but user ate 2500 instead of following idealToday
-    // avg = (12500 + 2500)/6 ≈ 2500 → bad, and 2500/1700 ≈ 1.47 → not within ±10%
+  test('clamped: consuming idealToday exactly shows ok', () => {
+    // Same clamped scenario; ratio = 1700/1700 = 1.0 ≤ 1.1 → 'ok'
+    expect(computeDayStatus(1700, 12500, 6, 2000, 1700)).toBe('ok');
+  });
+
+  test('clamped: consuming well over idealToday shows bad', () => {
+    // ratio = 2500/1700 ≈ 1.47 > 1.15 → 'bad'
     expect(computeDayStatus(2500, 12500, 6, 2000, 1700)).toBe('bad');
   });
 
-  test('safety net does not promote warn to ok', () => {
-    // avg is in warn territory and user hit idealToday — stays warn
-    // prevSum = 5*2150 = 10750, consumed=2150, effectiveDays=6
-    // avg = 12900/6 = 2150 = 107.5% → warn; idealToday=2000, 2150/2000=1.075 → within ±10%
-    // safety net only fires on 'bad', so result stays 'warn'
-    expect(computeDayStatus(2150, 10750, 6, 2000, 2000)).toBe('warn');
+  test('unclamped dense warn stays warn', () => {
+    // prevSum = 10200, rawIdeal = 12000 - 10200 = 1800 ∈ [1700, 2300] → not clamped
+    // avg = (10200 + 2500)/6 ≈ 2117, ratio = 1.058 → warn
+    expect(computeDayStatus(2500, 10200, 6, 2000, 1800)).toBe('warn');
   });
 
   // --- spike tolerance: one-day overshoot dampened by 7-day average ----------
@@ -290,13 +291,11 @@ describe('macroVisuals', () => {
   });
 
   test('bar and status always agree — warn status never produces bad bar', () => {
-    // Safety-net scenario: rolling avg says bad, but consumed/idealToday is within ±10% → warn
-    // prevSum high (5 prior days at 2500 each = 12500), effectiveDays=6
-    // avg = (12500+1700)/6 ≈ 2367 → 18% over goal → would be bad
-    // But idealToday=1700, consumed=1700 → ratio 1.0 → safety net caps to warn
+    // Clamped window (prevSum=12500 → rawIdeal=-500 < goal×0.85=1700)
+    // consumed=1904, idealToday=1700 → ratio≈1.12, between 1.10 and 1.15 → 'warn'
     /** @type {import('../data-goals.js').MacroWindow} */
     const mw = { target: 2000, status: 'warn', idealToday: 1700, prevSum: 12500 };
-    const v = macroVisuals(1700, mw, 6);
+    const v = macroVisuals(1904, mw, 6);
     expect(v.status).toBe('warn');
     expect(v.bar.badPct).toBe(0);
   });

@@ -151,19 +151,19 @@ describe('Macro cards vs heatmap calorie status consistency', () => {
     expect(macro).toBe(heatmap);
   });
 
-  test('safety net produces same result in both paths', async () => {
+  test('clamped window shows ok in both paths when eating idealToday', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
-    // Heavy over-eating on prior days
+    // Heavy over-eating on prior days — idealToday clamped to 0.85*2000=1700
     await seedDay('2024-06-07', 3000);
     await seedDay('2024-06-08', 3000);
     await seedDay('2024-06-09', 3000);
-    // Today eats idealToday (clamped to 0.85*2000=1700)
+    // Today eats exactly idealToday → clamped path → ok in both rendering paths
     await seedDay('2024-06-10', 1700);
 
     const macro = await mealPageCalStatus('2024-06-10');
     const heatmap = await heatmapCalStatus('2024-06-10');
-    expect(macro).toBe('warn');
-    expect(heatmap).toBe('warn');
+    expect(macro).toBe('ok');
+    expect(heatmap).toBe('ok');
   });
 });
 

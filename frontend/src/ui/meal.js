@@ -496,7 +496,7 @@ export function setupMeals(){
         : '';
 
       heroValueHtml = `
-        <div class="summary-hero-value">
+        <div class="summary-hero-value status-${calVis.status}">
           <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;

@@ -176,19 +176,18 @@ describe('Window status computation', () => {
     expect(vm?.calories.status).toBe('warn');
   });
 
-  test('safety net caps bad at warn when today follows idealToday', async () => {
+  test('clamped window: eating idealToday exactly shows ok', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
     const goal = await Goals.getActive('2024-06-10');
-    // Heavy over-eating on prior days...
+    // Heavy over-eating on prior days — idealToday clamped to 0.85*2000=1700
     await seedDay('2024-06-07', 3000);
     await seedDay('2024-06-08', 3000);
     await seedDay('2024-06-09', 3000);
-    // ...but today eats within ±10% of idealToday (which is clamped to 0.85*2000=1700)
+    // Today eats exactly idealToday → clamped path, ratio=1.0 → ok
     await seedDay('2024-06-10', 1700);
 
     const vm = await Goals.computeWindowVM('2024-06-10', goal);
-    // Rolling avg is very high (bad), but safety net overrides to warn
-    expect(vm?.calories.status).toBe('warn');
+    expect(vm?.calories.status).toBe('ok');
   });
 });
 
