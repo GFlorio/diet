@@ -376,6 +376,182 @@ export function derivedGrams(goals) {
   };
 }
 
+/** @param {number} x @param {number} lo @param {number} hi */
+function clampN(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+/**
+ * @param {number} kcal
+ * @param {{ proteinG: number, carbsG: number, fatG: number }} g
+ * @returns {{ protein: number, carbs: number, fat: number }}
+ */
+function gramsToShares(kcal, g) {
+  return {
+    protein: (KCAL_PER_G_PROTEIN * g.proteinG) / kcal,
+    carbs:   (KCAL_PER_G_CARBS   * g.carbsG)   / kcal,
+    fat:     (KCAL_PER_G_FAT     * g.fatG)      / kcal,
+  };
+}
+
+/**
+ * @param {number} kcal
+ * @param {{ protein: number, carbs: number, fat: number }} s
+ * @returns {{ proteinG: number, carbsG: number, fatG: number }}
+ */
+function sharesToGrams(kcal, s) {
+  return {
+    proteinG: (kcal * s.protein) / KCAL_PER_G_PROTEIN,
+    carbsG:   (kcal * s.carbs)   / KCAL_PER_G_CARBS,
+    fatG:     (kcal * s.fat)     / KCAL_PER_G_FAT,
+  };
+}
+
+/**
+ * Per-macro share-movement allowances based on 7-day adherence ratio.
+ * "down"/"up" are fractions of the desired share (applied as multipliers later).
+ * @param {'protein'|'carbs'|'fat'} macro
+ * @param {number} ratio  prevAvg / dailyGoalG
+ * @returns {{ down: number, up: number }}
+ */
+function directionalAllowance(macro, ratio) {
+  if (macro === 'protein') {
+    if (ratio < 0.90) { return { down: 0.15, up: 0.00 }; }
+    if (ratio < 0.95) { return { down: 0.15, up: 0.03 }; }
+    if (ratio <= 1.05) { return { down: 0.15, up: 0.10 }; }
+    if (ratio <= 1.10) { return { down: 0.10, up: 0.15 }; }
+    return                { down: 0.05, up: 0.15 };
+  }
+  if (ratio < 0.90) { return { down: 0.15, up: 0.03 }; }
+  if (ratio < 0.95) { return { down: 0.15, up: 0.05 }; }
+  if (ratio <= 1.05) { return { down: 0.15, up: 0.15 }; }
+  if (ratio <= 1.10) { return { down: 0.05, up: 0.15 }; }
+  return                { down: 0.03, up: 0.15 };
+}
+
+/**
+ * Project a candidate macro-share split onto the simplex (p+c+f=1)
+ * while respecting per-macro bounds. At most 5 passes (1–2 are typical).
+ * @param {{ protein: number, carbs: number, fat: number }} x
+ * @param {{ protein: number, carbs: number, fat: number }} lower
+ * @param {{ protein: number, carbs: number, fat: number }} upper
+ * @returns {{ protein: number, carbs: number, fat: number }}
+ */
+function projectToSimplex(x, lower, upper) {
+  const y = {
+    protein: clampN(x.protein, lower.protein, upper.protein),
+    carbs:   clampN(x.carbs,   lower.carbs,   upper.carbs),
+    fat:     clampN(x.fat,     lower.fat,     upper.fat),
+  };
+  for (let i = 0; i < 5; i++) {
+    const total = y.protein + y.carbs + y.fat;
+    const diff  = 1 - total;
+    if (Math.abs(diff) < 1e-6) { break; }
+    const room = {
+      protein: diff > 0 ? upper.protein - y.protein : y.protein - lower.protein,
+      carbs:   diff > 0 ? upper.carbs   - y.carbs   : y.carbs   - lower.carbs,
+      fat:     diff > 0 ? upper.fat     - y.fat      : y.fat     - lower.fat,
+    };
+    const totalRoom = room.protein + room.carbs + room.fat;
+    if (totalRoom <= 1e-9) { break; }
+    y.protein += diff * (room.protein / totalRoom);
+    y.carbs   += diff * (room.carbs   / totalRoom);
+    y.fat     += diff * (room.fat     / totalRoom);
+  }
+  return y;
+}
+
+/**
+ * Compute coherent macro ideal-today values such that
+ * 4·protIdeal + 4·carbIdeal + 9·fatIdeal ≈ kcalIdeal.
+ *
+ * Works in calorie-share space so that each macro's movement is bounded
+ * relative to the user's stated split rather than in raw grams.
+ * The 15% clamp is encoded in per-macro share bounds; directional
+ * constraints based on 7-day adherence tighten one side of each bound.
+ *
+ * @param {{
+ *   kcalIdeal:    number,
+ *   goals:        GoalRecord,
+ *   derivedG:     { protG: number, carbsG: number, fatG: number },
+ *   prevSum:      import('./db.js').Macros,
+ *   effectiveDays: number,
+ * }} params
+ * @returns {{ protIdeal: number, carbIdeal: number, fatIdeal: number }}
+ */
+function reconcileMacroIdeals({ kcalIdeal, goals, derivedG, prevSum, effectiveDays }) {
+  const desired = {
+    protein: goals.protPct  / 100,
+    carbs:   goals.carbsPct / 100,
+    fat:     goals.fatPct   / 100,
+  };
+
+  const rawG = {
+    proteinG: effectiveDays * derivedG.protG  - prevSum.prot,
+    carbsG:   effectiveDays * derivedG.carbsG - prevSum.carbs,
+    fatG:     effectiveDays * derivedG.fatG   - prevSum.fats,
+  };
+
+  const rawShares = gramsToShares(kcalIdeal, rawG);
+
+  // 7-day adherence ratios: prevAvg / dailyGoal.
+  // When there are no prior days (prevDays=0) treat as neutral (1.0).
+  const prevDays = effectiveDays - 1;
+  const pRatio = prevDays > 0 && derivedG.protG  > 0 ? (prevSum.prot  / prevDays) / derivedG.protG  : 1;
+  const cRatio = prevDays > 0 && derivedG.carbsG > 0 ? (prevSum.carbs / prevDays) / derivedG.carbsG : 1;
+  const fRatio = prevDays > 0 && derivedG.fatG   > 0 ? (prevSum.fats  / prevDays) / derivedG.fatG   : 1;
+
+  const pAllow = directionalAllowance('protein', pRatio);
+  const cAllow = directionalAllowance('carbs',   cRatio);
+  const fAllow = directionalAllowance('fat',     fRatio);
+
+  const lower = {
+    protein: desired.protein * (1 - pAllow.down),
+    carbs:   desired.carbs   * (1 - cAllow.down),
+    fat:     desired.fat     * (1 - fAllow.down),
+  };
+  const upper = {
+    protein: desired.protein * (1 + pAllow.up),
+    carbs:   desired.carbs   * (1 + cAllow.up),
+    fat:     desired.fat     * (1 + fAllow.up),
+  };
+
+  // Feasibility: if bounds can't contain sum=1, relax carbs → fat → protein.
+  const minPossible = lower.protein + lower.carbs + lower.fat;
+  const maxPossible = upper.protein + upper.carbs + upper.fat;
+  if (minPossible > 1) {
+    const excess    = minPossible - 1;
+    const carbRelax = Math.min(excess, lower.carbs);
+    lower.carbs    -= carbRelax;
+    const rem1      = excess - carbRelax;
+    const fatRelax  = Math.min(rem1, lower.fat);
+    lower.fat      -= fatRelax;
+    lower.protein   = Math.max(0, lower.protein - (rem1 - fatRelax));
+  }
+  if (maxPossible < 1) {
+    upper.carbs += 1 - maxPossible;
+  }
+
+  const candidate = {
+    protein: clampN(rawShares.protein, lower.protein, upper.protein),
+    carbs:   clampN(rawShares.carbs,   lower.carbs,   upper.carbs),
+    fat:     clampN(rawShares.fat,     lower.fat,     upper.fat),
+  };
+
+  const finalShares = projectToSimplex(candidate, lower, upper);
+  const finalG      = sharesToGrams(kcalIdeal, finalShares);
+
+  const protIdeal = Math.round(finalG.proteinG * 10) / 10;
+  const carbIdeal = Math.round(finalG.carbsG   * 10) / 10;
+  // Always nudge fat to absorb any rounding residual (9 kcal/g means fewest grams moved).
+  const residualKcal =
+    kcalIdeal
+    - KCAL_PER_G_PROTEIN * protIdeal
+    - KCAL_PER_G_CARBS   * carbIdeal
+    - KCAL_PER_G_FAT     * Math.round(finalG.fatG * 10) / 10;
+  const fatIdeal = Math.round((finalG.fatG + residualKcal / KCAL_PER_G_FAT) * 10) / 10;
+
+  return { protIdeal, carbIdeal, fatIdeal };
+}
+
 /**
  * Compute the 7-day sliding window view model.
  * Returns null if goals are not set or no meals exist in the window.
@@ -425,10 +601,14 @@ export async function computeWindowVM(todayISO, goals) {
     return Math.max(target * (1 - IDEAL_CLAMP), Math.min(target * (1 + IDEAL_CLAMP), ideal));
   };
 
-  const calIdeal  = idealToday(prevSum.kcal,  goals.kcal);
-  const protIdeal = idealToday(prevSum.prot,  g.protG);
-  const carbIdeal = idealToday(prevSum.carbs, g.carbsG);
-  const fatIdeal  = idealToday(prevSum.fats,  g.fatG);
+  const calIdeal = idealToday(prevSum.kcal, goals.kcal);
+  const { protIdeal, carbIdeal, fatIdeal } = reconcileMacroIdeals({
+    kcalIdeal: calIdeal,
+    goals,
+    derivedG: g,
+    prevSum,
+    effectiveDays,
+  });
 
   /** @param {number} consumed @param {number} pSum @param {number | null} goal @param {number} ideal */
   const status = (consumed, pSum, goal, ideal) =>

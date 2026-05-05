@@ -799,19 +799,113 @@ describe('computeWindowVM', () => {
     expect(result?.fat.status).toBe('ok');
   });
 
-  test('macro idealToday tracks each macro target independently', async () => {
+  test('one prior day at goal: macro ideals are close to goal grams', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.protein.idealToday).toBeCloseTo(150);
-    expect(result?.carbs.idealToday).toBeCloseTo(225);
-    expect(result?.fat.idealToday).toBeCloseTo(56);
+    // With no deviation in history, ideals stay close to goal.
+    // Slight differences (<1g) arise from rounding in derivedGrams and simplex projection.
+    expect(result?.protein.idealToday).toBeCloseTo(150, 0);
+    expect(result?.carbs.idealToday).toBeCloseTo(225, 0);
+    expect(result?.fat.idealToday).toBeCloseTo(56, 0);
   });
 
-  test('macro idealToday is clamped independently per macro', async () => {
+  test('fat over-adherence reduces fat ideal while maintaining calorie coherence', async () => {
+    // Fat was 200g vs 56g goal (ratio ≈ 3.6×): fat share pushed to its minimum bound.
+    // Other macros must absorb the slack to keep 4P+4C+9F = calIdeal.
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 2000, 150, 225, 200)]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.fat.idealToday).toBeCloseTo(56 * 0.85, 0);
-    expect(result?.protein.idealToday).toBeCloseTo(150);
+    expect(result?.fat.idealToday).toBeLessThan(56);
+    const macroKcal = 4 * (result?.protein.idealToday ?? 0)
+      + 4 * (result?.carbs.idealToday ?? 0)
+      + 9 * (result?.fat.idealToday ?? 0);
+    expect(macroKcal).toBeCloseTo(result?.calories.idealToday ?? 0, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeWindowVM – macro coherence and green-state invariant
+// ---------------------------------------------------------------------------
+describe('computeWindowVM – macro coherence', () => {
+  // goals: 2000 kcal, 30% prot (150g), 45% carbs (225g), 25% fat (56g)
+  const g = makeGoal('2024-01-01', { kcal: 2000, maintenanceKcal: 2500, calMagnitude: 500, protPct: 30, carbsPct: 45, fatPct: 25 });
+  const TODAY = '2024-02-07';
+
+  /**
+   * Build a calorie-coherent meal (kcal derived from macros).
+   * @param {string} date @param {number} prot @param {number} carbs @param {number} fats
+   */
+  function coherentMeal(date, prot, carbs, fats) {
+    const kcal = 4 * prot + 4 * carbs + 9 * fats;
+    return {
+      id: `meal:${date}`, foodId: 'food:1', multiplier: 1, date, updatedAt: 0,
+      foodSnapshot: { id: 'food:1', name: 'X', refLabel: '100g', kcal, prot, carbs, fats, updatedAt: 0 },
+    };
+  }
+
+  /**
+   * Given prior meals, assert that:
+   * (a) 4P + 4C + 9F ≈ calIdeal (coherence), and
+   * (b) eating exactly the idealToday values produces 'ok' status on all 4 dimensions.
+   * @param {ReturnType<typeof coherentMeal>[]} priorMeals
+   */
+  async function assertGreenState(priorMeals) {
+    // Step 1: compute ideals with no today entry.
+    vi.mocked(Meals.listRange).mockResolvedValue(priorMeals);
+    const pre = await computeWindowVM(TODAY, g);
+    expect(pre).not.toBeNull();
+
+    const { calories, protein, carbs, fat } = /** @type {NonNullable<typeof pre>} */ (pre);
+
+    // (a) Calorie coherence.
+    const macroKcal = 4 * protein.idealToday + 4 * carbs.idealToday + 9 * fat.idealToday;
+    expect(macroKcal).toBeCloseTo(calories.idealToday, 0);
+
+    // (b) Eating exactly the ideals produces 'ok' for all 4 dimensions.
+    // effectiveDays is the same before and after adding today (today-not-logged adds +1
+    // which exactly offsets today being added to windowDays), so the ideals are stable.
+    const todayMeal = {
+      id: `meal:${TODAY}`, foodId: 'food:1', multiplier: 1, date: TODAY, updatedAt: 0,
+      foodSnapshot: {
+        id: 'food:1', name: 'X', refLabel: '100g',
+        kcal: calories.idealToday,
+        prot: protein.idealToday,
+        carbs: carbs.idealToday,
+        fats: fat.idealToday,
+        updatedAt: 0,
+      },
+    };
+    vi.mocked(Meals.listRange).mockResolvedValue([...priorMeals, todayMeal]);
+    const post = await computeWindowVM(TODAY, g);
+    expect(post?.calories.status).toBe('ok');
+    expect(post?.protein.status).toBe('ok');
+    expect(post?.carbs.status).toBe('ok');
+    expect(post?.fat.status).toBe('ok');
+  }
+
+  test('all 6 prior days exactly at goal: ideals = goal, eating them is green', async () => {
+    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
+    await assertGreenState(days.map(d => coherentMeal(d, 150, 225, 56)));
+  });
+
+  test('6 prior days at 90% of every macro (undereating): ideals clamped up, eating them is green', async () => {
+    // All ratios = 0.9 → all ideals clamped above (undereating).
+    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
+    await assertGreenState(days.map(d => coherentMeal(d, 135, 202.5, 50.4)));
+  });
+
+  test('6 prior days at 110% of every macro (overeating): ideals clamped down, eating them is green', async () => {
+    // All ratios = 1.1 → all ideals clamped below (overeating).
+    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
+    await assertGreenState(days.map(d => coherentMeal(d, 165, 247.5, 61.6)));
+  });
+
+  test('mixed history: protein under (90%), carbs over (120%), fat under (80%): coherent and green', async () => {
+    // Calories are approximately on target despite per-macro imbalances.
+    // protein: 90% (low) → don't increase
+    // carbs:  120% (high) → don't decrease
+    // fat:     80% (low) → don't increase
+    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
+    await assertGreenState(days.map(d => coherentMeal(d, 135, 270, 44.8)));
   });
 });
 
