@@ -18,6 +18,8 @@ export function setupGoals() {
 
   async function refreshGoals() {
     const [goals, allRecords] = await Promise.all([Goals.getActive(), Goals.list()]);
+    const goalsTab = document.getElementById('goalsTab');
+    if (goalsTab) { $.html(goalsTab).classList.toggle('has-dot', goals === null); }
     renderGoalsCard(goals, allRecords);
     await renderHeatmap();
   }

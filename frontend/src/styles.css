@@ -63,6 +63,8 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, 
 nav.tabs{ display:flex; gap:8px; padding:8px; border-bottom:1px solid var(--border) }
 nav.tabs .tab{ flex:1; text-align:center; padding:10px; min-height:45px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--card); cursor:pointer; user-select:none }
 nav.tabs .tab.active{ outline:2px solid var(--brand) }
+nav.tabs .tab.has-dot{ position:relative }
+nav.tabs .tab.has-dot::after{ content:''; position:absolute; top:6px; right:6px; width:5px; height:5px; border-radius:50%; background:#e53e3e; pointer-events:none }
 
 .grid{ display:grid; gap:12px }
 .card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px }
