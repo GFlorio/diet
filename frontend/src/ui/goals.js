@@ -1,6 +1,7 @@
 import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
 import * as $ from '../utils.js';
+import { historyIcon } from '../icons.js';
 
 const NUM_WEEKS = 16;
 
@@ -40,7 +41,7 @@ export function setupGoals() {
       const g = Goals.derivedGrams(goals);
       const historyBtn = allRecords.length > 0
         ? `<button class="btn small ghost" id="goalHistoryBtn" data-testid="goalHistoryBtn"
-             aria-label="Goal history" title="Goal history" style="min-width:36px;min-height:36px;padding:4px 8px;font-size:16px">&#x23F1;</button>`
+             aria-label="Goal history" title="Goal history" style="min-width:36px;min-height:36px;padding:4px 8px">${historyIcon}</button>`
         : '';
       goalsCard.innerHTML = `
         <div class="goals-view-header">

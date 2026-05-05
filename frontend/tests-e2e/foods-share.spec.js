@@ -1,13 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { decodeFoodCode, encodeFoodCode } from '../src/food-share-code.js';
 import { insertFoods, loadPouchDB, resetDB } from './playwright-helpers.js';
-
-/**
- * Encode a food object into the base64 ?f= URL param format used by the share feature.
- * @param {object} data
- */
-function encodeFoodParam({ name, refLabel, kcal, prot, carbs, fats }) {
-  return Buffer.from(JSON.stringify({ n: name, r: refLabel, k: kcal, p: prot, c: carbs, f: fats })).toString('base64');
-}
 
 const SALMON = { name: 'Salmon', refLabel: '100 g', kcal: 208, prot: 20, carbs: 0, fats: 13 };
 
@@ -20,7 +13,7 @@ test.describe('Food share feature', () => {
     await page.reload();
   });
 
-  test('share button copies a URL with base64-encoded food data to clipboard', async ({ page }) => {
+  test('share button copies a URL with compact base64-encoded food data to clipboard', async ({ page }) => {
     // Arrange: create a food via UI
     await page.locator('.tab', { hasText: 'Foods' }).click();
     await page.fill('#foodName', SALMON.name);
@@ -42,15 +35,21 @@ test.describe('Food share feature', () => {
     const url = await page.evaluate(() => navigator.clipboard.readText());
     expect(url).toContain('?f=');
 
-    // Assert: decoded param matches the food's data exactly (short keys)
+    // Assert: decoded param round-trips back to the food's data
     const param = new URL(url).searchParams.get('f');
-    const decoded = JSON.parse(Buffer.from(param, 'base64').toString('utf8'));
-    expect(decoded).toMatchObject({ n: SALMON.name, r: SALMON.refLabel, k: SALMON.kcal, p: SALMON.prot, c: SALMON.carbs, f: SALMON.fats });
+    const decoded = decodeFoodCode(param);
+    expect(decoded).not.toBeNull();
+    expect(decoded.name).toBe(SALMON.name);
+    expect(decoded.refLabel).toBe(SALMON.refLabel);
+    expect(Number(decoded.kcal)).toBe(SALMON.kcal);
+    expect(Number(decoded.prot)).toBe(SALMON.prot);
+    expect(Number(decoded.carbs)).toBe(SALMON.carbs);
+    expect(Number(decoded.fats)).toBe(SALMON.fats);
   });
 
   test('opening a share link for a new food prefills the add form', async ({ page }) => {
     // Arrange: build a share URL for a food that does not exist in the DB
-    const encoded = encodeFoodParam(SALMON);
+    const encoded = encodeFoodCode(SALMON);
 
     // Act: navigate directly to the app with the share param
     await page.goto(`/?f=${encoded}`);
@@ -67,7 +66,7 @@ test.describe('Food share feature', () => {
     await expect(page.locator('#foodCarb')).toHaveValue(String(SALMON.carbs));
     await expect(page.locator('#foodFat')).toHaveValue(String(SALMON.fats));
 
-    // Assert: ?food= param has been stripped from the address bar
+    // Assert: ?f= param has been stripped from the address bar
     expect(page.url()).not.toContain('?f=');
   });
 
@@ -81,7 +80,7 @@ test.describe('Food share feature', () => {
     ]);
 
     // Act: navigate with a share link for a food with the same name
-    const encoded = encodeFoodParam(SALMON);
+    const encoded = encodeFoodCode(SALMON);
     await page.goto(`/?f=${encoded}`);
 
     // Assert: Foods tab is active
@@ -99,19 +98,18 @@ test.describe('Food share feature', () => {
     const idValue = await page.locator('#foodId').inputValue();
     expect(idValue).not.toBe('');
 
-    // Assert: ?food= param has been stripped from the address bar
+    // Assert: ?f= param has been stripped from the address bar
     expect(page.url()).not.toContain('?f=');
   });
 
-  test('malformed share param (valid base64, invalid JSON) does not prefill the form', async ({ page }) => {
-    // Arrange: build a param that is valid base64 but decodes to non-JSON text
-    // atob succeeds, JSON.parse throws → handler returns early without setting form fields
+  test('malformed share param does not prefill the form', async ({ page }) => {
+    // Arrange: valid base64 that decodes to something without the right pipe structure
     const badParam = Buffer.from('hello world').toString('base64');
 
     // Act: navigate with the bad param (DB is empty, so main.js shows Foods tab)
     await page.goto(`/?f=${badParam}`);
 
-    // Assert: app loaded and Foods form is visible but completely empty (no prefill)
+    // Assert: app loaded and Foods form is visible but completely empty
     await expect(page.locator('#foodFormTitle')).toHaveText('Add food');
     await expect(page.locator('#foodName')).toHaveValue('');
     await expect(page.locator('#foodRefLabel')).toHaveValue('');
@@ -119,5 +117,67 @@ test.describe('Food share feature', () => {
 
     // Assert: param is stripped from the address bar even on failure
     expect(page.url()).not.toContain('?f=');
+  });
+
+  test('import code toggle reveals input, apply prefills add form', async ({ page }) => {
+    // Arrange: navigate to foods page with no foods
+    await page.locator('.tab', { hasText: 'Foods' }).click();
+
+    // Assert: import area is hidden by default
+    await expect(page.locator('#foodImportArea')).toHaveClass(/hidden/);
+
+    // Act: click the toggle button
+    await page.click('#foodImportToggle');
+
+    // Assert: import area is now visible
+    await expect(page.locator('#foodImportArea')).not.toHaveClass(/hidden/);
+
+    // Act: paste a valid food code and apply
+    const code = encodeFoodCode(SALMON);
+    await page.fill('[data-testid="foodImportInput"]', code);
+    await page.click('[data-testid="foodImportApply"]');
+
+    // Assert: import area collapses
+    await expect(page.locator('#foodImportArea')).toHaveClass(/hidden/);
+
+    // Assert: form is prefilled in "Add food" mode
+    await expect(page.locator('#foodFormTitle')).toHaveText('Add food');
+    await expect(page.locator('#foodName')).toHaveValue(SALMON.name);
+    await expect(page.locator('#foodRefLabel')).toHaveValue(SALMON.refLabel);
+    await expect(page.locator('#foodKcal')).toHaveValue(String(SALMON.kcal));
+    await expect(page.locator('#foodProt')).toHaveValue(String(SALMON.prot));
+  });
+
+  test('import code accepts a full share URL and extracts the code from it', async ({ page }) => {
+    // Arrange
+    await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.click('#foodImportToggle');
+
+    // Act: paste a full URL rather than just the code
+    const code = encodeFoodCode(SALMON);
+    const fullUrl = `https://example.com/?f=${code}`;
+    await page.fill('[data-testid="foodImportInput"]', fullUrl);
+    await page.click('[data-testid="foodImportApply"]');
+
+    // Assert: form is prefilled correctly
+    await expect(page.locator('#foodFormTitle')).toHaveText('Add food');
+    await expect(page.locator('#foodName')).toHaveValue(SALMON.name);
+    await expect(page.locator('#foodRefLabel')).toHaveValue(SALMON.refLabel);
+    await expect(page.locator('#foodKcal')).toHaveValue(String(SALMON.kcal));
+  });
+
+  test('import code with invalid code shows error message', async ({ page }) => {
+    // Arrange
+    await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.click('#foodImportToggle');
+
+    // Act: submit an invalid code
+    await page.fill('[data-testid="foodImportInput"]', 'notavalidcode!!!');
+    await page.click('[data-testid="foodImportApply"]');
+
+    // Assert: error message shown, area stays open, form untouched
+    await expect(page.locator('#foodImportMsg')).toHaveText('Invalid code.');
+    await expect(page.locator('#foodImportArea')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#foodName')).toHaveValue('');
   });
 });

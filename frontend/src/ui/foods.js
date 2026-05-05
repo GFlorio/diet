@@ -1,6 +1,8 @@
 import { Foods, Meals } from '../data.js';
+import { decodeFoodCode, encodeFoodCode } from '../food-share-code.js';
 import * as $ from '../utils.js';
 import * as v from '../validation.js';
+import { archiveIcon, editIcon, importCodeIcon, shareIcon } from '../icons.js';
 
 /**
  * @typedef {import('../data.js').Food} Food
@@ -24,6 +26,12 @@ export function setupFoods(){
   const foodSearch = $.input($.id('foodSearch'));
   const foodStatus = $.select($.id('foodStatus'));
   const foodFormMsg = $.html($.id('foodFormMsg'));
+  const foodImportToggle = $.button($.id('foodImportToggle'));
+  foodImportToggle.innerHTML = `${importCodeIcon} Code`;
+  const foodImportArea = $.html($.id('foodImportArea'));
+  const foodImportInput = $.input($.id('foodImportInput'));
+  const foodImportApply = $.button($.id('foodImportApply'));
+  const foodImportMsg = $.html($.id('foodImportMsg'));
 
   /** Map validation field names to corresponding input elements */
   const fieldToInput = new Map([
@@ -108,14 +116,14 @@ export function setupFoods(){
     foodsList.innerHTML = xs.map((f)=>{
       const archivedChip = f.archived ? '<span class="chip">Archived</span>' : '';
       const archiveClass = f.archived ? 'unarchive' : 'archive';
-      const archiveLabel = f.archived ? '📦 Unarchive' : '📦 Archive';
+      const archiveLabel = f.archived ? `${archiveIcon} Unarchive` : `${archiveIcon} Archive`;
       const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
       return `
       <div class="item" data-id="${f.id}">
         <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
         <div class="actions">
-          <button class="btn small ghost edit">✏️ Edit</button>
-          <button class="btn small ghost share">🔗 Share</button>
+          <button class="btn small ghost edit">${editIcon} Edit</button>
+          <button class="btn small ghost share">${shareIcon} Share</button>
           <button class="btn small ghost ${archiveClass}">${archiveLabel}</button>
         </div>
         <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
@@ -137,11 +145,18 @@ export function setupFoods(){
     }
     if (target.classList.contains('share')){
       if (!f) { return; }
-      const data = { n: f.name, r: f.refLabel, k: f.kcal, p: f.prot, c: f.carbs, f: f.fats };
-      const encoded = btoa(JSON.stringify(data));
-      const url = `${location.origin}${location.pathname}?f=${encoded}`;
-      await navigator.clipboard.writeText(url);
-      $.toast('Link copied!');
+      const code = encodeFoodCode(f);
+      const url = `${location.origin}${location.pathname}?f=${code}`;
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: f.name, url });
+        } catch (err) {
+          if (/** @type {Error} */(err).name !== 'AbortError') { throw err; }
+        }
+      } else {
+        await navigator.clipboard.writeText(url);
+        $.toast('Link copied!');
+      }
       return;
     }
     if (target.classList.contains('archive')){
@@ -278,36 +293,69 @@ export function setupFoods(){
   void renderFoods();
 
   /**
-   * Pre-fill the food form from a ?food= base64 URL param, switching to edit
-   * mode if a food with the same name already exists.
+   * Pre-fill the add-food form from decoded share data. Switches to edit mode
+   * if a food with the same name already exists in the DB.
+   * @param {{ name: string, refLabel: string, kcal: string, prot: string, carbs: string, fats: string }} data
    */
-  async function handleFoodFromURL(){
-    const param = new URLSearchParams(location.search).get('f');
-    if (!param) { return; }
-    history.replaceState(null, '', location.pathname);
-    let data;
-    try {
-      data = JSON.parse(atob(param));
-    } catch {
-      console.warn('Invalid food share param — could not decode');
-      return;
-    }
+  async function applyFoodData(data){
     $.showPage('foods');
-    const name = String(data.n ?? '');
-    const matches = await Foods.list({ search: name, status: 'all' });
-    const existing = matches.find(f => f.name.trim().toLowerCase() === name.trim().toLowerCase());
+    const matches = await Foods.list({ search: data.name, status: 'all' });
+    const existing = matches.find(f => f.name.trim().toLowerCase() === data.name.trim().toLowerCase());
     if (existing) {
       setFoodForm(existing);
     } else {
       clearFoodForm();
-      foodName.value = name;
-      foodRefLabel.value = String(data.r ?? '');
-      foodKcal.value = data.k != null ? String(data.k) : '';
-      foodProt.value = data.p != null ? String(data.p) : '';
-      foodCarb.value = data.c != null ? String(data.c) : '';
-      foodFat.value = data.f != null ? String(data.f) : '';
+      foodName.value = data.name;
+      foodRefLabel.value = data.refLabel;
+      foodKcal.value = data.kcal;
+      foodProt.value = data.prot;
+      foodCarb.value = data.carbs;
+      foodFat.value = data.fats;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Import-code toggle UI
+  foodImportToggle.addEventListener('click', () => {
+    const opening = foodImportArea.classList.toggle('hidden');
+    if (!opening) { foodImportInput.focus(); }
+    foodImportMsg.textContent = '';
+  });
+
+  async function applyImportCode(){
+    let code = foodImportInput.value.trim();
+    if (!code) { return; }
+    try {
+      const urlParam = new URL(code).searchParams.get('f');
+      if (urlParam) { code = urlParam; }
+    } catch { /* not a URL, treat as raw code */ }
+    const data = decodeFoodCode(code);
+    if (!data) {
+      foodImportMsg.textContent = 'Invalid code.';
+      return;
+    }
+    foodImportMsg.textContent = '';
+    foodImportArea.classList.add('hidden');
+    foodImportInput.value = '';
+    await applyFoodData(data);
+  }
+
+  foodImportApply.addEventListener('click', () => { void applyImportCode(); });
+  foodImportInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { void applyImportCode(); }
+  });
+
+  /** Pre-fill the food form from a ?f= base64 URL param on app load. */
+  async function handleFoodFromURL(){
+    const param = new URLSearchParams(location.search).get('f');
+    if (!param) { return; }
+    history.replaceState(null, '', location.pathname);
+    const data = decodeFoodCode(param);
+    if (!data) {
+      console.warn('Invalid food share param — could not decode');
+      return;
+    }
+    await applyFoodData(data);
   }
   void handleFoodFromURL();
 }
