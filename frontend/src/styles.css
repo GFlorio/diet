@@ -178,10 +178,10 @@ label{ font-size:12px; color:var(--muted) }
 .macro-bar-fill:first-child,.summary-hero-bar-fill:first-child{ border-radius:999px 0 0 999px }
 .macro-bar-fill:last-child,.summary-hero-bar-fill:last-child{ border-radius:0 999px 999px 0 }
 .macro-bar-fill:only-child,.summary-hero-bar-fill:only-child{ border-radius:999px }
-.macro-bar-ok,.summary-hero-bar-fill.ok,.cal-day-ok  { background:var(--ok) }
-.macro-bar-low,.summary-hero-bar-fill.low,.cal-day-low{ background:var(--low) }
-.macro-bar-warn,.summary-hero-bar-fill.warn,.cal-day-warn{ background:var(--warn) }
-.macro-bar-bad,.summary-hero-bar-fill.bad,.cal-day-bad { background:var(--bad) }
+.macro-bar-ok,.summary-hero-bar-fill.ok,.cal-day.cal-day-ok  { background:var(--ok) }
+.macro-bar-low,.summary-hero-bar-fill.low,.cal-day.cal-day-low{ background:var(--low) }
+.macro-bar-warn,.summary-hero-bar-fill.warn,.cal-day.cal-day-warn{ background:var(--warn) }
+.macro-bar-bad,.summary-hero-bar-fill.bad,.cal-day.cal-day-bad { background:var(--bad) }
 
 /* Compact summary text */
 .compact-primary{ font-size:16px; font-weight:700 }
