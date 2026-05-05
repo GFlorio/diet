@@ -35,23 +35,12 @@ test.describe('Food form validation UI', () => {
 		await page.locator('#foodFat').fill(values.fats ?? '');
 	}
 
-		/** Disable built-in browser validation so we can assert app-side validation feedback */
-		async function disableNativeValidation(page) {
-			await page.locator('#foodForm').evaluate((form) => {
-				form.setAttribute('novalidate', 'true');
-			});
-		}
-
 	test('shows inline validation when name is missing', async ({ page }) => {
 		// Arrange: fill everything except the required name field
-		await disableNativeValidation(page);
 		await fillFoodForm(page, { name: '   ' });
 
-		// Act: attempt to submit the form
-		await page.locator('#saveFoodBtn').click();
-
-		// Assert: inline error message + field highlight are shown
-		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		// Assert: Save button disabled and name field highlighted (liveCheck debounce fires)
+		await expect(page.locator('#saveFoodBtn')).toBeDisabled();
 		await expect(page.locator('#foodName')).toHaveClass(/error/);
 
 		// Assert: other fields retain their values (form not cleared)
@@ -59,21 +48,17 @@ test.describe('Food form validation UI', () => {
 		await expect(page.locator('#foodKcal')).toHaveValue('165');
 		await expect(page.locator('#foodProt')).toHaveValue('31');
 
-		// Assert: nothing persisted in IndexedDB after failed validation
+		// Assert: nothing persisted in IndexedDB
 		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
 	});
 
 	test('rejects negative numbers in macro inputs', async ({ page }) => {
 		// Arrange: valid fields except negative kcal
-		await disableNativeValidation(page);
 		await fillFoodForm(page, { kcal: '-50' });
 
-		// Act
-		await page.locator('#saveFoodBtn').click();
-
-		// Assert: error message and kcal input styled as error
-		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		// Assert: Save button disabled and kcal field highlighted
+		await expect(page.locator('#saveFoodBtn')).toBeDisabled();
 		await expect(page.locator('#foodKcal')).toHaveClass(/error/);
 		await expect(page.locator('#foodKcal')).toHaveValue('-50');
 
@@ -83,14 +68,10 @@ test.describe('Food form validation UI', () => {
 
 	test('rejects out-of-range macro values', async ({ page }) => {
 		// Arrange: enter values above allowed maxima
-		await disableNativeValidation(page);
 		await fillFoodForm(page, { kcal: '6000', prot: '1500' });
 
-		// Act
-		await page.locator('#saveFoodBtn').click();
-
-		// Assert: error message shown and offending fields highlighted
-		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		// Assert: Save button disabled and offending fields highlighted
+		await expect(page.locator('#saveFoodBtn')).toBeDisabled();
 		await expect(page.locator('#foodKcal')).toHaveClass(/error/);
 		await expect(page.locator('#foodProt')).toHaveClass(/error/);
 
@@ -104,14 +85,10 @@ test.describe('Food form validation UI', () => {
 
 	test('rejects name with characters outside the allowed pattern', async ({ page }) => {
 		// Arrange: name contains characters not in /^[\p{L}\p{N}\s'\-_.()]+$/u
-		await disableNativeValidation(page);
 		await fillFoodForm(page, { name: 'Bad@Name!' });
 
-		// Act
-		await page.locator('#saveFoodBtn').click();
-
-		// Assert: name field flagged, nothing saved
-		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		// Assert: Save button disabled and name field flagged
+		await expect(page.locator('#saveFoodBtn')).toBeDisabled();
 		await expect(page.locator('#foodName')).toHaveClass(/error/);
 		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);
@@ -149,15 +126,11 @@ test.describe('Food form validation UI', () => {
 
 	test('rejects name at 121 characters (one over boundary)', async ({ page }) => {
 		// Arrange: 121 chars exceeds maxLen:120
-		await disableNativeValidation(page);
 		const name = 'a'.repeat(121);
 		await fillFoodForm(page, { name });
 
-		// Act
-		await page.locator('#saveFoodBtn').click();
-
-		// Assert: name field flagged, nothing saved
-		await expect(page.locator('#foodFormMsg')).toHaveText(/Invalid fields/i);
+		// Assert: Save button disabled and name field flagged
+		await expect(page.locator('#saveFoodBtn')).toBeDisabled();
 		await expect(page.locator('#foodName')).toHaveClass(/error/);
 		const foods = await getAllFromStore(page, 'foods');
 		expect(foods).toHaveLength(0);

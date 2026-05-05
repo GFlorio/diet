@@ -28,7 +28,8 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, 
 .app{ max-width:960px; margin:0 auto; padding: 8px 12px 64px }
 
 .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 10px; min-height:45px; min-width:45px; border:1px solid var(--border); background:var(--card); color:var(--fg); border-radius:var(--radius-md); cursor:pointer; user-select:none }
-.btn:active{ transform:translateY(1px) }
+.btn:active:not(:disabled){ transform:translateY(1px) }
+.btn:disabled{ opacity:.4; cursor:not-allowed }
 .btn.primary{ background:var(--brand); border-color:var(--brand); color:white }
 .btn.ghost{ background:transparent; box-shadow:none }
 .btn.small{ padding:6px 8px; border-radius:var(--radius-sm); font-size:12px; min-height:45px; min-width:45px }
@@ -322,7 +323,7 @@ label{ font-size:12px; color:var(--muted) }
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
-@media (max-width: 380px){ .grid.cols-4{ grid-template-columns: repeat(2, 1fr) } }
+@media (max-width: 300px){ .grid.cols-4{ grid-template-columns: repeat(2, 1fr) } }
 
 @media (max-width: 640px){
   .summary-hero-value .num{ font-size:28px }

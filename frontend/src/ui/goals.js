@@ -51,10 +51,10 @@ export function setupGoals() {
           </div>
         </div>
         <div class="goals-view-hero">
-          <div class="goals-view-hero-label">Daily calorie target</div>
+          <div class="goals-view-hero-label">Avg. daily calorie target</div>
           <div>
             <span class="goals-view-hero-num">${$.fmtNum(goals.kcal, 0)}</span>
-            <span class="goals-view-hero-unit">kcal</span>
+            <span class="goals-view-hero-unit">kcal / day</span>
           </div>
         </div>
         <div class="goals-macros-row">
@@ -92,12 +92,13 @@ export function setupGoals() {
     let fatPct    = 100 - protPct - carbsPct;
 
     goalsCard.innerHTML = `
-      <div class="goals-view-header" style="margin-bottom:12px">
+      <div class="goals-view-header" style="margin-bottom:4px">
         <span class="goals-view-title">Daily goals</span>
       </div>
+      <p style="margin:0 0 12px;font-size:13px;color:var(--muted)">These are average daily targets.</p>
 
       <div class="field">
-        <label for="goalsMaintenanceKcal">Maintenance kcal / day</label>
+        <label for="goalsMaintenanceKcal">Your maintenance kcal / day (TDEE)</label>
         <input id="goalsMaintenanceKcal" data-testid="goalsMaintenanceKcal" type="number"
           min="500" max="9999" step="1" value="${$.esc(String(maintenance))}" placeholder="2500" />
       </div>
@@ -115,7 +116,7 @@ export function setupGoals() {
       </div>
 
       <div class="goals-view-hero" style="padding:10px 0 8px; border-bottom:none; margin-bottom:0; margin-top:10px">
-        <div class="goals-view-hero-label">Daily calorie target</div>
+        <div class="goals-view-hero-label">Avg. daily calorie target</div>
         <div>
           <span class="goals-view-hero-num" id="goalsTargetNum">—</span>
           <span class="goals-view-hero-unit">kcal</span>

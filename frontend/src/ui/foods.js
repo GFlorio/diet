@@ -19,6 +19,7 @@ export function setupFoods(){
   const foodCarb = $.input($.id('foodCarb'));
   const foodFat = $.input($.id('foodFat'));
   const resetFoodBtn = $.button($.id('resetFoodBtn'));
+  const saveFoodBtn = $.button($.id('saveFoodBtn'));
   const foodsList = $.html($.id('foodsList'));
   const foodSearch = $.input($.id('foodSearch'));
   const foodStatus = $.select($.id('foodStatus'));
@@ -69,6 +70,7 @@ export function setupFoods(){
     foodFat.value='';
     foodFormMsg.textContent = '';
     clearFieldErrors();
+    saveFoodBtn.disabled = true;
   }
 
   resetFoodBtn.addEventListener('click', ()=> setFoodForm());
@@ -92,6 +94,7 @@ export function setupFoods(){
       foodFat.value=String(f.fats);
       foodFormMsg.textContent = '';
       clearFieldErrors();
+      saveFoodBtn.disabled = false;
     }
   }
 
@@ -248,8 +251,10 @@ export function setupFoods(){
     clearFieldErrors();
     try {
       v.createFoodInput(readFormPayload());
+      saveFoodBtn.disabled = false;
     } catch (err) {
       applyValidationErrors(err);
+      saveFoodBtn.disabled = true;
     }
   }, 400);
   [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat]
