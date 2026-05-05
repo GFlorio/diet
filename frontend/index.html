@@ -105,12 +105,12 @@
   </main>
 
   <main id="page-foods" class="grid hidden">
-    <section class="card grid cols-2">
+    <section class="card" id="foodFormCard">
       <form id="foodForm" class="grid" autocomplete="off">
         <div class="row"><strong id="foodFormTitle">Add food</strong><span class="muted" id="foodUpdated"></span></div>
         <input type="hidden" id="foodId" />
         <div class="field"><label>Name</label><input id="foodName" required /></div>
-        <div class="field"><label>Reference portion (label, e.g. 100 g, 1 slice)</label><input id="foodRefLabel" placeholder="e.g. 100 g" required/></div>
+        <div class="field"><label>Reference portion (e.g. 100 g, 1 slice)</label><input id="foodRefLabel" placeholder="e.g. 100 g" required/></div>
         <div class="grid cols-4">
           <div class="field"><label>kcal</label><input id="foodKcal" type="number" min="0" step="1" required/></div>
           <div class="field"><label>Protein (g)</label><input id="foodProt" type="number" min="0" step="0.1" required/></div>
@@ -123,8 +123,10 @@
           <span id="foodFormMsg" class="muted" style="margin-left:8px"></span>
         </div>
       </form>
+    </section>
 
-      <div>
+    <section class="card" id="foodsListCard">
+      <div class="grid">
         <div class="row">
           <div class="field grow"><label>Search</label><input id="foodSearch" placeholder="Filter foods" /></div>
           <div class="field" style="min-width:160px">
@@ -136,7 +138,7 @@
             </select>
           </div>
         </div>
-        <div id="foodsList" class="list" style="margin-top:8px"></div>
+        <div id="foodsList" class="list"></div>
       </div>
     </section>
   </main>

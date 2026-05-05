@@ -59,7 +59,7 @@ body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, 
 .btn.danger{ background:var(--bad); color:#fff; border-color:transparent }
 .btn.danger:hover{ opacity:.85 }
 
-nav.tabs{ display:flex; gap:8px; padding:8px; border-bottom:1px dashed var(--border) }
+nav.tabs{ display:flex; gap:8px; padding:8px; border-bottom:1px solid var(--border) }
 nav.tabs .tab{ flex:1; text-align:center; padding:10px; min-height:45px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:12px; background:var(--card); cursor:pointer; user-select:none }
 nav.tabs .tab.active{ outline:2px solid var(--brand) }
 
@@ -80,7 +80,7 @@ label{ font-size:12px; color:var(--muted) }
 .field{ display:grid; gap:6px }
 
 .list{ display:grid; gap:8px }
-.item{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; border:1px dashed var(--border); border-radius:12px; padding:10px }
+.item{ display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; border:1px solid var(--border); border-radius:12px; padding:10px }
 .item.rep-row{ grid-template-columns: 1fr 52px 52px 52px 52px }
 .item .meta{ font-size:12px; color:var(--muted) }
 .item > .meta{ grid-column: 1 / -1 }
@@ -337,13 +337,13 @@ label{ font-size:12px; color:var(--muted) }
 .cal-tt-warn { color: var(--warn); }
 .cal-tt-bad  { color: var(--bad); }
 
-/* Foods page — keep form at natural height; let list scroll */
-#page-foods .card.cols-2{ align-items: start }
+/* Foods page */
 #foodsList{ overflow-y: auto; max-height: 60vh }
 
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
+@media (max-width: 380px){ .grid.cols-4{ grid-template-columns: repeat(2, 1fr) } }
 
 @media (max-width: 640px){
   .summary-hero-value .num{ font-size:28px }
