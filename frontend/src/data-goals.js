@@ -115,7 +115,7 @@ const MIN_LOGGED_7  = 4;
  * the controller issues an adjustment. This guards against reacting to a very
  * short burst of logging. Raise to require more history; lower to react sooner.
  */
-const MIN_LOGGED_28 = 14;
+const MIN_LOGGED_28 = 10;
 
 /**
  * @typedef {import('./db.js').GoalRecord} GoalRecord
