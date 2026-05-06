@@ -199,9 +199,9 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.click('#quickList .item .add');
 
     // Navigate back to today: 2 past days with chicken (165 kcal each = 330 prevSum)
-    // idealToday = 3×2000 − 330 = 5670 → clamped to 2000×1.15 = 2300 → 2300 kcal left
+    // Controller gate requires MIN_LOGGED_7=4 logged days; only 2 here → no adjustment → 2000 kcal left
     await page.click('#nextDayBox');
-    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2300 kcal left');
+    await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
   });
 
   test('deleting today\'s last meal keeps idealToday stable', async ({ page }) => {

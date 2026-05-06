@@ -76,30 +76,34 @@ describe('computeWindowVM', () => {
     expect(vm?.calories.prevSum).toBe(2000);
   });
 
-  test('idealToday compensates for prior over-eating', async () => {
+  test('idealToday adjusts downward after sufficient history of over-eating', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
     const goal = await Goals.getActive('2024-06-10');
-    // Eat 2500 on each of 3 prior days (500 over per day)
-    await seedDay('2024-06-07', 2500);
-    await seedDay('2024-06-08', 2500);
-    await seedDay('2024-06-09', 2500);
-
+    // 14 consecutive days at 2500 kcal (500 over goal) — enough to pass the completeness gate.
+    // Persistent surplus (intensity→1) pushes gain to 2.0 → adjustment clamped at -15%.
+    for (let i = 14; i >= 1; i--) {
+      const d = new Date('2024-06-10T00:00:00');
+      d.setDate(d.getDate() - i);
+      await seedDay(d.toISOString().slice(0, 10), 2500);
+    }
     const vm = await Goals.computeWindowVM('2024-06-10', goal);
-    // effectiveDays = 3+1 = 4; ideal = 4*2000 - 7500 = 500; clamped to min 2000*0.85 = 1700
-    expect(vm?.calories.idealToday).toBe(1700);
+    expect(vm?.calories.idealToday).toBeLessThan(2000);
+    expect(vm?.calories.idealToday).toBeGreaterThanOrEqual(1700);
   });
 
-  test('idealToday compensates for prior under-eating', async () => {
+  test('idealToday adjusts upward after sufficient history of under-eating', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
     const goal = await Goals.getActive('2024-06-10');
-    // Eat 1500 on each of 3 prior days (500 under per day)
-    await seedDay('2024-06-07', 1500);
-    await seedDay('2024-06-08', 1500);
-    await seedDay('2024-06-09', 1500);
-
+    // 14 consecutive days at 1500 kcal (500 under goal).
+    // Loss mode + deficit → fixed gain=0.25 → modest upward nudge, well within ±15%.
+    for (let i = 14; i >= 1; i--) {
+      const d = new Date('2024-06-10T00:00:00');
+      d.setDate(d.getDate() - i);
+      await seedDay(d.toISOString().slice(0, 10), 1500);
+    }
     const vm = await Goals.computeWindowVM('2024-06-10', goal);
-    // effectiveDays = 4; ideal = 4*2000 - 4500 = 3500; clamped to max 2000*1.15 = 2300
-    expect(vm?.calories.idealToday).toBe(2300);
+    expect(vm?.calories.idealToday).toBeGreaterThan(2000);
+    expect(vm?.calories.idealToday).toBeLessThanOrEqual(2300);
   });
 
   test('idealToday clamp range is ±15%', async () => {
@@ -176,16 +180,22 @@ describe('Window status computation', () => {
     expect(vm?.calories.status).toBe('warn');
   });
 
-  test('clamped window: eating idealToday exactly shows ok', async () => {
+  test('after sufficient history of over-eating, eating adjusted idealToday shows ok', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
     const goal = await Goals.getActive('2024-06-10');
-    // Heavy over-eating on prior days — idealToday clamped to 0.85*2000=1700
-    await seedDay('2024-06-07', 3000);
-    await seedDay('2024-06-08', 3000);
-    await seedDay('2024-06-09', 3000);
-    // Today eats exactly idealToday → clamped path, ratio=1.0 → ok
-    await seedDay('2024-06-10', 1700);
+    // 14 days of heavy over-eating → controller fires, idealToday clamped below goal.
+    for (let i = 14; i >= 1; i--) {
+      const d = new Date('2024-06-10T00:00:00');
+      d.setDate(d.getDate() - i);
+      await seedDay(d.toISOString().slice(0, 10), 3000);
+    }
+    // Determine the adjusted ideal before logging today.
+    const preVm = await Goals.computeWindowVM('2024-06-10', goal);
+    const idealKcal = Math.round(preVm?.calories.idealToday ?? 2000);
+    expect(idealKcal).toBeLessThan(2000); // controller clamped it downward
 
+    // Eating exactly the adjusted ideal should yield 'ok'.
+    await seedDay('2024-06-10', idealKcal);
     const vm = await Goals.computeWindowVM('2024-06-10', goal);
     expect(vm?.calories.status).toBe('ok');
   });

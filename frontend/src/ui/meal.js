@@ -348,12 +348,7 @@ export function setupMeals(){
     const itemEl  = /** @type {HTMLElement} */ (item);
     const id      = itemEl.dataset.id;
     if (!id) { return; }
-    const food    = await Foods.byId(id);
-    if (!food) {
-      itemEl.classList.add('shake');
-      setTimeout(()=> itemEl.classList.remove('shake'), 500);
-      return;
-    }
+    // Read qty synchronously before any await so the value isn't stale after a re-render.
     const qtyEl = $.input(item.querySelector('.qty'));
     if (target.classList.contains('add')) {
       let qty;
@@ -365,6 +360,12 @@ export function setupMeals(){
         qtyEl.addEventListener('input', () => qtyEl.classList.remove('error'), { once: true });
         return;
       }
+      const food = await Foods.byId(id);
+      if (!food) {
+        itemEl.classList.add('shake');
+        setTimeout(()=> itemEl.classList.remove('shake'), 500);
+        return;
+      }
       await $.withConfirm($.button(target), async () => {
         await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
         qtyEl.value = '1';
@@ -372,6 +373,12 @@ export function setupMeals(){
         await renderMeals(true);
         quickSearch.focus();
       }, '✓ Added');
+      return;
+    }
+    const food    = await Foods.byId(id);
+    if (!food) {
+      itemEl.classList.add('shake');
+      setTimeout(()=> itemEl.classList.remove('shake'), 500);
       return;
     }
     if (target.classList.contains('add1')) {

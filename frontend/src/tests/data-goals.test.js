@@ -33,173 +33,333 @@ vi.mock('../data-meals.js', () => ({
 }));
 
 import {
+  adaptiveDeadband,
+  adaptiveGain,
   barSegments,
+  combineErrors,
   computeDayStatus,
+  computeKcalAdjustment,
   computeWindowVM,
   deleteRecord,
   derivedGrams,
+  expWeight,
   getActive,
   goalForDate,
   idealForDay,
+  isGoalClamped,
   list,
   macroVisuals,
+  overPersistence,
+  recoveryDays,
   remove,
   save,
+  SHORT_WINDOW,
+  LONG_WINDOW,
+  smoothstep,
   statusForDay,
   updateEffectiveFrom,
+  weightedAverageError,
 } from '../data-goals.js';
 import { Meals } from '../data-meals.js';
 import * as db from '../db.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: no migration needed (no old singleton)
   vi.mocked(db.get).mockResolvedValue(undefined);
-  // Default: empty goals store
   vi.mocked(db.getAll).mockResolvedValue([]);
   vi.mocked(db.put).mockResolvedValue('goal:test');
   vi.mocked(db.del).mockResolvedValue(undefined);
 });
 
 // ---------------------------------------------------------------------------
-// computeDayStatus — rolling-average approach with safety net
+// Pure helper functions
+// ---------------------------------------------------------------------------
+describe('expWeight', () => {
+  test('age 0 → weight 1.0', () => {
+    expect(expWeight(0, 7)).toBeCloseTo(1.0);
+  });
+  test('age = halfLife → weight 0.5', () => {
+    expect(expWeight(7, 7)).toBeCloseTo(0.5);
+  });
+  test('age = 2×halfLife → weight 0.25', () => {
+    expect(expWeight(14, 7)).toBeCloseTo(0.25);
+  });
+});
+
+describe('smoothstep', () => {
+  test('at edge0 → 0', () => {
+    expect(smoothstep(0.5, 0.9, 0.5)).toBeCloseTo(0);
+  });
+  test('at edge1 → 1', () => {
+    expect(smoothstep(0.5, 0.9, 0.9)).toBeCloseTo(1);
+  });
+  test('below edge0 → 0', () => {
+    expect(smoothstep(0.5, 0.9, 0.3)).toBeCloseTo(0);
+  });
+  test('above edge1 → 1', () => {
+    expect(smoothstep(0.5, 0.9, 1.0)).toBeCloseTo(1);
+  });
+  test('midpoint ≈ 0.5', () => {
+    expect(smoothstep(0.5, 0.9, 0.7)).toBeCloseTo(0.5, 1);
+  });
+});
+
+describe('weightedAverageError', () => {
+  test('uniform errors return that error regardless of window', () => {
+    const days = [0, 1, 2, 3, 4, 5, 6].map(ageDays => ({ ageDays, error: 100 }));
+    expect(weightedAverageError(days, SHORT_WINDOW, 7)).toBeCloseTo(100);
+  });
+  test('empty → 0', () => {
+    expect(weightedAverageError([], 7, 7)).toBe(0);
+  });
+  test('older days get less weight: recent +200, old -200 → slightly positive result', () => {
+    const days = [
+      { ageDays: 0, error: 200 },
+      { ageDays: 14, error: -200 },
+    ];
+    expect(weightedAverageError(days, LONG_WINDOW, 7)).toBeGreaterThan(0);
+  });
+});
+
+describe('overPersistence', () => {
+  test('0/14 logged days over goal → 0', () => {
+    const days = Array.from({ length: 14 }, (_, i) => ({ ageDays: i, error: -50 }));
+    expect(overPersistence(days, 2000)).toBeCloseTo(0);
+  });
+  test('14/14 days over goal → 1.0', () => {
+    const days = Array.from({ length: 14 }, (_, i) => ({ ageDays: i, error: 50 }));
+    expect(overPersistence(days, 2000)).toBeCloseTo(1.0);
+  });
+  test('7/14 days over goal → 0.5', () => {
+    const days = [
+      ...Array.from({ length: 7 }, (_, i) => ({ ageDays: i, error: 50 })),
+      ...Array.from({ length: 7 }, (_, i) => ({ ageDays: i + 7, error: -50 })),
+    ];
+    expect(overPersistence(days, 2000)).toBeCloseTo(0.5);
+  });
+});
+
+describe('adaptiveDeadband', () => {
+  test('intensity=0 on 2000 goal → 50 kcal (base deadband)', () => {
+    // max(50, 2.5%×2000=50) = 50
+    expect(adaptiveDeadband(2000, 0)).toBeCloseTo(50);
+  });
+  test('intensity=1 on 2000 goal → 25 kcal (persistent deadband)', () => {
+    // max(25, 1.25%×2000=25) = 25
+    expect(adaptiveDeadband(2000, 1)).toBeCloseTo(25);
+  });
+  test('intensity=0.5 → lerp between 50 and 25', () => {
+    expect(adaptiveDeadband(2000, 0.5)).toBeCloseTo(37.5);
+  });
+});
+
+describe('adaptiveGain', () => {
+  test('loss + surplus + intensity=0 → 0.70', () => {
+    expect(adaptiveGain('loss', 100, 0)).toBeCloseTo(0.70);
+  });
+  test('loss + surplus + intensity=1 → 2.00', () => {
+    expect(adaptiveGain('loss', 100, 1)).toBeCloseTo(2.00);
+  });
+  test('loss + deficit → always 0.25 regardless of intensity', () => {
+    expect(adaptiveGain('loss', -100, 0)).toBeCloseTo(0.25);
+    expect(adaptiveGain('loss', -100, 1)).toBeCloseTo(0.25);
+  });
+  test('gain + deficit + intensity=0 → 0.70', () => {
+    expect(adaptiveGain('gain', -100, 0)).toBeCloseTo(0.70);
+  });
+  test('gain + deficit + intensity=1 → 2.00', () => {
+    expect(adaptiveGain('gain', -100, 1)).toBeCloseTo(2.00);
+  });
+  test('gain + surplus → always 0.25', () => {
+    expect(adaptiveGain('gain', 100, 0)).toBeCloseTo(0.25);
+    expect(adaptiveGain('gain', 100, 1)).toBeCloseTo(0.25);
+  });
+  test('maintenance + intensity=0 → 0.60', () => {
+    expect(adaptiveGain('maintenance', 100, 0)).toBeCloseTo(0.60);
+    expect(adaptiveGain('maintenance', -100, 0)).toBeCloseTo(0.60);
+  });
+  test('maintenance + intensity=1 → 1.50', () => {
+    expect(adaptiveGain('maintenance', 100, 1)).toBeCloseTo(1.50);
+  });
+});
+
+describe('combineErrors', () => {
+  test('same sign → equal blend', () => {
+    expect(combineErrors(100, 200)).toBeCloseTo(150);
+  });
+  test('sign disagreement → trust long signal (75% weight)', () => {
+    // short=-100, long=+200 → 0.25×(-100) + 0.75×200 = -25+150 = 125
+    expect(combineErrors(-100, 200)).toBeCloseTo(125);
+  });
+  test('either is 0 → no sign disagreement', () => {
+    expect(combineErrors(0, 200)).toBeCloseTo(100);
+    expect(combineErrors(100, 0)).toBeCloseTo(50);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeKcalAdjustment
+// ---------------------------------------------------------------------------
+describe('computeKcalAdjustment', () => {
+  /** Build kcalByDay from a pattern: [oldest…newest] of kcal per day.
+   * @param {number[]} kcalPerDay @param {string} [endISO] */
+  function buildDays(kcalPerDay, endISO = '2024-02-07') {
+    /** @type {Record<string, number>} */
+    const map = {};
+    const end = new Date(`${endISO}T00:00:00`);
+    for (let i = kcalPerDay.length - 1; i >= 0; i--) {
+      const d = new Date(end);
+      d.setDate(end.getDate() - (kcalPerDay.length - 1 - i));
+      map[d.toISOString().slice(0, 10)] = kcalPerDay[i];
+    }
+    return map;
+  }
+
+  test('completeness gate fires with fewer than MIN_LOGGED_7 logged in 7 days', () => {
+    // Only 3 logged days in last 7 (< 4 required)
+    const map = buildDays([2500, 2500, 2500]);
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
+    expect(result.adjustment).toBe(0);
+    expect(result.adjustedGoalKcal).toBe(2000);
+  });
+
+  test('completeness gate fires with fewer than MIN_LOGGED_28 logged in 28 days', () => {
+    // 7 days logged in the 7-day window (>= 4) but only 7 total (< 14 required)
+    const map = buildDays([2500, 2500, 2500, 2500, 2500, 2500, 2500]);
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
+    expect(result.adjustment).toBe(0);
+  });
+
+  test('deadband: small effectiveError < deadband → adjustment 0', () => {
+    // 28 days at goal + 20 kcal — well inside 50 kcal base deadband
+    const map = buildDays(Array(28).fill(2020));
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
+    expect(result.adjustment).toBe(0);
+  });
+
+  test('chronic +100/day for 28 days → negative adjustment (lower goal)', () => {
+    const map = buildDays(Array(28).fill(2100));
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'loss');
+    expect(result.adjustment).toBeLessThan(0);
+  });
+
+  test('adjustment is clamped to ±15% of base goal', () => {
+    // Extreme over-eating: 5000 kcal/day for 28 days on 2000 goal
+    const map = buildDays(Array(28).fill(5000));
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'loss');
+    expect(result.adjustment).toBeGreaterThanOrEqual(-300); // -15% of 2000
+    expect(result.adjustment).toBeLessThanOrEqual(0);
+    expect(result.adjustedGoalKcal).toBe(1700);
+  });
+
+  test('sign disagreement: short<0, long>0 → damped blend, no reversal', () => {
+    // Party day 8 days ago (+2000 spike), followed by 7 compensating days at -200.
+    // Long signal still sees the party; short signal sees the compensation.
+    // Result: no aggressive upward reversal.
+    const kcalPerDay = [
+      ...Array(14).fill(2000),  // 14 normal days
+      4000,                      // party day (now 8 days ago from end of array)
+      ...Array(7).fill(1800),   // 7 compensating days (under goal)
+    ];
+    const map = buildDays(kcalPerDay);
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
+    // Adjustment should not be strongly positive (no upward reversal spike)
+    expect(result.adjustment).toBeLessThan(200);
+  });
+
+  test('mode asymmetry: same surplus → loss mode yields larger magnitude than gain mode', () => {
+    const map = buildDays(Array(28).fill(2200)); // persistent +200/day
+    const lossResult = computeKcalAdjustment(map, '2024-02-07', 2000, 'loss');
+    const gainResult = computeKcalAdjustment(map, '2024-02-07', 2000, 'gain');
+    // Loss mode penalises surplus more aggressively
+    expect(Math.abs(lossResult.adjustment)).toBeGreaterThan(Math.abs(gainResult.adjustment));
+  });
+
+  test('noisy alternating ±500/day: long error near zero, small adjustment', () => {
+    const kcalPerDay = Array.from({ length: 28 }, (_, i) => i % 2 === 0 ? 2500 : 1500);
+    const map = buildDays(kcalPerDay);
+    const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
+    // Short error roughly 0, long error roughly 0 → deadband applies → 0
+    expect(Math.abs(result.adjustment)).toBeLessThan(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeDayStatus — adjustment-driven branches
 // ---------------------------------------------------------------------------
 describe('computeDayStatus', () => {
   test('returns none when goal is null', () => {
-    expect(computeDayStatus(0, 0, 5, null, 0)).toBe('none');
-    expect(computeDayStatus(500, 0, 5, null, 0)).toBe('none');
+    expect(computeDayStatus(0,   null, 0, 0)).toBe('none');
+    expect(computeDayStatus(500, null, 0, 0)).toBe('none');
   });
 
   test('returns ok/bad when goal is 0', () => {
-    expect(computeDayStatus(0, 0, 5, 0, 0)).toBe('ok');
-    expect(computeDayStatus(1, 0, 5, 0, 0)).toBe('bad');
+    expect(computeDayStatus(0, 0, 0, 0)).toBe('ok');
+    expect(computeDayStatus(1, 0, 0, 0)).toBe('bad');
   });
 
-  // --- sparse data (< 4 days): ±SAFETY_NET_PCT of idealToday ---------------
+  // Unclamped (adjustment === 0): ±5%/10% bands around idealToday
 
-  test('sparse: ok within ±10% of idealToday', () => {
-    // 1 day, consumed=95, idealToday=100 → ratio 0.95 → within ±10%
-    expect(computeDayStatus(95, 0, 1, 100, 100)).toBe('ok');
-    expect(computeDayStatus(110, 0, 1, 100, 100)).toBe('ok');
-    expect(computeDayStatus(100, 0, 1, 100, 100)).toBe('ok');
+  test('unclamped: ok when consumed is within ±5% of idealToday', () => {
+    expect(computeDayStatus(95,  100, 100, 0)).toBe('ok');  // ratio 0.95
+    expect(computeDayStatus(100, 100, 100, 0)).toBe('ok');  // exact
+    expect(computeDayStatus(105, 100, 100, 0)).toBe('ok');  // ratio 1.05
   });
 
-  test('sparse: low when more than 10% under idealToday', () => {
-    expect(computeDayStatus(89, 0, 1, 100, 100)).toBe('low');
-    expect(computeDayStatus(0, 0, 1, 100, 100)).toBe('low');
+  test('unclamped: low when more than 5% under idealToday', () => {
+    expect(computeDayStatus(94, 100, 100, 0)).toBe('low');
+    expect(computeDayStatus(0,  100, 100, 0)).toBe('low');
   });
 
-  test('sparse: warn between 10% and 15% over idealToday', () => {
-    expect(computeDayStatus(114, 0, 1, 100, 100)).toBe('warn');
+  test('unclamped: warn when 5–10% over idealToday', () => {
+    expect(computeDayStatus(108, 100, 100, 0)).toBe('warn');
   });
 
-  test('sparse: bad beyond 15% over idealToday', () => {
-    expect(computeDayStatus(116, 0, 1, 100, 100)).toBe('bad');
+  test('unclamped: bad when more than 10% over idealToday', () => {
+    expect(computeDayStatus(111, 100, 100, 0)).toBe('bad');
   });
 
-  // --- sufficient data (≥ 4 days): rolling average vs raw goal ---------------
-
-  test('ok when rolling average is within ±5% of goal', () => {
-    // 5 days, prevSum=8000, consumed=2000 → avg=10000/5=2000 = goal
-    expect(computeDayStatus(2000, 8000, 5, 2000, 2000)).toBe('ok');
-    // avg = 9500/5 = 1900 = 95% of goal → boundary ok
-    expect(computeDayStatus(1500, 8000, 5, 2000, 2000)).toBe('ok');
-  });
-
-  test('low when average is more than 5% under goal', () => {
-    // avg = 9400/5 = 1880 = 94% of goal → low
-    expect(computeDayStatus(1400, 8000, 5, 2000, 2000)).toBe('low');
-  });
-
-  test('warn when average is 5-10% over goal', () => {
-    // avg = 10800/5 = 2160 = 108% of goal → warn
-    expect(computeDayStatus(2800, 8000, 5, 2000, 2000)).toBe('warn');
-  });
-
-  test('bad when average is more than 10% over goal', () => {
-    // avg = 11200/5 = 2240 = 112% of goal → bad
-    expect(computeDayStatus(3200, 8000, 5, 2000, 2000)).toBe('bad');
-  });
-
-  // --- clamped below (overeating): idealToday is a ceiling -------------------
-  // Ok window is 2×SAFETY_NET_PCT (20%) wide, sitting below idealToday.
+  // Clamped below (adjustment < 0): idealToday is a ceiling, ok window 20% wide below ideal
 
   test('clamped below: consuming 0 shows low', () => {
-    // prevSum=12500, rawIdeal=12000-12500=-500 < goal×0.85=1700 → clamped below
-    // ratio = 0/1700 = 0 < 0.80 → 'low'
-    expect(computeDayStatus(0, 12500, 6, 2000, 1700)).toBe('low');
+    expect(computeDayStatus(0, 2000, 1700, -300)).toBe('low');
   });
 
   test('clamped below: bottom of ok window is at idealToday × 0.80', () => {
-    // ratio = 1360/1700 = 0.80 → 'ok' (lower edge of 20% window)
-    expect(computeDayStatus(1360, 12500, 6, 2000, 1700)).toBe('ok');
-    // ratio = 1359/1700 ≈ 0.799 < 0.80 → 'low'
-    expect(computeDayStatus(1359, 12500, 6, 2000, 1700)).toBe('low');
+    expect(computeDayStatus(1360, 2000, 1700, -300)).toBe('ok');   // ratio 0.80
+    expect(computeDayStatus(1359, 2000, 1700, -300)).toBe('low');  // just below
   });
 
   test('clamped below: consuming idealToday exactly shows ok', () => {
-    // ratio = 1700/1700 = 1.0 ≤ 1.0 → 'ok'
-    expect(computeDayStatus(1700, 12500, 6, 2000, 1700)).toBe('ok');
+    expect(computeDayStatus(1700, 2000, 1700, -300)).toBe('ok');
   });
 
-  test('clamped below: consuming anything above idealToday is instantly bad', () => {
-    // No warn zone: ratio = 1701/1700 > 1.0 → 'bad'
-    expect(computeDayStatus(1701, 12500, 6, 2000, 1700)).toBe('bad');
+  test('clamped below: anything above idealToday is instantly bad (no warn zone)', () => {
+    expect(computeDayStatus(1701, 2000, 1700, -300)).toBe('bad');
+    expect(computeDayStatus(2500, 2000, 1700, -300)).toBe('bad');
   });
 
-  test('clamped below: consuming well over idealToday stays bad', () => {
-    expect(computeDayStatus(2500, 12500, 6, 2000, 1700)).toBe('bad');
-  });
-
-  // --- clamped above (undereating): idealToday is a floor --------------------
-  // Ok window is 2×SAFETY_NET_PCT (20%) wide, starting at idealToday.
+  // Clamped above (adjustment > 0): idealToday is a floor, ok window 20% wide above ideal
 
   test('clamped above: consuming below idealToday shows low', () => {
-    // prevSum=2400, rawIdeal=4×2000-2400=5600 > goal×1.15=2300 → clamped above
-    // idealToday=2300; ratio = 2200/2300 ≈ 0.957 < 1.0 → 'low'
-    expect(computeDayStatus(2200, 2400, 4, 2000, 2300)).toBe('low');
+    expect(computeDayStatus(2200, 2000, 2300, 300)).toBe('low');
   });
 
   test('clamped above: consuming idealToday exactly shows ok', () => {
-    // ratio = 2300/2300 = 1.0 → 'ok'
-    expect(computeDayStatus(2300, 2400, 4, 2000, 2300)).toBe('ok');
+    expect(computeDayStatus(2300, 2000, 2300, 300)).toBe('ok');
   });
 
   test('clamped above: top of ok window is at idealToday × 1.20', () => {
-    // ratio = 2760/2300 ≈ 1.20 → 'ok' (upper edge of 20% window)
-    expect(computeDayStatus(2760, 2400, 4, 2000, 2300)).toBe('ok');
-    // ratio = 2761/2300 ≈ 1.200 → 'warn'
-    expect(computeDayStatus(2761, 2400, 4, 2000, 2300)).toBe('warn');
+    expect(computeDayStatus(2760, 2000, 2300, 300)).toBe('ok');    // ratio 1.20
+    expect(computeDayStatus(2761, 2000, 2300, 300)).toBe('warn');  // just above
   });
 
   test('clamped above: warn zone above ok band', () => {
-    // ratio = 2806/2300 ≈ 1.22 > 1.20, ≤ 1.25 → 'warn'
-    expect(computeDayStatus(2806, 2400, 4, 2000, 2300)).toBe('warn');
+    expect(computeDayStatus(2806, 2000, 2300, 300)).toBe('warn');  // ratio ≈ 1.22
   });
 
   test('clamped above: bad beyond warn zone', () => {
-    // ratio = 2900/2300 ≈ 1.26 > 1.25 → 'bad'
-    expect(computeDayStatus(2900, 2400, 4, 2000, 2300)).toBe('bad');
-  });
-
-  test('unclamped dense warn stays warn', () => {
-    // prevSum = 10200, rawIdeal = 12000 - 10200 = 1800 ∈ [1700, 2300] → not clamped
-    // avg = (10200 + 2500)/6 ≈ 2117, ratio = 1.058 → warn
-    expect(computeDayStatus(2500, 10200, 6, 2000, 1800)).toBe('warn');
-  });
-
-  // --- spike tolerance: one-day overshoot dampened by 7-day average ----------
-
-  test('party day: moderate spike stays green when prior days are on target', () => {
-    // 6 prior days at goal: prevSum = 6*2000 = 12000, effectiveDays=7
-    // Party: consumed = 2500 → avg = 14500/7 ≈ 2071 = 3.6% over → ok
-    expect(computeDayStatus(2500, 12000, 7, 2000, 2000)).toBe('ok');
-  });
-
-  test('party day: large spike moves average to warn', () => {
-    // consumed = 3500 → avg = 15500/7 ≈ 2214 = 10.7% over → bad
-    // But idealToday = 2000, 3500/2000 = 1.75 → safety net does not apply → bad
-    expect(computeDayStatus(3500, 12000, 7, 2000, 2000)).toBe('bad');
+    expect(computeDayStatus(2900, 2000, 2300, 300)).toBe('bad');   // ratio ≈ 1.26
   });
 });
 
@@ -208,28 +368,23 @@ describe('computeDayStatus', () => {
 // ---------------------------------------------------------------------------
 describe('statusForDay', () => {
   test('returns ok when day is at goal with sufficient window data', () => {
-    const kcalByDay = {
-      '2024-02-01': 2000, '2024-02-02': 2000, '2024-02-03': 2000,
-      '2024-02-04': 2000, '2024-02-05': 2000, '2024-02-06': 2000,
-      '2024-02-07': 2000,
-    };
+    // 28 days all at goal → adjustment = 0 → ok
+    const kcalByDay = buildFullHistory('2024-02-07', 2000);
     expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
   });
 
-  test('tolerates a moderate spike when other days are on target', () => {
-    const kcalByDay = {
-      '2024-02-01': 2000, '2024-02-02': 2000, '2024-02-03': 2000,
-      '2024-02-04': 2000, '2024-02-05': 2000, '2024-02-06': 2000,
-      '2024-02-07': 2500,
-    };
-    // avg = 14500/7 ≈ 2071 → within ±5%
-    expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
-  });
-
-  test('uses sparse-data path when fewer than 4 days logged', () => {
+  test('returns ok when consumed equals goal with no history (sparse gate fires)', () => {
+    // 1 day logged → gate fires → adjustment = 0 → unclamped, consumed/idealToday = 1 → ok
     const kcalByDay = { '2024-02-07': 2000 };
-    // 1 day, idealToday = goal, consumed = goal → ok (±10% band)
     expect(statusForDay(kcalByDay, '2024-02-07', 2000)).toBe('ok');
+  });
+
+  test('chronic over-eating with full history → clamped below → ceiling status', () => {
+    // 28 days at 2500 (500 over) → adjustment < 0 → clamped below
+    const kcalByDay = buildFullHistory('2024-02-07', 2500);
+    const status = statusForDay(kcalByDay, '2024-02-07', 2000);
+    // today also at 2500; since idealToday < 2000, ratio > 1 → bad
+    expect(status).toBe('bad');
   });
 });
 
@@ -273,7 +428,6 @@ describe('barSegments', () => {
   test('extreme overshoot: segments still sum to 100%', () => {
     const s = barSegments(300, 100, 'bad');
     expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
-    // base portion shrinks as overshoot grows
     expect(s.basePct).toBeCloseTo(100 / 3, 1);
   });
 
@@ -284,8 +438,6 @@ describe('barSegments', () => {
     expect(s.badPct).toBe(0);
   });
 
-  // --- status capping: bar never shows a severity beyond the status ---
-
   test('status ok: over-target consumption shows only base (no warn/bad)', () => {
     const s = barSegments(120, 100, 'ok');
     expect(s.basePct).toBe(100);
@@ -294,7 +446,6 @@ describe('barSegments', () => {
   });
 
   test('status warn: bad band folded into warn', () => {
-    // consumed 115 / target 100 → would have bad band, but status is warn
     const s = barSegments(115, 100, 'warn');
     expect(s.basePct + s.warnPct + s.badPct).toBeCloseTo(100);
     expect(s.badPct).toBe(0);
@@ -325,41 +476,38 @@ describe('macroVisuals', () => {
     expect(v.bar.basePct).toBe(100);
   });
 
-  test('uses macroWin when provided', () => {
+  test('uses macroWin when provided (unclamped)', () => {
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 100, status: 'ok', idealToday: 100, prevSum: 400 };
+    const mw = { target: 100, status: 'ok', idealToday: 100, prevSum: 400, adjustment: 0 };
     const v = macroVisuals(100, mw, 5);
     expect(v.status).toBe('ok');
     expect(v.bar.basePct).toBe(100);
   });
 
-  test('bar and status always agree — warn status never produces bad bar', () => {
-    // Clamped above (prevSum=2400 → rawIdeal=5600 > goal×1.15=2300)
-    // consumed=2806, idealToday=2300 → ratio≈1.22 > 1.20, ≤ 1.25 → 'warn'; bar has warn but no bad
+  test('clamped above: bar and status always agree — warn status never produces bad bar', () => {
+    // adjustment > 0 → clamped above → idealToday is floor
+    // consumed=2806, idealToday=2300 → ratio≈1.22 > 1.20, ≤ 1.25 → 'warn'
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'warn', idealToday: 2300, prevSum: 2400 };
+    const mw = { target: 2000, status: 'warn', idealToday: 2300, prevSum: 2400, adjustment: 300 };
     const v = macroVisuals(2806, mw, 4);
     expect(v.status).toBe('warn');
     expect(v.bar.badPct).toBe(0);
   });
 
-  test('bar and status always agree — ok status never produces warn/bad bar', () => {
-    // Unclamped: 6 prior days at goal, today slightly over → rolling avg ok
-    // prevSum=12000, rawIdeal=7×2000-12000=2000 ∈ [1700,2300] → not clamped
+  test('unclamped: ok status never produces warn/bad bar', () => {
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'ok', idealToday: 2000, prevSum: 12000 };
-    // avg = (12000+2100)/7 ≈ 2014 → 100.7% → ok
+    const mw = { target: 2000, status: 'ok', idealToday: 2000, prevSum: 12000, adjustment: 0 };
+    // consumed 2100, idealToday 2000 → ratio 1.05 → ok (at boundary)
     const v = macroVisuals(2100, mw, 7);
     expect(v.status).toBe('ok');
     expect(v.bar.warnPct).toBe(0);
     expect(v.bar.badPct).toBe(0);
   });
 
-  test('clamped below bar has no warn zone — consumed just over idealToday jumps to bad', () => {
-    // Clamped below: prevSum=12500 → rawIdeal=-500 < 1700 → skipWarnZone=true
-    // consumed=1800 > idealToday=1700 → status='bad', warnPct must be 0
+  test('clamped below: bar has no warn zone — consumed just over idealToday jumps to bad', () => {
+    // adjustment < 0 → skipWarnZone = true
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'bad', idealToday: 1700, prevSum: 12500 };
+    const mw = { target: 2000, status: 'bad', idealToday: 1700, prevSum: 12500, adjustment: -300 };
     const v = macroVisuals(1800, mw, 6);
     expect(v.status).toBe('bad');
     expect(v.bar.warnPct).toBe(0);
@@ -371,41 +519,84 @@ describe('macroVisuals', () => {
 // idealForDay
 // ---------------------------------------------------------------------------
 describe('idealForDay', () => {
-  test('returns raw goal when no prior days are logged', () => {
+  test('returns raw goal when no days are logged', () => {
     expect(idealForDay({}, '2024-02-07', 2000)).toBe(2000);
   });
 
-  test('returns raw goal when only today is logged at goal', () => {
-    const kcalByDay = { '2024-02-07': 2000 };
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBeCloseTo(2000);
+  test('completeness gate: returns raw goal with insufficient history (< 14 in 28 days)', () => {
+    // 7 days logged — fewer than MIN_LOGGED_28 (14) → gate fires
+    const kcalByDay = buildFullHistory('2024-02-07', 3000, 7);
+    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBe(2000);
   });
 
-  test('compensates for under-eating yesterday', () => {
-    // Yesterday ate 1000 (1000 under). effectiveDays=2, ideal = 2*2000 - 1000 = 3000
-    // Clamped to 2000*1.15 = 2300
-    const kcalByDay = { '2024-02-06': 1000, '2024-02-07': 0 };
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBeCloseTo(2300);
+  test('adjusts goal downward with 28 days of over-eating', () => {
+    const kcalByDay = buildFullHistory('2024-02-07', 2500, 28);
+    const result = idealForDay(kcalByDay, '2024-02-07', 2000);
+    expect(result).toBeLessThan(2000);
+    expect(result).toBeGreaterThanOrEqual(1700); // clamped at -15%
   });
 
-  test('compensates for over-eating yesterday', () => {
-    // Yesterday ate 3000 (1000 over). effectiveDays=2, ideal = 2*2000 - 3000 = 1000
-    // Clamped to 2000*0.85 = 1700
-    const kcalByDay = { '2024-02-06': 3000, '2024-02-07': 0 };
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBeCloseTo(1700);
+  test('extreme over-eating clamps idealToday to goal × 0.85', () => {
+    const kcalByDay = buildFullHistory('2024-02-07', 7000, 28);
+    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBe(1700);
   });
 
-  test('mild under-eating is not clamped', () => {
-    // Yesterday ate 1900 (100 under). effectiveDays=2, ideal = 2*2000 - 1900 = 2100
-    // Within ±15% (1700–2300), not clamped
-    const kcalByDay = { '2024-02-06': 1900, '2024-02-07': 0 };
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBeCloseTo(2100);
+  test('returns goal when history is perfectly on target', () => {
+    const kcalByDay = buildFullHistory('2024-02-07', 2000, 28);
+    // error = 0 throughout → deadband applies → adjustment = 0
+    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBe(2000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isGoalClamped / recoveryDays
+// ---------------------------------------------------------------------------
+describe('isGoalClamped', () => {
+  test('returns false when target is null', () => {
+    const mw = /** @type {any} */ ({ target: null, adjustment: -300, prevSum: 0, idealToday: 0, status: 'none' });
+    expect(isGoalClamped(mw, 5)).toBe(false);
   });
 
-  test('only considers the 7-day window', () => {
-    // Day 8 days ago should be ignored
-    const kcalByDay = { '2024-01-30': 500, '2024-02-06': 2000, '2024-02-07': 0 };
-    // Only 02-06 counts as prev. effectiveDays=2, ideal = 2*2000 - 2000 = 2000
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBeCloseTo(2000);
+  test('returns false when effectiveDays < MIN_LOGGED_7', () => {
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: -300, prevSum: 0, idealToday: 1700, status: 'bad' });
+    expect(isGoalClamped(mw, 3)).toBe(false); // 3 < 4
+  });
+
+  test('returns below when adjustment is significantly negative', () => {
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: -300, prevSum: 0, idealToday: 1700, status: 'bad' });
+    expect(isGoalClamped(mw, 5)).toBe('below');
+  });
+
+  test('returns above when adjustment is significantly positive', () => {
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: 300, prevSum: 0, idealToday: 2300, status: 'low' });
+    expect(isGoalClamped(mw, 5)).toBe('above');
+  });
+
+  test('returns false when adjustment is within the deadband', () => {
+    // base deadband for 2000 kcal goal = max(50, 2.5%×2000) = 50 kcal
+    // adjustment of 20 < 50 → not clamped
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: 20, prevSum: 0, idealToday: 2020, status: 'ok' });
+    expect(isGoalClamped(mw, 5)).toBe(false);
+  });
+});
+
+describe('recoveryDays', () => {
+  test('returns 0 when adjustment is within deadband', () => {
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: 20, prevSum: 0, idealToday: 2020, status: 'ok' });
+    expect(recoveryDays(mw, 5, 'above')).toBe(0);
+  });
+
+  test('returns 1 when effectiveDays < MIN_LOGGED_7', () => {
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: -300, prevSum: 0, idealToday: 1700, status: 'bad' });
+    expect(recoveryDays(mw, 3, 'below')).toBe(1);
+  });
+
+  test('decay approximation: -300 adjustment on 2000 goal → ~18 days', () => {
+    // deadband = 50 kcal; n = 7 × log2(300/50) = 7 × log2(6) ≈ 7 × 2.585 ≈ 18.1 → ceil = 19
+    const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: -300, prevSum: 0, idealToday: 1700, status: 'bad' });
+    const n = recoveryDays(mw, 5, 'below');
+    expect(n).toBeGreaterThanOrEqual(18);
+    expect(n).toBeLessThanOrEqual(20);
   });
 });
 
@@ -454,7 +645,6 @@ describe('goalForDate', () => {
   test('returns the more recent record when date is between two records (sorted desc)', () => {
     const older = makeGoal('2024-01-01');
     const newer = makeGoal('2024-02-01');
-    // list() sorts desc, so newer first
     expect(goalForDate([newer, older], '2024-02-15')).toEqual(newer);
     expect(goalForDate([newer, older], '2024-01-15')).toEqual(older);
   });
@@ -478,7 +668,6 @@ describe('list', () => {
     const result = await list();
     expect(result.map(r => r.effectiveFrom)).toEqual(['2024-03-01', '2024-02-01', '2024-01-01']);
   });
-
 });
 
 // ---------------------------------------------------------------------------
@@ -643,23 +832,23 @@ describe('computeWindowVM', () => {
     expect(Meals.listRange).not.toHaveBeenCalled();
   });
 
-  test('returns null when no meals exist in window', async () => {
+  test('returns null when no meals exist in the 7-day display window', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result).toBeNull();
   });
 
-  // --- date range query ------------------------------------------------------
+  // --- date range query (now 28 days) ----------------------------------------
 
-  test('queries the range [todayISO−6, todayISO]', async () => {
+  test('queries the range [todayISO−27, todayISO]', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
     await computeWindowVM('2024-02-07', goals);
-    expect(Meals.listRange).toHaveBeenCalledWith('2024-02-01', '2024-02-07');
+    expect(Meals.listRange).toHaveBeenCalledWith('2024-01-11', '2024-02-07');
   });
 
-  // --- windowDays -------------------------------------------------------------
+  // --- windowDays (based on 7-day display window) ----------------------------
 
-  test('windowDays is the count of distinct days that have meals', async () => {
+  test('windowDays is the count of distinct days with meals in the last 7 days', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-03'),
       makeMeal('2024-02-05'),
@@ -678,147 +867,57 @@ describe('computeWindowVM', () => {
     expect(result?.windowDays).toBe(1);
   });
 
-  // --- idealToday / basic checks --------------------------------------------
+  // --- idealToday: controller output -----------------------------------------
 
-  test('two meals on same day: idealToday = goal', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-07', 1000, 75, 112, 28),
-      makeMeal('2024-02-07', 1000, 75, 113, 28),
-    ]);
+  test('adjustment propagated to all MacroWindows', async () => {
+    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(2000);
+    expect(typeof result?.calories.adjustment).toBe('number');
+    expect(result?.calories.adjustment).toBe(result?.protein.adjustment);
+    expect(result?.calories.adjustment).toBe(result?.carbs.adjustment);
+    expect(result?.calories.adjustment).toBe(result?.fat.adjustment);
   });
 
-  test('two days both at goal: status ok, idealToday = goal', async () => {
+  test('two days both at goal: adjustment = 0, idealToday ≈ goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06'),
       makeMeal('2024-02-07'),
     ]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.windowDays).toBe(2);
-    expect(result?.calories.status).toBe('ok');
+    // 2 days of history → gate fires (< 14) → adjustment = 0
+    expect(result?.calories.adjustment).toBe(0);
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
-  test('full 7-day window all at goal: status ok, idealToday = goal', async () => {
+  test('insufficient history causes gate to fire → adjustment = 0', async () => {
+    // Only 7 days → loggedDays28 < 14 → gate fires
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06','2024-02-07'];
-    vi.mocked(Meals.listRange).mockResolvedValue(days.map(d => makeMeal(d)));
+    vi.mocked(Meals.listRange).mockResolvedValue(days.map(d => makeMeal(d, 3000)));
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.windowDays).toBe(7);
-    expect(result?.calories.status).toBe('ok');
-    expect(result?.calories.idealToday).toBeCloseTo(2000);
+    expect(result?.calories.adjustment).toBe(0);
   });
 
-  // --- status (sparse data: < 4 days, uses ±10% idealToday bands) -----------
+  // --- macro status checks ---------------------------------------------------
 
-  test('sparse: ok when consumed is at goal', async () => {
+  test('sparse: status ok when today consumed equals goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('ok');
   });
 
-  test('sparse: ok when consumed is 8% under goal (within ±10%)', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1840)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.status).toBe('ok');
-  });
-
-  test('sparse: low when consumed is 20% below goal', async () => {
+  test('sparse: status low when consumed is 20% below goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 1600)]);
     const result = await computeWindowVM('2024-02-07', goals);
     expect(result?.calories.status).toBe('low');
   });
 
-  test('sparse: warn when consumed is 15% above idealToday', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2300)]);
+  // --- prevSum preserved for macro reconciliation ----------------------------
+
+  test('prevSum reflects 7-day prior totals (not 28-day)', async () => {
+    // Only a 7-day meal in window
+    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 2500)]);
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.status).toBe('warn');
-  });
-
-  test('sparse: ok when today tracks idealToday despite bad prior day', async () => {
-    // Yesterday was severely under-goal (1000 kcal vs 2000 target).
-    // idealToday is clamped to 2000×1.15 = 2300.
-    // Today the user eats 2300, which is within ±10% of idealToday → ok.
-    // (Sparse path: only 2 days of data.)
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-06', 1000),
-      makeMeal('2024-02-07', 2300),
-    ]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(2300);
-    expect(result?.calories.status).toBe('ok');
-  });
-
-  // --- idealToday / effectiveDays -------------------------------------------
-
-  test('idealToday = goal when today is logged at goal (effectiveDays = windowDays)', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07')]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(2000);
-  });
-
-  test('idealToday = goal when only prev days logged at goal (effectiveDays = windowDays + 1)', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(2000);
-  });
-
-  test('idealToday is clamped to goal×1.15 when far below cumulative target', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 200)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(2300);
-  });
-
-  test('idealToday is clamped to goal×0.85 when far above cumulative target', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 5000)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.idealToday).toBeCloseTo(1700);
-  });
-
-  test('idealToday for today-logged vs today-empty stays the same when prev is at goal', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([
-      makeMeal('2024-02-06'),
-      makeMeal('2024-02-07'),
-    ]);
-    const withToday = await computeWindowVM('2024-02-07', goals);
-
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
-    const withoutToday = await computeWindowVM('2024-02-07', goals);
-
-    expect(withToday?.calories.idealToday).toBeCloseTo(withoutToday?.calories.idealToday ?? 0);
-  });
-
-  // --- macro status and idealToday -------------------------------------------
-
-  test('computes protein/carbs/fat status independently (sparse: ±10% bands)', async () => {
-    // 1 day: sparse path. prot=150/150=1.0→ok, carbs=241/225=1.071→ok (within ±10%), fat=56/56=1.0→ok
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-07', 2000, 150, 241, 56)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.protein.status).toBe('ok');
-    expect(result?.carbs.status).toBe('ok');
-    expect(result?.fat.status).toBe('ok');
-  });
-
-  test('one prior day at goal: macro ideals are close to goal grams', async () => {
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06')]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    // With no deviation in history, ideals stay close to goal.
-    // Slight differences (<1g) arise from rounding in derivedGrams and simplex projection.
-    expect(result?.protein.idealToday).toBeCloseTo(150, 0);
-    expect(result?.carbs.idealToday).toBeCloseTo(225, 0);
-    expect(result?.fat.idealToday).toBeCloseTo(56, 0);
-  });
-
-  test('fat over-adherence reduces fat ideal while maintaining calorie coherence', async () => {
-    // Fat was 200g vs 56g goal (ratio ≈ 3.6×): fat share pushed to its minimum bound.
-    // Other macros must absorb the slack to keep 4P+4C+9F = calIdeal.
-    vi.mocked(Meals.listRange).mockResolvedValue([makeMeal('2024-02-06', 2000, 150, 225, 200)]);
-    const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.fat.idealToday).toBeLessThan(56);
-    const macroKcal = 4 * (result?.protein.idealToday ?? 0)
-      + 4 * (result?.carbs.idealToday ?? 0)
-      + 9 * (result?.fat.idealToday ?? 0);
-    expect(macroKcal).toBeCloseTo(result?.calories.idealToday ?? 0, 0);
+    expect(result?.calories.prevSum).toBe(2500);
   });
 });
 
@@ -849,20 +948,17 @@ describe('computeWindowVM – macro coherence', () => {
    * @param {ReturnType<typeof coherentMeal>[]} priorMeals
    */
   async function assertGreenState(priorMeals) {
-    // Step 1: compute ideals with no today entry.
     vi.mocked(Meals.listRange).mockResolvedValue(priorMeals);
     const pre = await computeWindowVM(TODAY, g);
     expect(pre).not.toBeNull();
 
     const { calories, protein, carbs, fat } = /** @type {NonNullable<typeof pre>} */ (pre);
 
-    // (a) Calorie coherence.
+    // (a) Calorie coherence (within 2 kcal — reconcileMacroIdeals rounds grams).
     const macroKcal = 4 * protein.idealToday + 4 * carbs.idealToday + 9 * fat.idealToday;
-    expect(macroKcal).toBeCloseTo(calories.idealToday, 0);
+    expect(Math.abs(macroKcal - calories.idealToday)).toBeLessThan(2);
 
     // (b) Eating exactly the ideals produces 'ok' for all 4 dimensions.
-    // effectiveDays is the same before and after adding today (today-not-logged adds +1
-    // which exactly offsets today being added to windowDays), so the ideals are stable.
     const todayMeal = {
       id: `meal:${TODAY}`, foodId: 'food:1', multiplier: 1, date: TODAY, updatedAt: 0,
       foodSnapshot: {
@@ -887,23 +983,18 @@ describe('computeWindowVM – macro coherence', () => {
     await assertGreenState(days.map(d => coherentMeal(d, 150, 225, 56)));
   });
 
-  test('6 prior days at 90% of every macro (undereating): ideals clamped up, eating them is green', async () => {
-    // All ratios = 0.9 → all ideals clamped above (undereating).
+  test('6 prior days at 90% of every macro: ideals at goal (gate fires), eating them is green', async () => {
+    // Only 6 prior days → loggedDays28 < 14 → gate fires → adjustment = 0 → ideals = goal grams
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
     await assertGreenState(days.map(d => coherentMeal(d, 135, 202.5, 50.4)));
   });
 
-  test('6 prior days at 110% of every macro (overeating): ideals clamped down, eating them is green', async () => {
-    // All ratios = 1.1 → all ideals clamped below (overeating).
+  test('6 prior days at 110% of every macro: ideals at goal (gate fires), eating them is green', async () => {
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
     await assertGreenState(days.map(d => coherentMeal(d, 165, 247.5, 61.6)));
   });
 
-  test('mixed history: protein under (90%), carbs over (120%), fat under (80%): coherent and green', async () => {
-    // Calories are approximately on target despite per-macro imbalances.
-    // protein: 90% (low) → don't increase
-    // carbs:  120% (high) → don't decrease
-    // fat:     80% (low) → don't increase
+  test('mixed history: macro imbalance → coherent ideals, eating them is green', async () => {
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
     await assertGreenState(days.map(d => coherentMeal(d, 135, 270, 44.8)));
   });
@@ -933,4 +1024,23 @@ function makeGoal(effectiveFrom, overrides = {}) {
     createdAt:      0,
     ...overrides,
   };
+}
+
+/**
+ * Build kcalByDay with N days ending on endISO, all at the given kcal value.
+ * @param {string} endISO
+ * @param {number} kcal
+ * @param {number} [days]
+ * @returns {Record<string, number>}
+ */
+function buildFullHistory(endISO, kcal, days = 28) {
+  /** @type {Record<string, number>} */
+  const map = {};
+  const end = new Date(`${endISO}T00:00:00`);
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end);
+    d.setDate(end.getDate() - i);
+    map[d.toISOString().slice(0, 10)] = kcal;
+  }
+  return map;
 }

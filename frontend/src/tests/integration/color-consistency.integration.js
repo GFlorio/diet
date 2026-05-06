@@ -39,15 +39,15 @@ async function mealPageCalStatus(todayISO) {
 
 /**
  * Compute the calorie status as the heatmap would (via statusForDay).
+ * Builds kcalByDay over 28 days so the controller has the same history as computeWindowVM.
  * @param {string} dateISO
  * @returns {Promise<string>}
  */
 async function heatmapCalStatus(dateISO) {
   const goal = await Goals.getActive(dateISO);
   if (!goal) { return 'none'; }
-  // Build kcalByDay over the full 7-day window so statusForDay has context
   const d = new Date(`${dateISO}T00:00:00`);
-  d.setDate(d.getDate() - 6);
+  d.setDate(d.getDate() - 27);
   const fromISO = d.toISOString().slice(0, 10);
   const kcalByDay = await buildKcalByDay(fromISO, dateISO);
   return Goals.statusForDay(kcalByDay, dateISO, goal.kcal);
@@ -151,14 +151,22 @@ describe('Macro cards vs heatmap calorie status consistency', () => {
     expect(macro).toBe(heatmap);
   });
 
-  test('clamped window shows ok in both paths when eating idealToday', async () => {
+  test('clamped window shows ok in both paths when eating adjusted idealToday', async () => {
     await insertGoal({ effectiveFrom: '2024-01-01', kcal: 2000, protPct: 30, carbsPct: 40, fatPct: 30 });
-    // Heavy over-eating on prior days — idealToday clamped to 0.85*2000=1700
-    await seedDay('2024-06-07', 3000);
-    await seedDay('2024-06-08', 3000);
-    await seedDay('2024-06-09', 3000);
-    // Today eats exactly idealToday → clamped path → ok in both rendering paths
-    await seedDay('2024-06-10', 1700);
+    // 14 days of heavy over-eating → controller fires, idealToday clamped below goal.
+    for (let i = 14; i >= 1; i--) {
+      const d = new Date('2024-06-10T00:00:00');
+      d.setDate(d.getDate() - i);
+      await seedDay(d.toISOString().slice(0, 10), 3000);
+    }
+    // Determine adjusted idealToday (via computeWindowVM).
+    const goalRec = await Goals.getActive('2024-06-10');
+    const preVm = await Goals.computeWindowVM('2024-06-10', goalRec);
+    const idealKcal = Math.round(preVm?.calories.idealToday ?? 2000);
+    expect(idealKcal).toBeLessThan(2000); // must be clamped downward
+
+    // Eating exactly the adjusted ideal should yield 'ok' in both rendering paths.
+    await seedDay('2024-06-10', idealKcal);
 
     const macro = await mealPageCalStatus('2024-06-10');
     const heatmap = await heatmapCalStatus('2024-06-10');

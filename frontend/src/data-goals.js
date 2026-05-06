@@ -6,8 +6,8 @@ import * as $ from './utils.js';
 export const STATUS_OK_PCT   = 0.05;
 /** % deviation at which the 7-day average transitions from warn → bad. */
 export const STATUS_WARN_PCT = 0.10;
-/** ±% of idealToday used as the ok band when data is sparse, and as the
- *  safety-net override that caps status at 'warn' during recovery. */
+/** ±% of idealToday used as the ok band when clamped, and as the safety-net
+ *  override that caps status at 'warn' during recovery. */
 export const SAFETY_NET_PCT  = 0.10;
 
 /** Kcal per gram of protein (and carbohydrate). */
@@ -17,10 +17,105 @@ export const KCAL_PER_G_CARBS   = 4;
 /** Kcal per gram of fat. */
 export const KCAL_PER_G_FAT     = 9;
 
-/** Number of days in the sliding average window. */
-export const WINDOW_DAYS = 7;
-/** Minimum logged days before the data-warning flag is cleared. */
-const WINDOW_MIN_DAYS = 4;
+/**
+ * Short signal window: the most recent N calendar days of logged meals feed
+ * the short-term error signal. Shrink to react faster; grow to dampen spikes.
+ */
+export const SHORT_WINDOW   = 7;
+
+/**
+ * Long signal window: the exponentially-decayed error is computed over this
+ * many calendar days. Longer = more stability; shorter = faster forgetting.
+ */
+export const LONG_WINDOW    = 28;
+
+/**
+ * Half-life for the exponential decay weights in the long error signal.
+ * A logged day that is HALF_LIFE_DAYS old gets half the weight of today.
+ * Shorter = recency matters more; longer = distant history carries more weight.
+ */
+export const HALF_LIFE_DAYS = 7;
+
+/** Clamp factor for idealToday: ±15% of the daily target. */
+const IDEAL_CLAMP = 0.15;
+
+/**
+ * Deadband at zero persistence intensity (floors to this many kcal or 2.5% of
+ * goal, whichever is larger). Errors smaller than the deadband produce no
+ * adjustment. Widen to tolerate more noise; narrow to be more reactive.
+ */
+const BASE_DEADBAND_KCAL    = 50;   // kcal — absolute floor
+const BASE_DEADBAND_PCT     = 0.025; // 2.5% of goal — scales with goal size
+
+/**
+ * Deadband at full persistence intensity (shrinks toward this floor when the
+ * user has been consistently over/under for many days). Narrower than base so
+ * chronic small overages eventually register even if they're below the base band.
+ */
+const PERSISTENT_DEADBAND_KCAL = 25;    // kcal — absolute floor at full persistence
+const PERSISTENT_DEADBAND_PCT  = 0.0125; // 1.25% of goal
+
+/**
+ * How many calendar days of logged history the persistence detector looks at.
+ * Longer = slower to declare "chronic"; shorter = quicker to fire.
+ */
+const PERSISTENCE_WINDOW_DAYS = 14;
+
+/**
+ * Fraction of PERSISTENCE_WINDOW_DAYS logged days that must be over-target
+ * before persistence intensity starts rising above 0.
+ * Below this threshold the controller treats drift as noise.
+ */
+const PERSISTENCE_START = 0.50;
+
+/**
+ * Fraction at which persistence intensity reaches 1.0 (fully persistent).
+ * Between START and FULL the intensity follows a smooth S-curve (smoothstep).
+ */
+const PERSISTENCE_FULL  = 0.90;
+
+// ── Mode-dependent gain constants ──────────────────────────────────────────
+// gain = lerp(base, persistent, persistenceIntensity)
+// A higher gain multiplies the error more aggressively, shrinking today's target
+// further. Persistent gain fires only when the detector has declared chronic drift.
+//
+// Asymmetry is intentional: the app penalises chronic surplus (loss mode) more
+// than it penalises chronic deficit, and vice versa for gain mode.
+
+/** Loss mode, user eating over goal — base gain (no persistence detected). */
+const LOSS_GAIN_OVER_BASE       = 0.70;
+/** Loss mode, user eating over goal — gain at full persistence. */
+const LOSS_GAIN_OVER_PERSISTENT = 2.00;
+/** Loss mode, user eating under goal — fixed gain regardless of persistence.
+ *  Under-eating in a deficit is fine; no need to push the target higher. */
+const LOSS_GAIN_UNDER           = 0.25;
+
+/** Maintenance mode base gain (symmetric — same for surplus and deficit). */
+const MAINTENANCE_GAIN_BASE       = 0.60;
+/** Maintenance mode gain at full persistence. */
+const MAINTENANCE_GAIN_PERSISTENT = 1.50;
+
+/** Gain mode, user eating under goal — base gain (no persistence detected). */
+const GAIN_GAIN_UNDER_BASE       = 0.70;
+/** Gain mode, user eating under goal — gain at full persistence. */
+const GAIN_GAIN_UNDER_PERSISTENT = 2.00;
+/** Gain mode, user eating over goal — fixed gain regardless of persistence.
+ *  Surplus in a bulk is fine; no need to push the target lower. */
+const GAIN_GAIN_OVER             = 0.25;
+
+/**
+ * Minimum logged days in the last SHORT_WINDOW calendar days required before
+ * the controller issues an adjustment. Below this, history is too sparse to
+ * trust a short-term signal. Raise to require denser logging; lower to accept gaps.
+ */
+const MIN_LOGGED_7  = 4;
+
+/**
+ * Minimum logged days in the last LONG_WINDOW calendar days required before
+ * the controller issues an adjustment. This guards against reacting to a very
+ * short burst of logging. Raise to require more history; lower to react sooner.
+ */
+const MIN_LOGGED_28 = 14;
 
 /**
  * @typedef {import('./db.js').GoalRecord} GoalRecord
@@ -39,6 +134,7 @@ const WINDOW_MIN_DAYS = 4;
  *   status:     'none'|'low'|'ok'|'warn'|'bad',
  *   idealToday: number,
  *   prevSum:    number,
+ *   adjustment: number,
  * }} MacroWindow
  */
 
@@ -129,51 +225,221 @@ export function goalForDate(records, dateISO) {
   return records.find(r => r.effectiveFrom <= dateISO) ?? null;
 }
 
-/** Clamp factor for idealToday: ±15% of the daily target. */
-const IDEAL_CLAMP = 0.15;
+// ── Pure helper functions ────────────────────────────────────────────────────
+
+/** @param {number} ageDays @param {number} halfLifeDays */
+export function expWeight(ageDays, halfLifeDays) {
+  return 0.5 ** (ageDays / halfLifeDays);
+}
+
+/** @param {number} a @param {number} b @param {number} t */
+export function lerp(a, b, t) { return a + (b - a) * t; }
+
+/**
+ * Cubic S-curve that maps x in [edge0, edge1] → [0, 1].
+ * Returns 0 for x ≤ edge0 and 1 for x ≥ edge1.
+ * @param {number} edge0 @param {number} edge1 @param {number} x
+ */
+export function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Compute the mean error over an array of per-day errors (newest first).
+ * Takes up to SHORT_WINDOW entries.
+ * @param {number[]} errorsNewestFirst
+ */
+export function shortError(errorsNewestFirst) {
+  const days = errorsNewestFirst.slice(0, SHORT_WINDOW);
+  if (days.length === 0) { return 0; }
+  return days.reduce((s, e) => s + e, 0) / days.length;
+}
+
+/**
+ * Exponentially-weighted average error over a calendar window.
+ * Each entry is weighted by expWeight(ageDays, HALF_LIFE_DAYS).
+ * @param {Array<{ageDays: number, error: number}>} days — all logged days in range
+ * @param {number} windowDays — calendar-day cutoff (entries with ageDays >= windowDays are ignored)
+ * @param {number} halfLife
+ */
+export function weightedAverageError(days, windowDays, halfLife) {
+  const subset = days.filter(d => d.ageDays < windowDays);
+  if (subset.length === 0) { return 0; }
+  let sumW = 0, sumWE = 0;
+  for (const d of subset) {
+    const w = expWeight(d.ageDays, halfLife);
+    sumW  += w;
+    sumWE += w * d.error;
+  }
+  return sumW > 0 ? sumWE / sumW : 0;
+}
+
+/**
+ * Blend short and long errors. When signs disagree (transient spike vs stable
+ * trend), trust the long signal more to avoid oscillation.
+ * @param {number} shortErr @param {number} longErr
+ */
+export function combineErrors(shortErr, longErr) {
+  const signDisagree = shortErr !== 0 && longErr !== 0 && Math.sign(shortErr) !== Math.sign(longErr);
+  return signDisagree
+    ? 0.25 * shortErr + 0.75 * longErr
+    : 0.50 * shortErr + 0.50 * longErr;
+}
+
+/**
+ * Fraction of logged days in the persistence window where actual > baseGoal.
+ * Ranges 0–1; 1 means every logged day in the window was over goal.
+ * @param {Array<{ageDays: number, error: number}>} days
+ * @param {number} baseGoalKcal — used only to confirm the threshold (error > 0 means over goal)
+ */
+export function overPersistence(days, baseGoalKcal) {
+  void baseGoalKcal; // threshold is always 0 (over vs under goal)
+  const window = days.filter(d => d.ageDays < PERSISTENCE_WINDOW_DAYS);
+  if (window.length === 0) { return 0; }
+  return window.filter(d => d.error > 0).length / window.length;
+}
+
+/**
+ * Interpolate between base and persistent deadband using persistence intensity.
+ * @param {number} baseGoalKcal
+ * @param {number} intensity — 0 (no persistence) to 1 (fully persistent)
+ */
+export function adaptiveDeadband(baseGoalKcal, intensity) {
+  const base       = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * baseGoalKcal);
+  const persistent = Math.max(PERSISTENT_DEADBAND_KCAL, PERSISTENT_DEADBAND_PCT * baseGoalKcal);
+  return lerp(base, persistent, intensity);
+}
+
+/**
+ * Mode-and-direction-dependent gain, interpolated by persistence intensity.
+ * @param {'loss'|'maintenance'|'gain'} mode
+ * @param {number} effectiveError — positive = surplus, negative = deficit
+ * @param {number} intensity — 0–1 persistence intensity
+ */
+export function adaptiveGain(mode, effectiveError, intensity) {
+  const surplus = effectiveError > 0;
+  if (mode === 'loss') {
+    return surplus
+      ? lerp(LOSS_GAIN_OVER_BASE, LOSS_GAIN_OVER_PERSISTENT, intensity)
+      : LOSS_GAIN_UNDER;
+  }
+  if (mode === 'gain') {
+    return surplus
+      ? GAIN_GAIN_OVER
+      : lerp(GAIN_GAIN_UNDER_BASE, GAIN_GAIN_UNDER_PERSISTENT, intensity);
+  }
+  // maintenance: symmetric
+  return lerp(MAINTENANCE_GAIN_BASE, MAINTENANCE_GAIN_PERSISTENT, intensity);
+}
+
+/**
+ * Stateless adaptive trend controller. Computes today's adjusted kcal target
+ * using a blend of 7-day and 28-day error signals with persistence detection.
+ *
+ * Returns baseGoal unchanged when the completeness gate fires (too few logged
+ * days to trust the signal). Never infers under-eating from absent logs.
+ *
+ * @param {Record<string, number>} kcalByDay — ISO date → total kcal (up to 28 days)
+ * @param {string} dateISO — the day to compute for
+ * @param {number} baseGoalKcal — raw daily target
+ * @param {'loss'|'maintenance'|'gain'} [mode]
+ * @returns {{ adjustedGoalKcal: number, adjustment: number, debug: object }}
+ */
+export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = 'maintenance') {
+  if (baseGoalKcal <= 0) {
+    return { adjustedGoalKcal: baseGoalKcal, adjustment: 0, debug: { gate: 'zero-goal' } };
+  }
+
+  const today = $.localDate(dateISO);
+
+  // Build logged-day array (newest first, including dateISO if logged).
+  /** @type {Array<{ageDays: number, error: number}>} */
+  const loggedDays = [];
+  for (let i = 0; i < LONG_WINDOW; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const iso = $.toISO(d);
+    if (iso in kcalByDay) {
+      loggedDays.push({ ageDays: i, error: kcalByDay[iso] - baseGoalKcal });
+    }
+  }
+
+  const loggedDays7  = loggedDays.filter(d => d.ageDays < SHORT_WINDOW).length;
+  const loggedDays28 = loggedDays.length;
+
+  // Completeness gate: require enough history before issuing any adjustment.
+  if (loggedDays7 < MIN_LOGGED_7 || loggedDays28 < MIN_LOGGED_28) {
+    return {
+      adjustedGoalKcal: Math.round(baseGoalKcal),
+      adjustment: 0,
+      debug: { gate: 'sparse', loggedDays7, loggedDays28 },
+    };
+  }
+
+  const shortErr = shortError(loggedDays.filter(d => d.ageDays < SHORT_WINDOW).map(d => d.error));
+  const longErr  = weightedAverageError(loggedDays, LONG_WINDOW, HALF_LIFE_DAYS);
+  const effectiveError = combineErrors(shortErr, longErr);
+
+  const persistence         = overPersistence(loggedDays, baseGoalKcal);
+  const persistenceIntensity = smoothstep(PERSISTENCE_START, PERSISTENCE_FULL, persistence);
+
+  const deadband = adaptiveDeadband(baseGoalKcal, persistenceIntensity);
+
+  if (Math.abs(effectiveError) < deadband) {
+    return {
+      adjustedGoalKcal: Math.round(baseGoalKcal),
+      adjustment: 0,
+      debug: { shortErr, longErr, effectiveError, persistence, persistenceIntensity, deadband, deadbandApplied: true, loggedDays7, loggedDays28 },
+    };
+  }
+
+  const gain               = adaptiveGain(mode, effectiveError, persistenceIntensity);
+  const unclampedAdj       = -gain * effectiveError;
+  const maxAdj             = IDEAL_CLAMP * baseGoalKcal;
+  const clampedAdj         = Math.max(-maxAdj, Math.min(maxAdj, unclampedAdj));
+  const clampApplied       = clampedAdj !== unclampedAdj;
+
+  return {
+    adjustedGoalKcal: Math.round(baseGoalKcal + clampedAdj),
+    adjustment: clampedAdj,
+    debug: {
+      shortErr, longErr, effectiveError,
+      persistence, persistenceIntensity,
+      deadband, gain,
+      unclampedAdj, clampedAdj,
+      clampApplied, deadbandApplied: false,
+      loggedDays7, loggedDays28,
+    },
+  };
+}
 
 /**
  * Compute day status.
  *
- * Three modes depending on window state:
+ * Three modes depending on the controller's adjustment:
  *
- * - Sparse (< WINDOW_MIN_DAYS): symmetric ±SAFETY_NET_PCT bands around idealToday.
- *   No reliable history yet, so direction is unknown.
+ * - Unclamped (adjustment === 0): symmetric ±STATUS_OK_PCT/STATUS_WARN_PCT bands
+ *   around idealToday.
  *
- * - Clamped below (overeating — rawIdeal < goal×0.85): idealToday is a ceiling.
- *   ok band is [ideal×0.9, ideal]; anything above ideal is immediately 'bad'.
+ * - Clamped below (adjustment < 0, over-eating): idealToday is a ceiling.
+ *   ok band is [ideal×0.80, ideal]; anything above ideal is immediately 'bad'.
  *
- * - Clamped above (undereating — rawIdeal > goal×1.15): idealToday is a floor.
- *   Below ideal is 'low'; ok band is [ideal, ideal×1.1]; then 'warn', then 'bad'.
- *
- * - Dense, unclamped: rolling-average (prevSum + consumed) / effectiveDays vs raw goal.
+ * - Clamped above (adjustment > 0, under-eating): idealToday is a floor.
+ *   Below ideal is 'low'; ok band is [ideal, ideal×1.20]; then 'warn', then 'bad'.
  *
  * @param {number} consumed
- * @param {number} prevSum       — total consumed on other logged days in the window
- * @param {number} effectiveDays — logged days (including today or +1 if today is empty)
  * @param {number | null} goal   — raw daily target
- * @param {number} idealToday    — adjusted daily target (clamped to ±IDEAL_CLAMP of goal)
+ * @param {number} idealToday    — adjusted daily target (goal + adjustment)
+ * @param {number} adjustment    — signed kcal adjustment from the controller
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
-export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealToday) {
+export function computeDayStatus(consumed, goal, idealToday, adjustment) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
-  // Sparse: symmetric bands — no directional history yet.
-  if (effectiveDays < WINDOW_MIN_DAYS) {
-    if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
-    const ratio = consumed / idealToday;
-    if (ratio < 1 - SAFETY_NET_PCT)                                      { return 'low'; }
-    if (ratio <= 1 + SAFETY_NET_PCT)                                      { return 'ok'; }
-    if (ratio <= 1 + SAFETY_NET_PCT + (STATUS_WARN_PCT - STATUS_OK_PCT)) { return 'warn'; }
-    return 'bad';
-  }
-
-  const rawIdeal = effectiveDays * goal - prevSum;
-
-  if (rawIdeal < goal * (1 - IDEAL_CLAMP)) {
+  if (adjustment < 0) {
     // Clamped below: idealToday is a ceiling — green only extends downward.
-    // Ok window is 2×SAFETY_NET_PCT wide, sitting below idealToday.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
     if (ratio < 1 - 2 * SAFETY_NET_PCT) { return 'low'; }
@@ -181,9 +447,8 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
     return 'bad';
   }
 
-  if (rawIdeal > goal * (1 + IDEAL_CLAMP)) {
+  if (adjustment > 0) {
     // Clamped above: idealToday is a floor — green only extends upward.
-    // Ok window is 2×SAFETY_NET_PCT wide, starting at idealToday.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
     if (ratio < 1)                                                           { return 'low'; }
@@ -192,9 +457,9 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
     return 'bad';
   }
 
-  // Dense, unclamped: rolling-average position relative to the raw goal.
-  const avg   = (prevSum + consumed) / effectiveDays;
-  const ratio = avg / goal;
+  // Unclamped: compare consumed vs idealToday with standard bands.
+  if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
+  const ratio = consumed / idealToday;
   if (ratio < 1 - STATUS_OK_PCT)    { return 'low'; }
   if (ratio <= 1 + STATUS_OK_PCT)   { return 'ok'; }
   if (ratio <= 1 + STATUS_WARN_PCT) { return 'warn'; }
@@ -202,9 +467,9 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
 }
 
 /**
- * Compute the adjusted daily target for a given day, based on the 7-day
- * sliding window of consumption. If prior days were under/over, the target
- * shifts to compensate, clamped to ±15% of the raw target.
+ * Compute the adjusted daily kcal target for a given day.
+ * Uses 'maintenance' mode (symmetric gain) so past heatmap colors do not
+ * retroactively shift based on the user's current mode setting.
  *
  * @param {Record<string, number>} kcalByDay — map of ISO date → total kcal
  * @param {string} dateISO — the day to compute the target for
@@ -213,29 +478,13 @@ export function computeDayStatus(consumed, prevSum, effectiveDays, goal, idealTo
  */
 export function idealForDay(kcalByDay, dateISO, goalKcal) {
   if (goalKcal <= 0) { return goalKcal; }
-  const d = $.localDate(dateISO);
-  let prevSum    = 0;
-  let loggedDays = 0;
-  for (let i = 1; i < WINDOW_DAYS; i++) {
-    const prev = new Date(d);
-    prev.setDate(d.getDate() - i);
-    const prevISO = $.toISO(prev);
-    if (prevISO in kcalByDay) {
-      prevSum += kcalByDay[prevISO];
-      loggedDays++;
-    }
-  }
-  const todayLogged = dateISO in kcalByDay;
-  if (todayLogged) { loggedDays++; }
-  if (loggedDays === 0) { return goalKcal; }
-  const effectiveDays = todayLogged ? loggedDays : loggedDays + 1;
-  const ideal = effectiveDays * goalKcal - prevSum;
-  return Math.max(goalKcal * (1 - IDEAL_CLAMP), Math.min(goalKcal * (1 + IDEAL_CLAMP), ideal));
+  return computeKcalAdjustment(kcalByDay, dateISO, goalKcal, 'maintenance').adjustedGoalKcal;
 }
 
 /**
  * Compute day status for a single day in the kcalByDay map.
- * Convenience wrapper around idealForDay + computeDayStatus for the heatmap.
+ * Convenience wrapper around computeKcalAdjustment + computeDayStatus for the heatmap.
+ * Uses 'maintenance' mode so past colors are not affected by current goal settings.
  * @param {Record<string, number>} kcalByDay
  * @param {string} dateISO
  * @param {number} goalKcal
@@ -243,26 +492,9 @@ export function idealForDay(kcalByDay, dateISO, goalKcal) {
  */
 export function statusForDay(kcalByDay, dateISO, goalKcal) {
   const consumed = kcalByDay[dateISO] ?? 0;
-  if (goalKcal <= 0) { return computeDayStatus(consumed, 0, 1, goalKcal, goalKcal); }
-  const d = $.localDate(dateISO);
-  let prevSum    = 0;
-  let loggedDays = 0;
-  for (let i = 1; i < WINDOW_DAYS; i++) {
-    const prev = new Date(d);
-    prev.setDate(d.getDate() - i);
-    const prevISO = $.toISO(prev);
-    if (prevISO in kcalByDay) {
-      prevSum += kcalByDay[prevISO];
-      loggedDays++;
-    }
-  }
-  const todayLogged = dateISO in kcalByDay;
-  if (todayLogged) { loggedDays++; }
-  if (loggedDays === 0) { return computeDayStatus(consumed, 0, 1, goalKcal, goalKcal); }
-  const effectiveDays = todayLogged ? loggedDays : loggedDays + 1;
-  const ideal = effectiveDays * goalKcal - prevSum;
-  const idealToday = Math.max(goalKcal * (1 - IDEAL_CLAMP), Math.min(goalKcal * (1 + IDEAL_CLAMP), ideal));
-  return computeDayStatus(consumed, prevSum, effectiveDays, goalKcal, idealToday);
+  if (goalKcal <= 0) { return computeDayStatus(consumed, goalKcal, goalKcal, 0); }
+  const { adjustedGoalKcal, adjustment } = computeKcalAdjustment(kcalByDay, dateISO, goalKcal, 'maintenance');
+  return computeDayStatus(consumed, goalKcal, adjustedGoalKcal, adjustment);
 }
 
 /**
@@ -330,31 +562,29 @@ export function barSegments(consumed, target, status, skipWarnZone = false) {
 
 /**
  * Single source of truth for how a macro value should be colored and how
- * its progress bar should look.  Computes status via the rolling-average /
- * sparse-data logic and derives bar segments that are guaranteed to stay
+ * its progress bar should look.  Computes status via the controller-driven
+ * adjustment logic and derives bar segments that are guaranteed to stay
  * consistent with the status (bar never shows a severity beyond status).
  *
  * @param {number} consumed
  * @param {MacroWindow | null | undefined} macroWin - from computeWindowVM; null/undefined = fallback
- * @param {number} effectiveDays - from WindowVM; ignored when macroWin is null
+ * @param {number} _effectiveDays - from WindowVM; kept for isGoalClamped/recoveryDays callers
  * @param {number | null} [fallbackGoal] - raw daily target when macroWin is unavailable
  * @returns {MacroVisuals}
  */
-export function macroVisuals(consumed, macroWin, effectiveDays, fallbackGoal = null) {
+export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = null) {
   /** @type {'none'|'low'|'ok'|'warn'|'bad'} */
   let status;
   let barTarget;
   let skipWarnZone = false;
 
   if (macroWin) {
-    status    = computeDayStatus(consumed, macroWin.prevSum, effectiveDays, macroWin.target, macroWin.idealToday);
-    barTarget = macroWin.idealToday;
-    if (macroWin.target !== null && effectiveDays >= WINDOW_MIN_DAYS) {
-      const rawIdeal = effectiveDays * macroWin.target - macroWin.prevSum;
-      skipWarnZone = rawIdeal < macroWin.target * (1 - IDEAL_CLAMP);
-    }
+    const adj = macroWin.adjustment ?? 0;
+    status       = computeDayStatus(consumed, macroWin.target, macroWin.idealToday, adj);
+    barTarget    = macroWin.idealToday;
+    skipWarnZone = adj < 0; // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
-    status    = computeDayStatus(consumed, 0, 1, fallbackGoal, fallbackGoal);
+    status    = computeDayStatus(consumed, fallbackGoal, fallbackGoal, 0);
     barTarget = fallbackGoal;
   } else {
     return { status: 'none', bar: { basePct: 0, warnPct: 0, badPct: 0 } };
@@ -377,35 +607,38 @@ export function derivedGrams(goals) {
 }
 
 /**
- * Returns the direction in which the sliding-window idealToday has been clamped by the ±15% limit.
- * Returns false when the window is too sparse or the raw ideal falls within the unclamped range.
+ * Returns the direction in which the controller has clamped idealToday via ±15%.
+ * Returns false when history is too sparse or the adjustment is within the deadband.
  * @param {MacroWindow} macroWin
  * @param {number} effectiveDays
  * @returns {'below' | 'above' | false}
  */
 export function isGoalClamped(macroWin, effectiveDays) {
-  if (macroWin.target === null || effectiveDays < WINDOW_MIN_DAYS) { return false; }
-  const rawIdeal = effectiveDays * macroWin.target - macroWin.prevSum;
-  if (rawIdeal < macroWin.target * (1 - IDEAL_CLAMP)) { return 'below'; }
-  if (rawIdeal > macroWin.target * (1 + IDEAL_CLAMP)) { return 'above'; }
+  const adj      = macroWin.adjustment ?? 0;
+  const deadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
+  if (macroWin.target === null || effectiveDays < MIN_LOGGED_7) { return false; }
+  if (adj < -deadband) { return 'below'; }
+  if (adj >  deadband) { return 'above'; }
   return false;
 }
 
 /**
- * Assuming the user hits their adjusted idealToday exactly each day, returns the number
- * of future days until the sliding-window ideal is no longer clamped.
+ * Estimates how many days until the controller's adjustment returns to within
+ * the deadband, assuming no new meals are logged. Uses the exponential-decay
+ * approximation: debt halves every HALF_LIFE_DAYS days.
  * @param {MacroWindow} macroWin
  * @param {number} effectiveDays
- * @param {'below' | 'above'} direction
+ * @param {'below' | 'above'} _direction
  * @returns {number}
  */
-export function recoveryDays(macroWin, effectiveDays, direction) {
+export function recoveryDays(macroWin, effectiveDays, _direction) {
   if (macroWin.target === null || macroWin.target <= 0) { return 1; }
-  const rawIdeal     = effectiveDays * macroWin.target - macroWin.prevSum;
-  const boundary     = macroWin.target * (direction === 'below' ? (1 - IDEAL_CLAMP) : (1 + IDEAL_CLAMP));
-  const gap          = direction === 'below' ? boundary - rawIdeal : rawIdeal - boundary;
-  const dailyStep    = IDEAL_CLAMP * macroWin.target;
-  return Math.max(1, Math.ceil(gap / dailyStep));
+  const adj      = macroWin.adjustment ?? 0;
+  const deadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * macroWin.target);
+  if (Math.abs(adj) <= deadband) { return 0; }
+  if (effectiveDays < MIN_LOGGED_7) { return 1; }
+  // Solve for n: |adj| × 0.5^(n/HALF_LIFE) = deadband → n = HALF_LIFE × log2(|adj|/deadband)
+  return Math.max(1, Math.ceil(HALF_LIFE_DAYS * Math.log2(Math.abs(adj) / deadband)));
 }
 
 /** @param {number} x @param {number} lo @param {number} hi */
@@ -585,8 +818,18 @@ function reconcileMacroIdeals({ kcalIdeal, goals, derivedG, prevSum, effectiveDa
 }
 
 /**
- * Compute the 7-day sliding window view model.
- * Returns null if goals are not set or no meals exist in the window.
+ * Derive the controller mode from a goal record.
+ * @param {GoalRecord} goals
+ * @returns {'loss'|'maintenance'|'gain'}
+ */
+function deriveMode(goals) {
+  if (goals.calMagnitude === 0) { return 'maintenance'; }
+  return goals.calMode === 'deficit' ? 'loss' : 'gain';
+}
+
+/**
+ * Compute the 28-day sliding window view model.
+ * Returns null if goals are not set or no meals exist in the 7-day display window.
  * @param {string} todayISO
  * @param {GoalRecord | null} goals
  * @returns {Promise<WindowVM | null>}
@@ -594,46 +837,56 @@ function reconcileMacroIdeals({ kcalIdeal, goals, derivedG, prevSum, effectiveDa
 export async function computeWindowVM(todayISO, goals) {
   if (!goals) { return null; }
 
-  const d = $.localDate(todayISO);
-  d.setDate(d.getDate() - (WINDOW_DAYS - 1));
-  const fromISO = $.toISO(d);
+  // Fetch 28-day range so the kcal controller has enough history.
+  const d28 = $.localDate(todayISO);
+  d28.setDate(d28.getDate() - (LONG_WINDOW - 1));
+  const from28ISO = $.toISO(d28);
 
-  const meals = await Meals.listRange(fromISO, todayISO);
+  const meals = await Meals.listRange(from28ISO, todayISO);
 
   /** @type {Record<string, import('./db.js').Macros>} */
-  const byDay = {};
+  const byDay28 = {};
   for (const m of meals) {
-    if (!byDay[m.date]) { byDay[m.date] = $.zeroMacros(); }
-    $.addScaledMacros(byDay[m.date], m.foodSnapshot, m.multiplier);
+    if (!byDay28[m.date]) { byDay28[m.date] = $.zeroMacros(); }
+    $.addScaledMacros(byDay28[m.date], m.foodSnapshot, m.multiplier);
   }
 
-  const dayKeys = Object.keys(byDay);
-  const windowDays = dayKeys.length;
+  // The 7-day window drives windowDays, effectiveDays, prevSum, and the UI display.
+  const d7 = $.localDate(todayISO);
+  d7.setDate(d7.getDate() - (SHORT_WINDOW - 1));
+  const from7ISO = $.toISO(d7);
+
+  /** @type {Record<string, import('./db.js').Macros>} */
+  const byDay7 = {};
+  for (const [k, v] of Object.entries(byDay28)) {
+    if (k >= from7ISO) { byDay7[k] = v; }
+  }
+
+  const dayKeys7   = Object.keys(byDay7);
+  const windowDays = dayKeys7.length;
   if (windowDays === 0) { return null; }
 
-  // Separate today's intake from the previous days.
-  // prevSum uses 0 for any prior day with no meals logged.
-  const todayMacros = byDay[todayISO] ?? $.zeroMacros();
-  const prevSum = $.zeroMacros();
-  for (const k of dayKeys) {
-    if (k !== todayISO) { $.addScaledMacros(prevSum, byDay[k], 1); }
+  // Build kcalByDay for the controller from the full 28-day set.
+  /** @type {Record<string, number>} */
+  const kcalByDay28 = {};
+  for (const [k, v] of Object.entries(byDay28)) { kcalByDay28[k] = v.kcal; }
+
+  const { adjustedGoalKcal, adjustment } = computeKcalAdjustment(
+    kcalByDay28, todayISO, goals.kcal, deriveMode(goals),
+  );
+  const calIdeal = adjustedGoalKcal;
+
+  // prevSum uses only the 7-day window so macro directional allowances are unchanged.
+  const todayMacros = byDay28[todayISO] ?? $.zeroMacros();
+  const prevSum     = $.zeroMacros();
+  for (const k of dayKeys7) {
+    if (k !== todayISO) { $.addScaledMacros(prevSum, byDay7[k], 1); }
   }
 
   const g = derivedGrams(goals);
-
-  // How much to eat today to bring the logged-days average back to target,
-  // clamped to ±15% of the daily target so the suggestion stays reasonable.
-  // If today has no meals yet, eating today adds a new day, so the effective
-  // denominator is windowDays + 1 rather than windowDays.
-  const todayLogged = todayISO in byDay;
+  const todayLogged   = todayISO in byDay7;
   const effectiveDays = todayLogged ? windowDays : windowDays + 1;
-  /** @param {number} prevSumVal @param {number} target @returns {number} */
-  const idealToday = (prevSumVal, target) => {
-    const ideal = effectiveDays * target - prevSumVal;
-    return Math.max(target * (1 - IDEAL_CLAMP), Math.min(target * (1 + IDEAL_CLAMP), ideal));
-  };
 
-  const calIdeal = idealToday(prevSum.kcal, goals.kcal);
   const { protIdeal, carbIdeal, fatIdeal } = reconcileMacroIdeals({
     kcalIdeal: calIdeal,
     goals,
@@ -642,16 +895,16 @@ export async function computeWindowVM(todayISO, goals) {
     effectiveDays,
   });
 
-  /** @param {number} consumed @param {number} pSum @param {number | null} goal @param {number} ideal */
-  const status = (consumed, pSum, goal, ideal) =>
-    computeDayStatus(consumed, pSum, effectiveDays, goal, ideal);
+  /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
+  const statusFn = (consumed, goalVal, ideal) =>
+    computeDayStatus(consumed, goalVal, ideal, adjustment);
 
   return {
     windowDays,
     effectiveDays,
-    calories: { target: goals.kcal, status: status(todayMacros.kcal,  prevSum.kcal,  goals.kcal, calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal  },
-    protein:  { target: g.protG,    status: status(todayMacros.prot,  prevSum.prot,  g.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot  },
-    carbs:    { target: g.carbsG,   status: status(todayMacros.carbs, prevSum.carbs, g.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs },
-    fat:      { target: g.fatG,     status: status(todayMacros.fats,  prevSum.fats,  g.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats  },
+    calories: { target: goals.kcal, status: statusFn(todayMacros.kcal,  goals.kcal, calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
+    protein:  { target: g.protG,    status: statusFn(todayMacros.prot,  g.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment },
+    carbs:    { target: g.carbsG,   status: statusFn(todayMacros.carbs, g.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment },
+    fat:      { target: g.fatG,     status: statusFn(todayMacros.fats,  g.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment },
   };
 }
