@@ -130,6 +130,24 @@ label{ font-size:12px; color:var(--muted) }
   box-shadow:var(--shadow-soft);
   display:grid;
   gap:14px;
+  position:relative;
+}
+
+.summary-mode-toggle{
+  position:absolute; top:8px; right:8px;
+  display:inline-flex; align-items:center; justify-content:center;
+  width:36px; height:36px; padding:0;
+  border:1px solid var(--border); background:var(--surface-2);
+  color:var(--muted); border-radius:var(--radius-sm);
+  cursor:pointer; transition:color .15s, background .15s, border-color .15s;
+}
+.summary-mode-toggle:hover{ color:var(--fg); border-color:var(--fg) }
+.summary-mode-toggle[aria-pressed="true"]{ color:var(--brand); border-color:var(--brand) }
+.summary-mode-toggle svg{ width:18px; height:18px }
+
+.summary-avg-indicator{
+  font-size:11px; color:var(--muted); text-align:center;
+  text-transform:uppercase; letter-spacing:.6px; font-weight:600;
 }
 
 .day-summary-compact{

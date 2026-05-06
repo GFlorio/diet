@@ -1,5 +1,6 @@
 import { Foods, Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
+import { calendarIcon, trendIcon } from '../icons.js';
 import * as $ from '../utils.js';
 import * as V from '../validation.js';
 
@@ -35,6 +36,8 @@ export function setupMeals(){
     quickSearchFocused: false,
     /** Set to true when goals are loaded */
     goalsEnabled: false,
+    /** Daily totals vs. 7-day rolling average view */
+    summaryMode: /** @type {'daily'|'average'} */ ('daily'),
   };
 
   /** @param {'overview'|'entry'|'spacious'} mode */
@@ -433,14 +436,20 @@ export function setupMeals(){
   function renderDayInfo(totals){
     const vm   = buildTotalsViewModel(totals);
     const wvm  = currentWindowVM;
-
+    const avgMode = mealsUiState.summaryMode === 'average' && wvm !== null && currentGoals !== null;
 
     /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
     const deltaStr = (delta, unit) => delta >= 0
       ? `${$.fmtNum(delta, 0)} ${unit} left`
       : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over`;
 
+    /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
+    const avgDeltaStr = (delta, unit) => delta >= 0
+      ? `${$.fmtNum(delta, 0)} ${unit} under`
+      : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over`;
+
     const ed = wvm?.effectiveDays ?? 1;
+    const avgDivisor = wvm ? Math.max(1, wvm.windowDays) : 1;
 
     /**
      * Render a multi-segment progress bar from pre-computed bar segments.
@@ -475,8 +484,21 @@ export function setupMeals(){
     // --- Hero section ---
     let heroValueHtml;
     let heroExtras = '';
+    const heroLabel = 'Calories';
 
-    if (wvm) {
+    if (avgMode && wvm && currentGoals) {
+      const avgKcal = (wvm.calories.prevSum + vm.calories.consumed) / avgDivisor;
+      const calVis  = Goals.macroVisuals(avgKcal, null, 1, currentGoals.kcal);
+      const delta   = currentGoals.kcal - avgKcal;
+      heroValueHtml = `
+        <div class="summary-hero-value status-${calVis.status}">
+          <span class="num">${$.fmtNum(avgKcal, 0)}</span>
+          <span class="unit">kcal</span>
+        </div>`;
+      heroExtras = `
+        <div class="summary-hero-subtext status-${calVis.status}">${avgDeltaStr(delta, 'kcal')}</div>
+        ${heroBarHtml(calVis.bar, calVis.status)}`;
+    } else if (wvm) {
       const calVis   = Goals.macroVisuals(vm.calories.consumed, wvm.calories, ed);
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
       heroValueHtml = `
@@ -520,6 +542,20 @@ export function setupMeals(){
      * @returns {string}
      */
     const macroCard = (label, macroVM, macroWin, cls) => {
+      if (avgMode && macroWin && macroWin.target !== null) {
+        const avg   = (macroWin.prevSum + macroVM.consumed) / avgDivisor;
+        const vis   = Goals.macroVisuals(avg, null, 1, macroWin.target);
+        const delta = macroWin.target - avg;
+        return `
+          <div class="macro-card ${cls} status-${vis.status}">
+            <div class="macro-label">${label}</div>
+            <div class="macro-value-row">
+              <div class="macro-value">${$.fmtNum(avg, 0)}<span class="unit">g</span></div>
+              <div class="macro-subtext status-${vis.status}">${avgDeltaStr(delta, 'g')}</div>
+            </div>
+            ${barHtml(vis.bar, vis.status)}
+          </div>`;
+      }
       if (wvm && macroWin) {
         const vis = Goals.macroVisuals(macroVM.consumed, macroWin, ed);
         const d   = macroWin.idealToday - macroVM.consumed;
@@ -590,10 +626,25 @@ export function setupMeals(){
       compactLine2 = `${compactMacro('P', vm.protein)} · ${compactMacro('C', vm.carbs)} · ${compactMacro('F', vm.fat)}`;
     }
 
+    const canToggleMode = wvm !== null && currentGoals !== null;
+    const toggleBtnHtml = canToggleMode
+      ? `<button type="button" class="summary-mode-toggle"
+            data-mode="${avgMode ? 'average' : 'daily'}"
+            aria-pressed="${avgMode}"
+            aria-label="${avgMode ? 'Switch to daily view' : 'Switch to 7-day average'}"
+            title="${avgMode ? 'Switch to daily view' : 'Switch to 7-day average'}">
+            ${avgMode ? calendarIcon : trendIcon}
+          </button>`
+      : '';
+    const avgIndicatorHtml = avgMode && wvm
+      ? `<div class="summary-avg-indicator">7-day average · ${wvm.windowDays} ${wvm.windowDays === 1 ? 'day' : 'days'} logged</div>`
+      : '';
+
     dayTotals.innerHTML = `
-      <div class="day-summary day-summary-expanded">
+      <div class="day-summary day-summary-expanded${avgMode ? ' summary-avg' : ''}">
+        ${toggleBtnHtml}
         <div class="summary-hero">
-          <div class="summary-hero-label">Calories</div>
+          <div class="summary-hero-label">${heroLabel}</div>
           ${heroValueHtml}
           ${heroExtras}
         </div>
@@ -602,12 +653,21 @@ export function setupMeals(){
           ${macroCard('Carbs',   vm.carbs,   wvm?.carbs,   'macro-carbs')}
           ${macroCard('Fat',     vm.fat,     wvm?.fat,     'macro-fat')}
         </div>
+        ${avgIndicatorHtml}
       </div>
       <div class="day-summary day-summary-compact">
         <div class="compact-primary">${compactLine1}</div>
         <div class="compact-secondary">${compactLine2}</div>
       </div>`;
   }
+
+  dayTotals.addEventListener('click', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    const btn    = target.closest('.summary-mode-toggle');
+    if (!btn) { return; }
+    mealsUiState.summaryMode = mealsUiState.summaryMode === 'daily' ? 'average' : 'daily';
+    renderDayInfo(computeTotals(currentMeals));
+  });
 
   /**
    * @param {Meal[]} meals
