@@ -374,7 +374,7 @@ export function setupGoals() {
   /** @param {HTMLElement} dayEl */
   function showTooltip(dayEl) {
     if (!tooltipEl) { return; }
-    const { iso, status, kcal, goal, goalSince } = dayEl.dataset;
+    const { iso, status, kcal, goal, ideal, goalSince } = dayEl.dataset;
     const date    = $.localDate(iso ?? '');
     const dateStr = date.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
     const STATUS_LABELS = /** @type {Record<string,string>} */ ({ low: 'Under target', ok: 'On target', warn: 'Close', bad: 'Off target' });
@@ -385,8 +385,9 @@ export function setupGoals() {
     } else if (kcal !== null && kcal !== undefined) {
       const kcalNum = Number(kcal);
       body = `<div class="cal-tt-kcal">${$.fmtNum(kcalNum, 0)} kcal</div>`;
-      if (goal) {
-        body += `<div class="cal-tt-muted">${$.fmtNum(Number(goal), 0)} target</div>`;
+      const target = ideal ?? goal;
+      if (target) {
+        body += `<div class="cal-tt-muted">${$.fmtNum(Number(target), 0)} target</div>`;
       }
       if (STATUS_LABELS[status ?? '']) {
         body += `<div class="cal-tt-status cal-tt-${status}">${STATUS_LABELS[status ?? '']}</div>`;
@@ -446,7 +447,7 @@ export function setupGoals() {
       kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + m.foodSnapshot.kcal * m.multiplier;
     }
 
-    /** @type {Array<Array<{iso:string, status:string, kcal:number|null, cellGoal: import('../data-goals.js').GoalRecord|null}>>} */
+    /** @type {Array<Array<{iso:string, status:string, kcal:number|null, cellGoal: import('../data-goals.js').GoalRecord|null, idealKcal: number|null}>>} */
     const weeks = [];
     for (let w = 0; w < NUM_WEEKS; w++) {
       const week = [];
@@ -458,14 +459,18 @@ export function setupGoals() {
         const kcal     = kcalByDay[iso] ?? null;
         const cellGoal = Goals.goalForDate(allGoalRecords, iso);
         let status     = 'empty';
+        let idealKcal  = null;
         if (isFuture) {
           status = 'future';
         } else if (kcal !== null) {
-          status = cellGoal
-            ? Goals.statusForDay(kcalByDay, iso, cellGoal.kcal)
-            : 'none';
+          if (cellGoal) {
+            status    = Goals.statusForDay(kcalByDay, iso, cellGoal.kcal);
+            idealKcal = Math.round(Goals.idealForDay(kcalByDay, iso, cellGoal.kcal));
+          } else {
+            status = 'none';
+          }
         }
-        week.push({ iso, status, kcal, cellGoal });
+        week.push({ iso, status, kcal, cellGoal, idealKcal });
       }
       weeks.push(week);
     }
@@ -485,14 +490,15 @@ export function setupGoals() {
     // One row per day of week; one square per week column
     const dayRowsHtml = DAY_LABELS.map((label, d) => {
       const squares = weeks.map(week => {
-        const { iso, status, kcal, cellGoal } = week[d];
+        const { iso, status, kcal, cellGoal, idealKcal } = week[d];
         const dataKcal    = kcal !== null ? ` data-kcal="${Math.round(kcal)}"` : '';
         const dataGoal    = cellGoal ? ` data-goal="${cellGoal.kcal}"` : '';
+        const dataIdeal   = idealKcal !== null ? ` data-ideal="${idealKcal}"` : '';
         // Show "Goal since" hint only when this cell's goal differs from today's active goal
         const dataGoalSince = (cellGoal && cellGoal.id !== todayGoal?.id)
           ? ` data-goal-since="${$.esc(cellGoal.effectiveFrom)}"`
           : '';
-        return `<div class="cal-day cal-day-${status}" data-iso="${$.esc(iso)}" data-status="${status}"${dataKcal}${dataGoal}${dataGoalSince}></div>`;
+        return `<div class="cal-day cal-day-${status}" data-iso="${$.esc(iso)}" data-status="${status}"${dataKcal}${dataGoal}${dataIdeal}${dataGoalSince}></div>`;
       }).join('');
       return `<div class="cal-day-row"><div class="cal-dlabel">${label}</div>${squares}</div>`;
     }).join('');
