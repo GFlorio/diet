@@ -174,7 +174,7 @@ test.describe('Goals: daily status on Meals page', () => {
     await page.click('#quickList .item .add');
 
     // Assert: macro cards have no status tinting
-    await expect(page.locator('.macro-card.macro-protein')).not.toHaveClass(/status-ok|status-warn|status-bad/);
+    await expect(page.locator('.macro-row.macro-protein')).not.toHaveClass(/status-ok|status-warn|status-bad/);
   });
 
   test('macro cards show status when goals are set', async ({ page }) => {
@@ -188,10 +188,8 @@ test.describe('Goals: daily status on Meals page', () => {
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Assert: protein card shows a status class (any of ok/warn/bad)
-    const protCard = page.locator('.macro-card.macro-protein');
-    const cls = await protCard.getAttribute('class');
-    expect(cls).toMatch(/status-low|status-ok|status-warn|status-bad/);
+    // Assert: protein card subtext shows a status class (any of low/ok/warn/bad)
+    await expect(page.locator('.macro-row.macro-protein .macro-subtext')).toHaveClass(/status-low|status-ok|status-warn|status-bad/);
   });
 
   test('hero progress bar is visible when goals are set', async ({ page }) => {
@@ -301,9 +299,9 @@ test.describe('Goals: 7-day window', () => {
     await page.fill('#quickSearch', 'chi');
     await page.click('#quickList .item .add');
 
-    // Assert: macro cards show "g" unit and per-macro delta subtext
+    // Assert: macro cards show target in unit span and per-macro delta subtext
     const proteinCard = page.locator('.macro-protein');
-    await expect(proteinCard.locator('.macro-value .unit')).toHaveText('g');
+    await expect(proteinCard.locator('.macro-value .unit')).toContainText('g');
     await expect(proteinCard.locator('.macro-subtext')).toContainText(/g (left|over)/);
   });
 

@@ -1,6 +1,6 @@
 import { Foods, Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
-import { calendarIcon, trendIcon } from '../icons.js';
+import { calendarIcon, recoveryIcon, trendIcon } from '../icons.js';
 import * as $ from '../utils.js';
 import * as V from '../validation.js';
 
@@ -267,7 +267,9 @@ export function setupMeals(){
     mealsUiState.quickSearchFocused = false;
     window.setTimeout(() => {
       if (!mealsUiState.quickSearchFocused && !quickAddCard.contains(document.activeElement) && !blurSuppressed) {
-        setMealsMode('overview');
+        if (window.innerWidth < 720) {
+          setMealsMode('overview');
+        }
       }
     }, 120);
   });
@@ -482,6 +484,22 @@ export function setupMeals(){
     };
 
     // --- Hero section ---
+    const heroClampHtml = (() => {
+      if (!wvm) { return ''; }
+      const clamped = Goals.isGoalClamped(wvm.calories, wvm.effectiveDays);
+      if (!clamped) { return ''; }
+      const n   = Goals.recoveryDays(wvm.calories, wvm.effectiveDays, clamped);
+      const dir = clamped === 'below' ? 'over' : 'under';
+      const adj = clamped === 'below' ? 'reduced' : 'increased';
+      return `<span class="macro-clamp-wrap summary-hero-clamp">
+          <button class="macro-clamp-btn" type="button" aria-label="Recovery mode">${recoveryIcon}</button>
+          <div class="macro-clamp-tooltip" role="tooltip">
+            <strong>Recovery mode</strong><br>
+            Your daily calorie target has been ${adj} to compensate for recent
+            ${dir}-consumption. Adjusted target applies for ~${n} more day${n !== 1 ? 's' : ''}.
+          </div>
+        </span>`;
+    })();
     let heroValueHtml;
     let heroExtras = '';
     const heroLabel = 'Calories';
@@ -492,6 +510,7 @@ export function setupMeals(){
       const delta   = currentGoals.kcal - avgKcal;
       heroValueHtml = `
         <div class="summary-hero-value status-${calVis.status}">
+          ${heroClampHtml}
           <span class="num">${$.fmtNum(avgKcal, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;
@@ -503,6 +522,7 @@ export function setupMeals(){
       const calDelta = wvm.calories.idealToday - vm.calories.consumed;
       heroValueHtml = `
         <div class="summary-hero-value status-${calVis.status}">
+          ${heroClampHtml}
           <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;
@@ -519,6 +539,7 @@ export function setupMeals(){
 
       heroValueHtml = `
         <div class="summary-hero-value status-${calVis.status}">
+          ${heroClampHtml}
           <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;
@@ -528,6 +549,7 @@ export function setupMeals(){
     } else {
       heroValueHtml = `
         <div class="summary-hero-value">
+          ${heroClampHtml}
           <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
           <span class="unit">kcal</span>
         </div>`;
@@ -542,31 +564,47 @@ export function setupMeals(){
      * @returns {string}
      */
     const macroCard = (label, macroVM, macroWin, cls) => {
+      const clamped = wvm && macroWin ? Goals.isGoalClamped(macroWin, wvm.effectiveDays) : false;
+      const clampInline = (() => {
+        if (!clamped || !wvm || !macroWin) { return ''; }
+        const n   = Goals.recoveryDays(macroWin, wvm.effectiveDays, clamped);
+        const dir = clamped === 'below' ? 'over' : 'under';
+        const adj = clamped === 'below' ? 'reduced' : 'increased';
+        return `<span class="macro-clamp-wrap">
+            <button class="macro-clamp-btn" type="button" aria-label="Recovery mode">${recoveryIcon}</button>
+            <div class="macro-clamp-tooltip" role="tooltip">
+              <strong>Recovery mode</strong><br>
+              Your daily ${label.toLowerCase()} target has been ${adj} to compensate for recent
+              ${dir}-consumption. Adjusted target applies for ~${n} more day${n !== 1 ? 's' : ''}.
+            </div>
+          </span>`;
+      })();
+
       if (avgMode && macroWin && macroWin.target !== null) {
         const avg   = (macroWin.prevSum + macroVM.consumed) / avgDivisor;
         const vis   = Goals.macroVisuals(avg, null, 1, macroWin.target);
         const delta = macroWin.target - avg;
         return `
-          <div class="macro-card ${cls} status-${vis.status}">
-            <div class="macro-label">${label}</div>
-            <div class="macro-value-row">
-              <div class="macro-value">${$.fmtNum(avg, 0)}<span class="unit">g</span></div>
-              <div class="macro-subtext status-${vis.status}">${avgDeltaStr(delta, 'g')}</div>
+          <div class="macro-row ${cls}">
+            <div class="macro-row-hd">
+              <div class="macro-label">${label}</div>
+              <div class="macro-value">${clampInline}${$.fmtNum(avg, 0)}<span class="unit"> / ${macroWin.target}g</span></div>
             </div>
             ${barHtml(vis.bar, vis.status)}
+            <div class="macro-subtext status-${vis.status}">${avgDeltaStr(delta, 'g')}</div>
           </div>`;
       }
       if (wvm && macroWin) {
         const vis = Goals.macroVisuals(macroVM.consumed, macroWin, ed);
         const d   = macroWin.idealToday - macroVM.consumed;
         return `
-          <div class="macro-card ${cls} status-${vis.status}">
-            <div class="macro-label">${label}</div>
-            <div class="macro-value-row">
-              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-              <div class="macro-subtext status-${vis.status}">${deltaStr(d, 'g')}</div>
+          <div class="macro-row ${cls}">
+            <div class="macro-row-hd">
+              <div class="macro-label">${label}</div>
+              <div class="macro-value">${clampInline}${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${$.fmtNum(macroWin.idealToday, 0)}g</span></div>
             </div>
             ${barHtml(vis.bar, vis.status)}
+            <div class="macro-subtext status-${vis.status}">${deltaStr(d, 'g')}</div>
           </div>`;
       }
       if (currentGoals) {
@@ -576,19 +614,21 @@ export function setupMeals(){
           ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)}g left` : `${$.fmtNum(Math.abs(remaining), 0)}g over`)
           : '';
         return `
-          <div class="macro-card ${cls} status-${vis.status}">
-            <div class="macro-label">${label}</div>
-            <div class="macro-value-row">
-              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit">g</span></div>
-              <div class="macro-subtext status-${vis.status}">${subtext}</div>
+          <div class="macro-row ${cls}">
+            <div class="macro-row-hd">
+              <div class="macro-label">${label}</div>
+              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${macroVM.target ?? '?'}g</span></div>
             </div>
             ${barHtml(vis.bar, vis.status)}
+            ${subtext ? `<div class="macro-subtext status-${vis.status}">${subtext}</div>` : ''}
           </div>`;
       }
       return `
-        <div class="macro-card ${cls}">
-          <div class="macro-label">${label}</div>
-          <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> g</span></div>
+        <div class="macro-row ${cls}">
+          <div class="macro-row-hd">
+            <div class="macro-label">${label}</div>
+            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> g</span></div>
+          </div>
         </div>`;
     };
 
@@ -663,10 +703,38 @@ export function setupMeals(){
 
   dayTotals.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-    const btn    = target.closest('.summary-mode-toggle');
-    if (!btn) { return; }
+
+    const clampBtn = target.closest('.macro-clamp-btn');
+    if (clampBtn) {
+      e.stopPropagation();
+      const wrap = /** @type {HTMLElement|null} */ (clampBtn.closest('.macro-clamp-wrap'));
+      const tip  = /** @type {HTMLElement|null} */ (wrap?.querySelector('.macro-clamp-tooltip'));
+      if (!wrap || !tip) { return; }
+      // Align tooltip to avoid viewport overflow on the leftmost card
+      const rect    = wrap.getBoundingClientRect();
+      const tipWidth = 220;
+      if (rect.left < tipWidth) {
+        tip.style.right = 'auto';
+        tip.style.left  = '0';
+      } else {
+        tip.style.right = '0';
+        tip.style.left  = 'auto';
+      }
+      dayTotals.querySelectorAll('.macro-clamp-tooltip.open').forEach(t => {
+        if (t !== tip) { t.classList.remove('open'); }
+      });
+      tip.classList.toggle('open');
+      return;
+    }
+
+    const modeBtn = target.closest('.summary-mode-toggle');
+    if (!modeBtn) { return; }
     mealsUiState.summaryMode = mealsUiState.summaryMode === 'daily' ? 'average' : 'daily';
     renderDayInfo(computeTotals(currentMeals));
+  });
+
+  document.addEventListener('click', () => {
+    dayTotals.querySelectorAll('.macro-clamp-tooltip.open').forEach(t => { t.classList.remove('open'); });
   });
 
   /**

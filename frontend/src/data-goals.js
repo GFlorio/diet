@@ -376,6 +376,38 @@ export function derivedGrams(goals) {
   };
 }
 
+/**
+ * Returns the direction in which the sliding-window idealToday has been clamped by the ±15% limit.
+ * Returns false when the window is too sparse or the raw ideal falls within the unclamped range.
+ * @param {MacroWindow} macroWin
+ * @param {number} effectiveDays
+ * @returns {'below' | 'above' | false}
+ */
+export function isGoalClamped(macroWin, effectiveDays) {
+  if (macroWin.target === null || effectiveDays < WINDOW_MIN_DAYS) { return false; }
+  const rawIdeal = effectiveDays * macroWin.target - macroWin.prevSum;
+  if (rawIdeal < macroWin.target * (1 - IDEAL_CLAMP)) { return 'below'; }
+  if (rawIdeal > macroWin.target * (1 + IDEAL_CLAMP)) { return 'above'; }
+  return false;
+}
+
+/**
+ * Assuming the user hits their adjusted idealToday exactly each day, returns the number
+ * of future days until the sliding-window ideal is no longer clamped.
+ * @param {MacroWindow} macroWin
+ * @param {number} effectiveDays
+ * @param {'below' | 'above'} direction
+ * @returns {number}
+ */
+export function recoveryDays(macroWin, effectiveDays, direction) {
+  if (macroWin.target === null || macroWin.target <= 0) { return 1; }
+  const rawIdeal     = effectiveDays * macroWin.target - macroWin.prevSum;
+  const boundary     = macroWin.target * (direction === 'below' ? (1 - IDEAL_CLAMP) : (1 + IDEAL_CLAMP));
+  const gap          = direction === 'below' ? boundary - rawIdeal : rawIdeal - boundary;
+  const dailyStep    = IDEAL_CLAMP * macroWin.target;
+  return Math.max(1, Math.ceil(gap / dailyStep));
+}
+
 /** @param {number} x @param {number} lo @param {number} hi */
 function clampN(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
 

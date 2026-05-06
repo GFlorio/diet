@@ -184,14 +184,25 @@ label{ font-size:12px; color:var(--muted) }
 .summary-hero-value .unit{ font-size:12px; color:var(--muted); font-weight:500 }
 .summary-hero-subtext{ font-size:12px; color:var(--muted) }
 
-/* Macro cards grid */
-.summary-macros{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px }
-.macro-card{ border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-2); padding:10px; display:grid; gap:6px }
-.macro-value-row{ display:flex; align-items:baseline; gap:8px; justify-content:space-between }
-.macro-value{ font-size:18px; font-weight:700; line-height:1.1 }
-.macro-value .unit{ font-size:11px; color:var(--muted); font-weight:500; margin-left:2px }
+/* Macro rows */
+.summary-macros{ display:grid; gap:0; margin-top:4px; padding-top:12px; border-top:1px solid var(--border) }
+.macro-row{ display:grid; gap:5px; padding:10px 0; border-bottom:1px solid var(--border) }
+.macro-row:first-child{ padding-top:2px }
+.macro-row:last-child{ border-bottom:none; padding-bottom:0 }
+.macro-row-hd{ display:flex; align-items:center; justify-content:space-between; gap:8px }
+.macro-value{ font-size:18px; font-weight:700; line-height:1 }
+.macro-value .unit{ font-size:11px; color:var(--muted); font-weight:500 }
 .macro-subtext{ font-size:11px; color:var(--muted) }
-.macro-bar{ height:6px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; display:flex }
+
+/* Clamped goal indicator — wrap anchors both the trigger and the tooltip */
+.macro-clamp-wrap{ position:relative; display:inline-flex; align-items:center; vertical-align:middle }
+.macro-row .macro-clamp-wrap{ margin-right:6px }
+.summary-hero-clamp{ margin-left:5px; align-self:center }
+.macro-clamp-btn{ width:18px; height:18px; padding:0; border:none; background:none; cursor:pointer; color:var(--muted); display:flex; align-items:center; justify-content:center; border-radius:4px; transition:color .15s, background .15s }
+.macro-clamp-btn:hover{ color:var(--fg); background:color-mix(in oklab, var(--border) 50%, transparent) }
+.macro-clamp-tooltip{ display:none; position:absolute; top:calc(100% + 4px); right:0; min-width:210px; max-width:260px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px; font-size:11px; font-weight:400; color:var(--muted); line-height:1.5; text-transform:none; letter-spacing:normal; z-index:50; box-shadow:var(--shadow-soft) }
+.macro-clamp-tooltip.open{ display:block }
+.macro-bar{ height:3px; border-radius:999px; background:color-mix(in oklab, var(--border) 55%, transparent); overflow:hidden; display:flex }
 .macro-bar-fill,.summary-hero-bar-fill{ height:100%; flex-shrink:0 }
 .macro-bar-fill:first-child,.summary-hero-bar-fill:first-child{ border-radius:999px 0 0 999px }
 .macro-bar-fill:last-child,.summary-hero-bar-fill:last-child{ border-radius:0 999px 999px 0 }
@@ -214,10 +225,6 @@ label{ font-size:12px; color:var(--muted) }
 .summary-hero-value.status-ok .num  { color:var(--ok) }
 .summary-hero-value.status-warn .num{ color:var(--warn) }
 .summary-hero-value.status-bad .num { color:var(--bad) }
-.macro-card.status-low{ background:var(--low-bg) }
-.macro-card.status-ok{ background:var(--ok-bg) }
-.macro-card.status-warn{ background:var(--warn-bg) }
-.macro-card.status-bad{ background:var(--bad-bg) }
 
 /* Meals logged list — lighter than the food search results */
 .meals-list{ display:grid }
@@ -340,14 +347,34 @@ label{ font-size:12px; color:var(--muted) }
 
 /* Responsive */
 @media (min-width: 720px){ .grid.cols-2{ grid-template-columns: 1fr 1fr } }
+
+/* Desktop meals layout: summary + quick add side by side */
+@media (min-width: 720px) {
+  #page-meals {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "subheader subheader"
+      "totals    quickadd"
+      "meals     meals";
+    align-items: start;
+  }
+  #mealsSubHeader { grid-area: subheader; }
+  #dayTotals      { grid-area: totals; }
+  #quickAddCard   { grid-area: quickadd; }
+  #mealsCard      { grid-area: meals; }
+
+  /* Override mobile mode-switching: always show both panels on desktop */
+  #page-meals.mode-overview #quickList         { display: block; }
+  #page-meals.mode-entry .day-summary-expanded { display: grid; }
+  #page-meals.mode-entry .day-summary-compact  { display: none; }
+}
 .grid.cols-4{ grid-template-columns: repeat(4, 1fr) }
 @media (max-width: 300px){ .grid.cols-4{ grid-template-columns: repeat(2, 1fr) } }
 
 @media (max-width: 640px){
   .summary-hero-value .num{ font-size:28px }
   .day-summary-expanded{ padding:10px; gap:8px }
-  .summary-macros{ gap:6px }
-  .macro-card{ padding:6px 8px; gap:3px }
+  .macro-row{ padding:8px 0; gap:4px }
   .macro-value{ font-size:16px }
 }
 
