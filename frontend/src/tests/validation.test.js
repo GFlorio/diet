@@ -148,7 +148,7 @@ describe('validation.number — exact boundaries and scientific notation', () =>
 });
 
 // The canonical name pattern — kept in sync with validateName() in validation-schemas.js
-const NAME_PATTERN = /^[\p{L}\p{N}\s'\-_.()]+$/u;
+const NAME_PATTERN = /^[\p{L}\p{N}\s'\-_.,()&]+$/u;
 
 describe('validation.string — name pattern and length boundaries', () => {
   test('pattern accepts Unicode letters, digits, and allowed punctuation', () => {
@@ -157,13 +157,14 @@ describe('validation.string — name pattern and length boundaries', () => {
     expect(v.string('食品', { pattern: NAME_PATTERN })).toBe('食品');
     expect(v.string('50-50', { pattern: NAME_PATTERN })).toBe('50-50');
     expect(v.string("O'Brien", { pattern: NAME_PATTERN })).toBe("O'Brien");
+    expect(v.string('Apple & Banana', { pattern: NAME_PATTERN })).toBe('Apple & Banana');
+    expect(v.string('Milk, whole', { pattern: NAME_PATTERN })).toBe('Milk, whole');
   });
 
   test('pattern rejects disallowed characters', () => {
     expect(() => v.string('@handle', { pattern: NAME_PATTERN })).toThrowError();
     expect(() => v.string('#tag', { pattern: NAME_PATTERN })).toThrowError();
     expect(() => v.string('<script>', { pattern: NAME_PATTERN })).toThrowError();
-    expect(() => v.string('Apple & Banana', { pattern: NAME_PATTERN })).toThrowError();
     expect(() => v.string('🍎', { pattern: NAME_PATTERN })).toThrowError();
   });
 
@@ -223,11 +224,23 @@ describe('schema: createFoodInput — name pattern and length', () => {
     expect(() => v.createFoodInput({ ...base, name: 'Café' })).not.toThrow();
     expect(() => v.createFoodInput({ ...base, name: 'Apple (raw)' })).not.toThrow();
     expect(() => v.createFoodInput({ ...base, name: '食品' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'M&Ms' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Milk, whole' })).not.toThrow();
+  });
+
+  test('accepts refLabel with brand-name characters', () => {
+    expect(() => v.createFoodInput({ ...base, refLabel: '1 serving (30g)' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, refLabel: 'Bar, 40g' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, refLabel: 'M&M portion' })).not.toThrow();
+  });
+
+  test('rejects refLabel with invalid characters', () => {
+    expectValidationError(() => v.createFoodInput({ ...base, refLabel: '<script>' }), ['refLabel']);
+    expectValidationError(() => v.createFoodInput({ ...base, refLabel: '🍎 portion' }), ['refLabel']);
   });
 
   test('rejects names with invalid characters', () => {
     expectValidationError(() => v.createFoodInput({ ...base, name: '<script>' }), ['name']);
-    expectValidationError(() => v.createFoodInput({ ...base, name: 'Apple & Banana' }), ['name']);
     expectValidationError(() => v.createFoodInput({ ...base, name: '🍎 Apple' }), ['name']);
   });
 
