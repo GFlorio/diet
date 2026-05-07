@@ -1,8 +1,8 @@
 import { Foods, Meals } from '../data.js';
 import { decodeFoodCode, encodeFoodCode } from '../food-share-code.js';
+import { archiveIcon, editIcon, importCodeIcon, shareIcon } from '../icons.js';
 import * as $ from '../utils.js';
 import * as v from '../validation.js';
-import { archiveIcon, editIcon, importCodeIcon, shareIcon } from '../icons.js';
 
 /**
  * @typedef {import('../data.js').Food} Food
@@ -23,11 +23,12 @@ export function setupFoods(){
   const resetFoodBtn = $.button($.id('resetFoodBtn'));
   const saveFoodBtn = $.button($.id('saveFoodBtn'));
   const foodsList = $.html($.id('foodsList'));
+  const foodsListCard = $.id('foodsListCard');
   const foodSearch = $.input($.id('foodSearch'));
   const foodStatus = $.select($.id('foodStatus'));
   const foodFormMsg = $.html($.id('foodFormMsg'));
   const foodImportToggle = $.button($.id('foodImportToggle'));
-  foodImportToggle.innerHTML = `${importCodeIcon} Code`;
+  foodImportToggle.innerHTML = `${importCodeIcon} Link`;
   const foodImportArea = $.html($.id('foodImportArea'));
   const foodImportInput = $.input($.id('foodImportInput'));
   const foodImportApply = $.button($.id('foodImportApply'));
@@ -191,6 +192,16 @@ export function setupFoods(){
     }
   });
 
+  foodSearch.addEventListener('focus', () => {
+    const touchDevice = window.matchMedia($.MEDIA_COARSE_POINTER).matches;
+    if (touchDevice && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        foodsListCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, { once: true });
+    } else {
+      foodsListCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
   foodSearch.addEventListener('input', renderFoods);
   foodStatus.addEventListener('change', renderFoods);
 
@@ -311,6 +322,12 @@ export function setupFoods(){
       foodProt.value = data.prot;
       foodCarb.value = data.carbs;
       foodFat.value = data.fats;
+      try {
+        v.createFoodInput(readFormPayload());
+        saveFoodBtn.disabled = false;
+      } catch (err) {
+        applyValidationErrors(err);
+      }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }

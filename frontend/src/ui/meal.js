@@ -154,10 +154,10 @@ export function setupMeals(){
     const windowViewModel = currentWindowVM;
     const effectiveDays  = windowViewModel?.effectiveDays ?? 1;
 
-    const kcalStatus  = Goals.macroVisuals(totals.kcal + kcalDelta,  windowViewModel?.calories, effectiveDays, currentGoals?.kcal ?? null).status;
-    const protStatus  = Goals.macroVisuals(totals.prot + protDelta,   windowViewModel?.protein,  effectiveDays, gramGoals?.protG ?? null).status;
-    const carbsStatus = Goals.macroVisuals(totals.carbs + carbsDelta,  windowViewModel?.carbs,    effectiveDays, gramGoals?.carbsG ?? null).status;
-    const fatStatus   = Goals.macroVisuals(totals.fats + fatsDelta,    windowViewModel?.fat,      effectiveDays, gramGoals?.fatG ?? null).status;
+    const kcalStatus  = Goals.macroVisuals(totals.kcal  + kcalDelta,  windowViewModel?.calories, effectiveDays, currentGoals?.kcal ?? null).status;
+    const protStatus  = Goals.macroVisuals(totals.prot  + protDelta,  windowViewModel?.protein,  effectiveDays, gramGoals?.protG ?? null).status;
+    const carbsStatus = Goals.macroVisuals(totals.carbs + carbsDelta, windowViewModel?.carbs,    effectiveDays, gramGoals?.carbsG ?? null).status;
+    const fatStatus   = Goals.macroVisuals(totals.fats  + fatsDelta,  windowViewModel?.fat,      effectiveDays, gramGoals?.fatG ?? null).status;
 
     /** @param {number} value @param {string} unit @param {string} status @returns {string} */
     const segmentHtml = (value, unit, status) => {
