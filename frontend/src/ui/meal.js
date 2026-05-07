@@ -198,8 +198,8 @@ export function setupMeals(){
           <input type="number" inputmode="decimal" step="0.5" min="0"
             value="1" class="qty" title="Qty (×ref portion)" style="width:80px" />
           <button class="btn small add" tabindex="-1">＋ Add</button>
-          <button class="btn small ghost add05" tabindex="-1" title="+0.5">+0.5</button>
           <button class="btn small ghost add1"  tabindex="-1" title="+1">+1</button>
+          <button class="btn small ghost add05" tabindex="-1" title="-0.5">-0.5</button>
         </div>
         <div class="food-card-macros">${macroContribHtml(f, 1, totals)}</div>
       </div>`
@@ -387,7 +387,7 @@ export function setupMeals(){
       quickSearch.focus(); return;
     }
     if (target.classList.contains('add05')) {
-      quantityEl.value = String(V.number((Number(quantityEl.value || '0') + 0.5)));
+      quantityEl.value = String(V.number((Number(quantityEl.value || '0') - 0.5)));
       quantityEl.dispatchEvent(new Event('input'));
       quickSearch.focus(); return;
     }
