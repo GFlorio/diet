@@ -681,7 +681,9 @@ export function setupMeals(){
           </button>`
       : '';
     const avgIndicatorHtml = avgMode && windowViewModel
-      ? `<div class="summary-avg-indicator">7-day average · ${windowViewModel.windowDays} ${windowViewModel.windowDays === 1 ? 'day' : 'days'} logged</div>`
+      ? `<div class="summary-avg-indicator">7-day average${
+        windowViewModel.windowDays !== 7 ?
+          `· ${windowViewModel.windowDays} ${windowViewModel.windowDays === 1 ? 'day' : 'days'} logged</div>` : ''}`
       : '';
 
     dayTotals.innerHTML = `
