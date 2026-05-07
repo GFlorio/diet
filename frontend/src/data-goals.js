@@ -34,7 +34,7 @@ export const LONG_WINDOW    = 28;
  * A logged day that is HALF_LIFE_DAYS old gets half the weight of today.
  * Shorter = recency matters more; longer = distant history carries more weight.
  */
-export const HALF_LIFE_DAYS = 7;
+export const HALF_LIFE_DAYS = 9;
 
 /** Clamp factor for idealToday: ±15% of the daily target. */
 const IDEAL_CLAMP = 0.15;

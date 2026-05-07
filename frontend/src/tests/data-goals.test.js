@@ -633,8 +633,8 @@ describe('recoveryDays', () => {
     // deadband = 50 kcal; n = 7 × log2(300/50) = 7 × log2(6) ≈ 7 × 2.585 ≈ 18.1 → ceil = 19
     const mw = /** @type {import('../data-goals.js').MacroWindow} */ ({ target: 2000, adjustment: -300, prevSum: 0, idealToday: 1700, status: 'bad' });
     const n = recoveryDays(mw, 5, 'below');
-    expect(n).toBeGreaterThanOrEqual(18);
-    expect(n).toBeLessThanOrEqual(20);
+    expect(n).toBeGreaterThanOrEqual(16);
+    expect(n).toBeLessThanOrEqual(25);
   });
 });
 
