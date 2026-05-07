@@ -105,17 +105,36 @@ const GAIN_GAIN_OVER             = 0.25;
 
 /**
  * Minimum logged days in the last SHORT_WINDOW calendar days required before
- * the controller issues an adjustment. Below this, history is too sparse to
- * trust a short-term signal. Raise to require denser logging; lower to accept gaps.
+ * the controller issues any adjustment. Below this the 7-day signal is too
+ * sparse to trust. Also serves as the minimum logged days in the 14-day
+ * persistence window before the confidence ramp starts.
  */
-const MIN_LOGGED_7  = 4;
+const MIN_LOGGED_7 = 4;
 
 /**
- * Minimum logged days in the last LONG_WINDOW calendar days required before
- * the controller issues an adjustment. This guards against reacting to a very
- * short burst of logging. Raise to require more history; lower to react sooner.
+ * Logged days in the persistence window at which controller confidence reaches
+ * 1.0 (full strength). Between MIN_LOGGED_7 and this value the controller
+ * ramps from CONFIDENCE_MIN_STRENGTH to 1 via a smoothstep curve.
  */
-const MIN_LOGGED_28 = 10;
+const CONFIDENCE_FULL_DAYS = PERSISTENCE_WINDOW_DAYS; // 14
+
+/**
+ * Controller strength when logged days equals exactly MIN_LOGGED_7.
+ * Prevents a sudden jump from zero to full at the minimum threshold.
+ */
+const CONFIDENCE_MIN_STRENGTH = 0.20;
+
+/**
+ * Minimum logged days in the 28-day window before the long error signal
+ * starts contributing to the blended effectiveError.
+ */
+const LONG_CONFIDENCE_MIN_DAYS = 7;
+
+/**
+ * Logged days in the 28-day window at which the long signal reaches its
+ * maximum weight (50%) in the short/long blend.
+ */
+const LONG_CONFIDENCE_FULL_DAYS = 21;
 
 /**
  * @typedef {import('./db.js').GoalRecord} GoalRecord
@@ -246,6 +265,19 @@ export function smoothstep(edge0, edge1, x) {
 }
 
 /**
+ * Data-confidence multiplier [0, 1] for the adaptive controller.
+ * Returns 0 when the user has fewer than MIN_LOGGED_7 days in the persistence
+ * window (no adjustment issued). Ramps from CONFIDENCE_MIN_STRENGTH to 1.0
+ * as days go from MIN_LOGGED_7 to CONFIDENCE_FULL_DAYS via a smoothstep curve,
+ * so early data produces small adjustments rather than a binary on/off gate.
+ * @param {number} loggedDays14 — logged days in the last PERSISTENCE_WINDOW_DAYS calendar days
+ */
+export function controllerConfidence(loggedDays14) {
+  if (loggedDays14 < MIN_LOGGED_7) { return 0; }
+  return CONFIDENCE_MIN_STRENGTH + (1 - CONFIDENCE_MIN_STRENGTH) * smoothstep(MIN_LOGGED_7, CONFIDENCE_FULL_DAYS, loggedDays14);
+}
+
+/**
  * Compute the mean error over an array of per-day errors (newest first).
  * Takes up to SHORT_WINDOW entries.
  * @param {number[]} errorsNewestFirst
@@ -276,15 +308,21 @@ export function weightedAverageError(days, windowDays, halfLife) {
 }
 
 /**
- * Blend short and long errors. When signs disagree (transient spike vs stable
- * trend), trust the long signal more to avoid oscillation.
- * @param {number} shortErr @param {number} longErr
+ * Blend short and long errors with dynamic weighting based on long-window
+ * data confidence. Long signal weight scales from 0 (no long data) to 50%
+ * (full data). When signs disagree and long confidence is meaningful (> 0.5),
+ * the long signal gets 75% weight to suppress transient spikes.
+ * @param {number} shortErr
+ * @param {number} longErr
+ * @param {number} [longConfidence] 0-1; defaults to 1 (full weight, backward-compatible)
  */
-export function combineErrors(shortErr, longErr) {
+export function combineErrors(shortErr, longErr, longConfidence = 1) {
   const signDisagree = shortErr !== 0 && longErr !== 0 && Math.sign(shortErr) !== Math.sign(longErr);
-  return signDisagree
-    ? 0.25 * shortErr + 0.75 * longErr
-    : 0.50 * shortErr + 0.50 * longErr;
+  if (longConfidence > 0.5 && signDisagree) {
+    return 0.25 * shortErr + 0.75 * longErr;
+  }
+  const longWeight = 0.50 * longConfidence;
+  return (1 - longWeight) * shortErr + longWeight * longErr;
 }
 
 /**
@@ -366,24 +404,37 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
   }
 
   const loggedDays7  = loggedDays.filter(d => d.ageDays < SHORT_WINDOW).length;
+  const loggedDays14 = loggedDays.filter(d => d.ageDays < PERSISTENCE_WINDOW_DAYS).length;
   const loggedDays28 = loggedDays.length;
 
-  // Completeness gate: require enough history before issuing any adjustment.
-  if (loggedDays7 < MIN_LOGGED_7 || loggedDays28 < MIN_LOGGED_28) {
+  // Gate: require at least MIN_LOGGED_7 recent days before issuing any adjustment.
+  if (loggedDays7 < MIN_LOGGED_7) {
     return {
       adjustedGoalKcal: Math.round(baseGoalKcal),
       adjustment: 0,
       gated: true,
-      debug: { gate: 'sparse', loggedDays7, loggedDays28 },
+      debug: { gate: 'sparse', loggedDays7, loggedDays14, loggedDays28 },
     };
   }
 
+  // Confidence ramp: scales adjustment magnitude from 20% at MIN_LOGGED_7 days
+  // to 100% at CONFIDENCE_FULL_DAYS. Prevents cold-start jumps and treats
+  // early streaks as uncertain rather than fully persistent.
+  const confidence = controllerConfidence(loggedDays14);
+
   const shortErr = shortError(loggedDays.filter(d => d.ageDays < SHORT_WINDOW).map(d => d.error));
   const longErr  = weightedAverageError(loggedDays, LONG_WINDOW, HALF_LIFE_DAYS);
-  const effectiveError = combineErrors(shortErr, longErr);
 
-  const persistence         = overPersistence(loggedDays, baseGoalKcal);
-  const persistenceIntensity = smoothstep(PERSISTENCE_START, PERSISTENCE_FULL, persistence);
+  // Long signal fades in gradually; trust the short signal more until the
+  // 28-day window has enough data.
+  const longConfidence  = smoothstep(LONG_CONFIDENCE_MIN_DAYS, LONG_CONFIDENCE_FULL_DAYS, loggedDays28);
+  const effectiveError  = combineErrors(shortErr, longErr, longConfidence);
+
+  // Shrink rawPersistence toward a neutral 0.5 prior when confidence is low.
+  // Prevents a short run of identical days from triggering full chronic-overage mode.
+  const rawPersistence      = overPersistence(loggedDays, baseGoalKcal);
+  const effectivePersistence = 0.5 + confidence * (rawPersistence - 0.5);
+  const persistenceIntensity = smoothstep(PERSISTENCE_START, PERSISTENCE_FULL, effectivePersistence);
 
   const deadband = adaptiveDeadband(baseGoalKcal, persistenceIntensity);
 
@@ -391,26 +442,33 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
     return {
       adjustedGoalKcal: Math.round(baseGoalKcal),
       adjustment: 0,
-      debug: { shortErr, longErr, effectiveError, persistence, persistenceIntensity, deadband, deadbandApplied: true, loggedDays7, loggedDays28 },
+      debug: {
+        shortErr, longErr, effectiveError,
+        rawPersistence, effectivePersistence, persistenceIntensity,
+        deadband, deadbandApplied: true,
+        loggedDays7, loggedDays14, loggedDays28, confidence, longConfidence,
+      },
     };
   }
 
   const gain               = adaptiveGain(mode, effectiveError, persistenceIntensity);
   const unclampedAdj       = -gain * effectiveError;
+  // Scale the raw adjustment by confidence so early data produces smaller moves.
+  const confidenceScaledAdj = unclampedAdj * confidence;
   const maxAdj             = IDEAL_CLAMP * baseGoalKcal;
-  const clampedAdj         = Math.max(-maxAdj, Math.min(maxAdj, unclampedAdj));
-  const clampApplied       = clampedAdj !== unclampedAdj;
+  const clampedAdj         = Math.max(-maxAdj, Math.min(maxAdj, confidenceScaledAdj));
+  const clampApplied       = clampedAdj !== confidenceScaledAdj;
 
   return {
     adjustedGoalKcal: Math.round(baseGoalKcal + clampedAdj),
     adjustment: clampedAdj,
     debug: {
       shortErr, longErr, effectiveError,
-      persistence, persistenceIntensity,
+      rawPersistence, effectivePersistence, persistenceIntensity,
       deadband, gain,
-      unclampedAdj, clampedAdj,
+      unclampedAdj, confidenceScaledAdj, clampedAdj,
       clampApplied, deadbandApplied: false,
-      loggedDays7, loggedDays28,
+      loggedDays7, loggedDays14, loggedDays28, confidence, longConfidence,
     },
   };
 }
@@ -439,7 +497,14 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
-  if (adjustment < 0) {
+  // Only enter ceiling/floor mode when the adjustment is large enough to be
+  // meaningful. Small confidence-ramped adjustments (below the base deadband)
+  // should not suppress the warn zone — the user's eating is still within normal
+  // noise. This threshold matches isGoalClamped so both agree on "is it clamped".
+  const adjDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
+  const effectiveAdj = Math.abs(adjustment) >= adjDeadband ? adjustment : 0;
+
+  if (effectiveAdj < 0) {
     // Clamped below: idealToday is a ceiling — green only extends downward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
@@ -448,7 +513,7 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
     return 'bad';
   }
 
-  if (adjustment > 0) {
+  if (effectiveAdj > 0) {
     // Clamped above: idealToday is a floor — green only extends upward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
@@ -583,7 +648,10 @@ export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = 
     const adj = macroWin.adjustment ?? 0;
     status       = computeDayStatus(consumed, macroWin.target, macroWin.idealToday, adj);
     barTarget    = macroWin.idealToday;
-    skipWarnZone = adj < 0; // clamped below → ceiling → no warn zone above ideal
+    // Only suppress the warn zone when the adjustment is large enough to be
+    // meaningful (same threshold as computeDayStatus uses for ceiling mode).
+    const adjDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
+    skipWarnZone = adj < -adjDeadband; // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
     status    = computeDayStatus(consumed, fallbackGoal, fallbackGoal, 0);
     barTarget = fallbackGoal;

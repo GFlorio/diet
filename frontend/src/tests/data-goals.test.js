@@ -40,6 +40,7 @@ import {
   computeDayStatus,
   computeKcalAdjustment,
   computeWindowVM,
+  controllerConfidence,
   deleteRecord,
   derivedGrams,
   expWeight,
@@ -183,17 +184,50 @@ describe('adaptiveGain', () => {
   });
 });
 
+describe('controllerConfidence', () => {
+  test('< MIN_LOGGED_7 (4) days → 0', () => {
+    expect(controllerConfidence(0)).toBe(0);
+    expect(controllerConfidence(3)).toBe(0);
+  });
+  test('at MIN_LOGGED_7 (4) days → CONFIDENCE_MIN_STRENGTH (0.20)', () => {
+    expect(controllerConfidence(4)).toBeCloseTo(0.20);
+  });
+  test('at CONFIDENCE_FULL_DAYS (14) days → 1.0', () => {
+    expect(controllerConfidence(14)).toBeCloseTo(1.0);
+  });
+  test('beyond CONFIDENCE_FULL_DAYS → 1.0', () => {
+    expect(controllerConfidence(28)).toBeCloseTo(1.0);
+  });
+  test('ramps smoothly between 4 and 14', () => {
+    const c7  = controllerConfidence(7);
+    const c10 = controllerConfidence(10);
+    expect(c7).toBeGreaterThan(0.20);
+    expect(c7).toBeLessThan(1.0);
+    expect(c10).toBeGreaterThan(c7);
+    expect(c10).toBeLessThan(1.0);
+  });
+});
+
 describe('combineErrors', () => {
-  test('same sign → equal blend', () => {
+  test('same sign, full long confidence → equal blend', () => {
     expect(combineErrors(100, 200)).toBeCloseTo(150);
   });
-  test('sign disagreement → trust long signal (75% weight)', () => {
-    // short=-100, long=+200 → 0.25×(-100) + 0.75×200 = -25+150 = 125
+  test('sign disagreement, full long confidence → trust long signal (75% weight)', () => {
+    // short=-100, long=+200, longConfidence=1 > 0.5 → 0.25×(-100) + 0.75×200 = 125
     expect(combineErrors(-100, 200)).toBeCloseTo(125);
   });
-  test('either is 0 → no sign disagreement', () => {
+  test('either is 0, full long confidence → no sign disagreement', () => {
     expect(combineErrors(0, 200)).toBeCloseTo(100);
     expect(combineErrors(100, 0)).toBeCloseTo(50);
+  });
+  test('longConfidence=0 → short signal only (long weight = 0)', () => {
+    expect(combineErrors(100, 200, 0)).toBeCloseTo(100);
+    expect(combineErrors(-100, 200, 0)).toBeCloseTo(-100); // no sign-disagree rule at confidence=0
+  });
+  test('sign disagreement, longConfidence=0.3 (≤ 0.5) → dynamic blend, no spike suppression', () => {
+    // longWeight = 0.5 * 0.3 = 0.15; shortWeight = 0.85
+    // 0.85×(-100) + 0.15×200 = -85 + 30 = -55
+    expect(combineErrors(-100, 200, 0.3)).toBeCloseTo(-55);
   });
 });
 
@@ -223,11 +257,13 @@ describe('computeKcalAdjustment', () => {
     expect(result.adjustedGoalKcal).toBe(2000);
   });
 
-  test('completeness gate fires with fewer than MIN_LOGGED_28 logged in 28 days', () => {
-    // 7 days logged in the 7-day window (>= 4) but only 7 total (< 14 required)
+  test('7 logged days: no hard gate, adjustment is confidence-scaled (not zero)', () => {
+    // loggedDays14 = 7 → confidence ≈ 0.37 → non-zero but smaller-than-full adjustment
     const map = buildDays([2500, 2500, 2500, 2500, 2500, 2500, 2500]);
     const result = computeKcalAdjustment(map, '2024-02-07', 2000, 'maintenance');
-    expect(result.adjustment).toBe(0);
+    // Over-eating: adjustment should be negative and within (−300, 0)
+    expect(result.adjustment).toBeLessThan(0);
+    expect(result.adjustment).toBeGreaterThan(-300);
   });
 
   test('deadband: small effectiveError < deadband → adjustment 0', () => {
@@ -523,10 +559,12 @@ describe('idealForDay', () => {
     expect(idealForDay({}, '2024-02-07', 2000)).toBe(2000);
   });
 
-  test('completeness gate: returns raw goal with insufficient history (< 14 in 28 days)', () => {
-    // 7 days logged — fewer than MIN_LOGGED_28 (14) → gate fires
-    const kcalByDay = buildFullHistory('2024-02-07', 3000, 7);
-    expect(idealForDay(kcalByDay, '2024-02-07', 2000)).toBe(2000);
+  test('7 logged days: confidence-scaled adjustment applied (not raw goal)', () => {
+    // +700 overage × confidence≈0.37 stays below the ±15% clamp → partial adjustment
+    const kcalByDay = buildFullHistory('2024-02-07', 2700, 7);
+    const result = idealForDay(kcalByDay, '2024-02-07', 2000);
+    expect(result).toBeLessThan(2000);
+    expect(result).toBeGreaterThan(1700); // strictly above clamped floor (goal × 0.85)
   });
 
   test('adjusts goal downward with 28 days of over-eating', () => {
@@ -878,23 +916,24 @@ describe('computeWindowVM', () => {
     expect(result?.calories.adjustment).toBe(result?.fat.adjustment);
   });
 
-  test('two days both at goal: adjustment = 0, idealToday ≈ goal', async () => {
+  test('two days both at goal: sparse gate fires → adjustment = 0, idealToday ≈ goal', async () => {
     vi.mocked(Meals.listRange).mockResolvedValue([
       makeMeal('2024-02-06'),
       makeMeal('2024-02-07'),
     ]);
     const result = await computeWindowVM('2024-02-07', goals);
-    // 2 days of history → gate fires (< 14) → adjustment = 0
+    // 2 days → loggedDays7 = 2 < MIN_LOGGED_7 (4) → gate fires → adjustment = 0
     expect(result?.calories.adjustment).toBe(0);
     expect(result?.calories.idealToday).toBeCloseTo(2000);
   });
 
-  test('insufficient history causes gate to fire → adjustment = 0', async () => {
-    // Only 7 days → loggedDays28 < 14 → gate fires
+  test('7 logged days: confidence-scaled adjustment applied (below full magnitude)', async () => {
+    // +500 overage × confidence≈0.37 stays below the ±15% clamp → partial adjustment
     const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06','2024-02-07'];
-    vi.mocked(Meals.listRange).mockResolvedValue(days.map(d => makeMeal(d, 3000)));
+    vi.mocked(Meals.listRange).mockResolvedValue(days.map(d => makeMeal(d, 2500)));
     const result = await computeWindowVM('2024-02-07', goals);
-    expect(result?.calories.adjustment).toBe(0);
+    expect(result?.calories.adjustment).toBeLessThan(0);
+    expect(result?.calories.adjustment).toBeGreaterThan(-300);
   });
 
   // --- macro status checks ---------------------------------------------------
@@ -978,25 +1017,31 @@ describe('computeWindowVM – macro coherence', () => {
     expect(post?.fat.status).toBe('ok');
   }
 
-  test('all 6 prior days exactly at goal: ideals = goal, eating them is green', async () => {
-    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
-    await assertGreenState(days.map(d => coherentMeal(d, 150, 225, 56)));
+  /** Generate N ISO date strings ending the day before TODAY. */
+  function priorDates(/** @type {number} */ n) {
+    const end = new Date('2024-02-07T00:00:00');
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date(end);
+      d.setDate(end.getDate() - (n - i));
+      return d.toISOString().slice(0, 10);
+    });
+  }
+
+  test('all 14 prior days exactly at goal: ideals = goal, eating them is green', async () => {
+    await assertGreenState(priorDates(14).map(d => coherentMeal(d, 150, 225, 56)));
   });
 
-  test('6 prior days at 90% of every macro: ideals at goal (gate fires), eating them is green', async () => {
-    // Only 6 prior days → loggedDays28 < 14 → gate fires → adjustment = 0 → ideals = goal grams
-    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
-    await assertGreenState(days.map(d => coherentMeal(d, 135, 202.5, 50.4)));
+  test('14 prior days at 90% of every macro: adjustment within deadband, eating ideals is green', async () => {
+    // Under-eating in loss mode: gain=0.25 × error → adjustment likely within deadband
+    await assertGreenState(priorDates(14).map(d => coherentMeal(d, 135, 202.5, 50.4)));
   });
 
-  test('6 prior days at 110% of every macro: ideals at goal (gate fires), eating them is green', async () => {
-    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
-    await assertGreenState(days.map(d => coherentMeal(d, 165, 247.5, 61.6)));
+  test('14 prior days at 110% of every macro: coherent ideals, eating them is green', async () => {
+    await assertGreenState(priorDates(14).map(d => coherentMeal(d, 165, 247.5, 61.6)));
   });
 
   test('mixed history: macro imbalance → coherent ideals, eating them is green', async () => {
-    const days = ['2024-02-01','2024-02-02','2024-02-03','2024-02-04','2024-02-05','2024-02-06'];
-    await assertGreenState(days.map(d => coherentMeal(d, 135, 270, 44.8)));
+    await assertGreenState(priorDates(14).map(d => coherentMeal(d, 135, 270, 44.8)));
   });
 });
 
