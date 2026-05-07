@@ -344,7 +344,7 @@ export function adaptiveGain(mode, effectiveError, intensity) {
  * @param {string} dateISO — the day to compute for
  * @param {number} baseGoalKcal — raw daily target
  * @param {'loss'|'maintenance'|'gain'} [mode]
- * @returns {{ adjustedGoalKcal: number, adjustment: number, debug: object }}
+ * @returns {{ adjustedGoalKcal: number, adjustment: number, gated?: true, debug: object }}
  */
 export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = 'maintenance') {
   if (baseGoalKcal <= 0) {
@@ -373,6 +373,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
     return {
       adjustedGoalKcal: Math.round(baseGoalKcal),
       adjustment: 0,
+      gated: true,
       debug: { gate: 'sparse', loggedDays7, loggedDays28 },
     };
   }
@@ -871,7 +872,7 @@ export async function computeWindowVM(todayISO, goals) {
   const kcalByDay28 = {};
   for (const [k, v] of Object.entries(byDay28)) { kcalByDay28[k] = v.kcal; }
 
-  const { adjustedGoalKcal, adjustment } = computeKcalAdjustment(
+  const { adjustedGoalKcal, adjustment, gated } = computeKcalAdjustment(
     kcalByDay28, todayISO, goals.kcal, deriveMode(goals),
   );
   const calIdeal = adjustedGoalKcal;
@@ -887,12 +888,15 @@ export async function computeWindowVM(todayISO, goals) {
   const todayLogged   = todayISO in byDay7;
   const effectiveDays = todayLogged ? windowDays : windowDays + 1;
 
+  // When the completeness gate fired, history is too sparse to trust macro signals
+  // either — reconcile against a zeroed prevSum so no past eating drifts the ideals,
+  // but still run the rounding/coherence step so 4p+4c+9f ≈ kcalIdeal.
   const { protIdeal, carbIdeal, fatIdeal } = reconcileMacroIdeals({
     kcalIdeal: calIdeal,
     goals,
     derivedG: g,
-    prevSum,
-    effectiveDays,
+    prevSum: gated ? $.zeroMacros() : prevSum,
+    effectiveDays: gated ? 1 : effectiveDays,
   });
 
   /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
