@@ -40,8 +40,8 @@ export function assertEl(obj) {
  */
 export function showPage(page){
   const pages = ['meals', 'foods', 'goals'];
-  arr('.tab').forEach(t => { html(t).classList.toggle('active', html(t).dataset.page === page); });
-  pages.forEach(p => { html(document.getElementById(`page-${p}`)).classList.toggle('hidden', p !== page); });
+  arr('.tab').forEach(tab => { html(tab).classList.toggle('active', html(tab).dataset.page === page); });
+  pages.forEach(pageName => { html(document.getElementById(`page-${pageName}`)).classList.toggle('hidden', pageName !== page); });
 }
 
 /** Format macro nutrients meta string
@@ -105,22 +105,22 @@ export function select(el) { return castEl(el, HTMLSelectElement, 'HTML select e
 
 /**
  * Formats a number to a fixed decimal, removing trailing zeros.
- * @param {number} n
- * @param {number} [d=1]
+ * @param {number} value
+ * @param {number} [digits=1]
  * @returns {string}
  */
-export const fmtNum = (n, d = 1) => Number(n).toFixed(d).replace(/\.0+$/, '');
+export const fmtNum = (value, digits = 1) => Number(value).toFixed(digits).replace(/\.0+$/, '');
 
 /**
  * Format a Date to local YYYY-MM-DD (respects the user's timezone).
- * @param {Date} d
+ * @param {Date} date
  * @returns {string}
  */
-const localISO = (d) => {
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
+const localISO = (date) => {
+  const year  = date.getFullYear();
+  const month  = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 /**
@@ -131,10 +131,10 @@ export const isoToday = () => localISO(new Date());
 
 /**
  * Converts a date to ISO format (YYYY-MM-DD), in the user's local timezone.
- * @param {string|Date} d
+ * @param {string|Date} date
  * @returns {string}
  */
-export const toISO = (d) => localISO(new Date(d));
+export const toISO = (date) => localISO(new Date(date));
 
 /**
  * Convert an ISO date string (YYYY-MM-DD) to a local midnight Date object.
@@ -155,25 +155,25 @@ export const now = () => Date.now();
  * @returns {string}
  */
 export function randomUUID() {
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
 }
 
 /**
  * Escapes HTML special characters in a string.
- * @param {string} [s='']
+ * @param {string} [value='']
  * @returns {string}
  */
-export const esc = (s = '') => (`${s}`).replace(/[&<>"']/g, c => ({
+export const esc = (value = '') => (`${value}`).replace(/[&<>"']/g, character => ({
 	'&': '&amp;',
 	'<': '&lt;',
 	'>': '&gt;',
 	'"': '&quot;',
 	"'": '&#39;'
-}[c] || ''));
+}[character] || ''));
 
 /** Media query: device supports hover (i.e. not a touch-only device). */
 export const MEDIA_HOVER = '(hover: hover)';
@@ -206,29 +206,29 @@ export function addScaledMacros(acc, macros, multiplier) {
 /**
  * Show a non-blocking toast message fixed below the header.
  * Dismissable via X button, swipe, or auto-removal after `duration` ms.
- * @param {string} msg
+ * @param {string} message
  * @param {{ type?: 'error'|'', duration?: number, action?: ToastAction }} [opts]
  */
-export function toast(msg, { type = '', duration = 3000, action } = {}) {
-  const el = document.createElement('div');
-  el.className = `toast${type ? ` ${type}` : ''}`;
-  el.setAttribute('role', 'status');
+export function toast(message, { type = '', duration = 3000, action } = {}) {
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast${type ? ` ${type}` : ''}`;
+  toastEl.setAttribute('role', 'status');
 
   const text = document.createElement('span');
   text.className = 'toast-msg';
-  text.textContent = msg;
-  el.appendChild(text);
+  text.textContent = message;
+  toastEl.appendChild(text);
 
   if (action) {
-    const btn = document.createElement('button');
-    btn.className = 'btn small';
+    const actionBtn = document.createElement('button');
+    actionBtn.className = 'btn small';
     const isDesktop = window.matchMedia(MEDIA_HOVER).matches;
-    btn.textContent = isDesktop ? `${action.label} (Y)` : action.label;
-    btn.addEventListener('click', () => {
+    actionBtn.textContent = isDesktop ? `${action.label} (Y)` : action.label;
+    actionBtn.addEventListener('click', () => {
       action.callback();
       dismiss();
     });
-    el.appendChild(btn);
+    toastEl.appendChild(actionBtn);
 
     function onKey(/** @type {KeyboardEvent} */ e) {
       if (dismissed) {
@@ -239,7 +239,7 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { return; }
       e.preventDefault();
       document.removeEventListener('keydown', onKey);
-      btn.click();
+      actionBtn.click();
     }
     document.addEventListener('keydown', onKey);
   }
@@ -249,9 +249,9 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
   closeBtn.setAttribute('aria-label', 'Dismiss');
   closeBtn.textContent = '✕';
   closeBtn.addEventListener('click', dismiss);
-  el.appendChild(closeBtn);
+  toastEl.appendChild(closeBtn);
 
-  document.body.appendChild(el);
+  document.body.appendChild(toastEl);
 
   let dismissed = false;
   const timer = setTimeout(dismiss, duration);
@@ -260,7 +260,7 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
     if (dismissed) { return; }
     dismissed = true;
     clearTimeout(timer);
-    el.remove();
+    toastEl.remove();
   }
 
   /** @param {1|-1} dir */
@@ -268,33 +268,33 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
     if (dismissed) { return; }
     dismissed = true;
     clearTimeout(timer);
-    el.style.transition = 'transform .25s ease-in, opacity .25s ease-in';
-    el.style.transform = `translateX(calc(-50% + ${dir * 110}vw))`;
-    el.style.opacity = '0';
-    setTimeout(() => el.remove(), 270);
+    toastEl.style.transition = 'transform .25s ease-in, opacity .25s ease-in';
+    toastEl.style.transform = `translateX(calc(-50% + ${dir * 110}vw))`;
+    toastEl.style.opacity = '0';
+    setTimeout(() => toastEl.remove(), 270);
   }
 
   let startX = 0;
 
-  el.addEventListener('touchstart', (e) => {
+  toastEl.addEventListener('touchstart', (e) => {
     startX = e.touches[0].clientX;
-    el.style.transition = 'none';
+    toastEl.style.transition = 'none';
   }, { passive: true });
 
-  el.addEventListener('touchmove', (e) => {
+  toastEl.addEventListener('touchmove', (e) => {
     const delta = e.touches[0].clientX - startX;
-    el.style.transform = `translateX(calc(-50% + ${delta}px))`;
-    el.style.opacity = String(Math.max(0, 1 - Math.abs(delta) / 200));
+    toastEl.style.transform = `translateX(calc(-50% + ${delta}px))`;
+    toastEl.style.opacity = String(Math.max(0, 1 - Math.abs(delta) / 200));
   }, { passive: true });
 
-  el.addEventListener('touchend', (e) => {
+  toastEl.addEventListener('touchend', (e) => {
     const delta = e.changedTouches[0].clientX - startX;
     if (Math.abs(delta) > 80) {
       dismissToSide(delta > 0 ? 1 : -1);
     } else {
-      el.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
-      el.style.transform = 'translateX(-50%)';
-      el.style.opacity = '1';
+      toastEl.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
+      toastEl.style.transform = 'translateX(-50%)';
+      toastEl.style.opacity = '1';
     }
   }, { passive: true });
 }
@@ -309,10 +309,10 @@ export function toast(msg, { type = '', duration = 3000, action } = {}) {
  */
 export function debounce(fn, ms = 300){
     /** @type {number|undefined} */
-    let t;
+    let timeoutId;
     return (...args) => {
-        if (t) {window.clearTimeout(t);}
-        t = window.setTimeout(() => fn(...args), ms);
+        if (timeoutId) {window.clearTimeout(timeoutId);}
+        timeoutId = window.setTimeout(() => fn(...args), ms);
     };
 }
 
@@ -321,26 +321,26 @@ export function debounce(fn, ms = 300){
  * Disables the button while the action runs, then briefly shows a confirmation
  * label before restoring the original text. On error, restores immediately and rethrows.
  * @template T
- * @param {HTMLButtonElement} btn
+ * @param {HTMLButtonElement} buttonEl
  * @param {() => Promise<T>} action
- * @param {string | ((r: T) => string)} [doneLabel='✓']
+ * @param {string | ((result: T) => string)} [doneLabel='✓']
  * @param {number} [doneMs=1500]
  * @returns {Promise<T>}
  */
-export async function withConfirm(btn, action, doneLabel = '✓', doneMs = 1500) {
-  const orig = btn.textContent ?? '';
-  btn.disabled = true;
+export async function withConfirm(buttonEl, action, doneLabel = '✓', doneMs = 1500) {
+  const originalText = buttonEl.textContent ?? '';
+  buttonEl.disabled = true;
   try {
     const result = await action();
-    btn.textContent = typeof doneLabel === 'function' ? doneLabel(result) : doneLabel;
+    buttonEl.textContent = typeof doneLabel === 'function' ? doneLabel(result) : doneLabel;
     setTimeout(() => {
-      btn.textContent = orig;
-      btn.disabled = false;
+      buttonEl.textContent = originalText;
+      buttonEl.disabled = false;
     }, doneMs);
     return result;
   } catch (err) {
-    btn.textContent = orig;
-    btn.disabled = false;
+    buttonEl.textContent = originalText;
+    buttonEl.disabled = false;
     throw err;
   }
 }

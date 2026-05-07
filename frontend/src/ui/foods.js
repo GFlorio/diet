@@ -47,7 +47,7 @@ export function setupFoods(){
    * Remove error styling from all food form input fields.
    */
   function clearFieldErrors(){
-    fieldToInput.forEach(el => { el.classList.remove('error'); });
+    fieldToInput.forEach(input => { input.classList.remove('error'); });
   }
 
   /**
@@ -55,11 +55,11 @@ export function setupFoods(){
    * @param {unknown} err - Error object, expected to have optional `fields` array
    */
   function applyValidationErrors(err){
-    const e = /** @type {{ fields?: string[] }} */ (err || {});
-    if (!Array.isArray(e.fields)) {return;}
-    e.fields.forEach(f => {
-      const el = fieldToInput.get(f);
-      if (el) {el.classList.add('error');}
+    const validationError = /** @type {{ fields?: string[] }} */ (err || {});
+    if (!Array.isArray(validationError.fields)) {return;}
+    validationError.fields.forEach(field => {
+      const input = fieldToInput.get(field);
+      if (input) {input.classList.add('error');}
     });
   }
 
@@ -85,21 +85,21 @@ export function setupFoods(){
 
   /**
    * Set the food form to either edit an existing food or reset to create a new one.
-   * @param {Food=} f - Food to edit, or undefined/null to reset for new food
+   * @param {Food=} food - Food to edit, or undefined/null to reset for new food
    */
-  function setFoodForm(f){
-    if (!f){
+  function setFoodForm(food){
+    if (!food){
       clearFoodForm();
     } else {
       foodFormTitle.textContent = 'Edit food';
-      foodUpdated.textContent = `updated ${new Date(f.updatedAt).toLocaleString()}`;
-      foodId.value = String(f.id);
-      foodName.value=f.name;
-      foodRefLabel.value=f.refLabel;
-      foodKcal.value=String(f.kcal);
-      foodProt.value=String(f.prot);
-      foodCarb.value=String(f.carbs);
-      foodFat.value=String(f.fats);
+      foodUpdated.textContent = `updated ${new Date(food.updatedAt).toLocaleString()}`;
+      foodId.value = String(food.id);
+      foodName.value=food.name;
+      foodRefLabel.value=food.refLabel;
+      foodKcal.value=String(food.kcal);
+      foodProt.value=String(food.prot);
+      foodCarb.value=String(food.carbs);
+      foodFat.value=String(food.fats);
       foodFormMsg.textContent = '';
       clearFieldErrors();
       saveFoodBtn.disabled = false;
@@ -112,21 +112,21 @@ export function setupFoods(){
   async function renderFoods(){
     const status = foodStatus.value === 'archived' ? 'archived'
       : foodStatus.value === 'all' ? 'all' : 'active';
-    const xs = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
-    foodsList.innerHTML = xs.map((f)=>{
-      const archivedChip = f.archived ? '<span class="chip">Archived</span>' : '';
-      const archiveClass = f.archived ? 'unarchive' : 'archive';
-      const archiveLabel = f.archived ? `${archiveIcon} Unarchive` : `${archiveIcon} Archive`;
-      const meta = $.nutrMeta(f.kcal, f.prot, f.carbs, f.fats);
+    const foods = /** @type {Food[]} */ (await Foods.list({ search: foodSearch.value, status }));
+    foodsList.innerHTML = foods.map((food)=>{
+      const archivedChip = food.archived ? '<span class="chip">Archived</span>' : '';
+      const archiveClass = food.archived ? 'unarchive' : 'archive';
+      const archiveLabel = food.archived ? `${archiveIcon} Unarchive` : `${archiveIcon} Archive`;
+      const meta = $.nutrMeta(food.kcal, food.prot, food.carbs, food.fats);
       return `
-      <div class="item" data-id="${f.id}">
-        <div><strong>${$.esc(f.name)}</strong> ${archivedChip}</div>
+      <div class="item" data-id="${food.id}">
+        <div><strong>${$.esc(food.name)}</strong> ${archivedChip}</div>
         <div class="actions">
           <button class="btn small ghost edit">${editIcon} Edit</button>
           <button class="btn small ghost share">${shareIcon} Share</button>
           <button class="btn small ghost ${archiveClass}">${archiveLabel}</button>
         </div>
-        <div class="meta">${$.esc(f.refLabel)} · ${meta}</div>
+        <div class="meta">${$.esc(food.refLabel)} · ${meta}</div>
       </div>`;
     }).join('') || `<div class="muted">No foods yet.</div>`;
   }
@@ -137,19 +137,19 @@ export function setupFoods(){
 
     const id = row.dataset.id;
     if (!id) { return; }
-    const f = await Foods.byId(id);
+    const food = await Foods.byId(id);
     if (target.classList.contains('edit')){
-      setFoodForm(f);
+      setFoodForm(food);
       window.scrollTo({top:0, behavior:'smooth'});
       return;
     }
     if (target.classList.contains('share')){
-      if (!f) { return; }
-      const code = encodeFoodCode(f);
+      if (!food) { return; }
+      const code = encodeFoodCode(food);
       const url = `${location.origin}${location.pathname}?f=${code}`;
       if (navigator.share) {
         try {
-          await navigator.share({ title: f.name, url });
+          await navigator.share({ title: food.name, url });
         } catch (err) {
           if (/** @type {Error} */(err).name !== 'AbortError') { throw err; }
         }
@@ -163,19 +163,19 @@ export function setupFoods(){
       await Foods.setArchived(id, true);
       await renderFoods();
       const hasMeals = await Meals.hasForFood(id);
-      if (!hasMeals && f) {
-        $.toast(`No meal history for "${$.esc(f.name)}" — delete permanently?`, {
+      if (!hasMeals && food) {
+        $.toast(`No meal history for "${$.esc(food.name)}" — delete permanently?`, {
           duration: 8000,
           action: {
             label: 'Delete',
             callback: async () => {
               await Foods.remove(id);
               await renderFoods();
-              $.toast(`"${$.esc(f.name)}" deleted`, {
+              $.toast(`"${$.esc(food.name)}" deleted`, {
                 duration: 5000,
                 action: {
                   label: 'Undo',
-                  callback: async () => { await Foods.restore({ ...f, archived: true }); await renderFoods(); },
+                  callback: async () => { await Foods.restore({ ...food, archived: true }); await renderFoods(); },
                 },
               });
             },
@@ -245,18 +245,18 @@ export function setupFoods(){
             action: {
               label: 'Update meals',
               callback: async () => {
-                const n = await Meals.syncAllForFood(editId);
-                $.toast(`✓ ${n} meal${n === 1 ? '' : 's'} updated`);
+                const updatedCount = await Meals.syncAllForFood(editId);
+                $.toast(`✓ ${updatedCount} meal${updatedCount === 1 ? '' : 's'} updated`);
               },
             },
           });
         }
       }
     } catch (err) {
-      const e = /** @type {Error & {fields?: string[]}} */ (err);
-      const msg = e?.message || 'Invalid input';
-      foodFormMsg.textContent = msg;
-      applyValidationErrors(e);
+      const error = /** @type {Error & {fields?: string[]}} */ (err);
+      const message = error?.message || 'Invalid input';
+      foodFormMsg.textContent = message;
+      applyValidationErrors(error);
     }
   });
 
@@ -273,15 +273,15 @@ export function setupFoods(){
     }
   }, 400);
   [foodName, foodRefLabel, foodKcal, foodProt, foodCarb, foodFat]
-    .forEach(el => { el.addEventListener('input', liveCheck); });
+    .forEach(input => { input.addEventListener('input', liveCheck); });
 
   // Listen to cross-module navigation prefill
   window.addEventListener('go-foods', async (e) => {
     const detail = /** @type {CustomEvent} */(e).detail;
     $.showPage('foods');
     if (detail?.id) {
-      const f = await Foods.byId(detail.id);
-      if (f) { setFoodForm(f); }
+      const food = await Foods.byId(detail.id);
+      if (food) { setFoodForm(food); }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       foodForm.reset();

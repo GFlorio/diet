@@ -38,7 +38,7 @@ export function setupGoals() {
         <p style="margin:0 0 16px; font-size:14px; color:var(--muted)">No daily targets set yet.</p>
         <button class="btn small" id="goalsEditBtn" data-testid="goalsEditBtn">Set daily targets</button>`;
     } else {
-      const g = Goals.derivedGrams(goals);
+      const gramGoals = Goals.derivedGrams(goals);
       const historyBtn = allRecords.length > 0
         ? `<button class="btn small ghost" id="goalHistoryBtn" data-testid="goalHistoryBtn"
              aria-label="Goal history" title="Goal history" style="min-width:36px;min-height:36px;padding:4px 8px">${historyIcon}</button>`
@@ -61,17 +61,17 @@ export function setupGoals() {
         <div class="goals-macros-row">
           <div class="goals-macro-pill">
             <div class="goals-macro-pill-name">Protein</div>
-            <div class="goals-macro-pill-g">${g.protG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
+            <div class="goals-macro-pill-g">${gramGoals.protG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
             <div class="goals-macro-pill-pct">${goals.protPct}%</div>
           </div>
           <div class="goals-macro-pill">
             <div class="goals-macro-pill-name">Carbs</div>
-            <div class="goals-macro-pill-g">${g.carbsG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
+            <div class="goals-macro-pill-g">${gramGoals.carbsG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
             <div class="goals-macro-pill-pct">${goals.carbsPct}%</div>
           </div>
           <div class="goals-macro-pill">
             <div class="goals-macro-pill-name">Fat</div>
-            <div class="goals-macro-pill-g">${g.fatG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
+            <div class="goals-macro-pill-g">${gramGoals.fatG}<span style="font-size:11px;color:var(--muted);font-weight:500"> g</span></div>
             <div class="goals-macro-pill-pct">${goals.fatPct}%</div>
           </div>
         </div>`;
@@ -244,7 +244,7 @@ export function setupGoals() {
     // Mode toggle
     modeToggle.querySelectorAll('.goals-mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        modeToggle.querySelectorAll('.goals-mode-btn').forEach(b => { b.classList.remove('active'); });
+        modeToggle.querySelectorAll('.goals-mode-btn').forEach(button => { button.classList.remove('active'); });
         btn.classList.add('active');
         updateForm();
       });
@@ -443,17 +443,17 @@ export function setupGoals() {
 
     /** @type {Record<string, number>} */
     const kcalByDay = {};
-    for (const m of meals) {
-      kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + m.foodSnapshot.kcal * m.multiplier;
+    for (const meal of meals) {
+      kcalByDay[meal.date] = (kcalByDay[meal.date] ?? 0) + meal.foodSnapshot.kcal * meal.multiplier;
     }
 
     /** @type {Array<Array<{iso:string, status:string, kcal:number|null, cellGoal: import('../data-goals.js').GoalRecord|null, idealKcal: number|null}>>} */
     const weeks = [];
-    for (let w = 0; w < NUM_WEEKS; w++) {
+    for (let weekIndex = 0; weekIndex < NUM_WEEKS; weekIndex++) {
       const week = [];
-      for (let d = 0; d < 7; d++) {
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
         const date     = new Date(startDate);
-        date.setDate(startDate.getDate() + w * 7 + d);
+        date.setDate(startDate.getDate() + weekIndex * 7 + dayIndex);
         const iso      = $.toISO(date);
         const isFuture = iso > today;
         const kcal     = kcalByDay[iso] ?? null;
@@ -488,9 +488,9 @@ export function setupGoals() {
     const monthRowHtml = `<div class="cal-month-row"><div class="cal-dlabel-spacer"></div>${monthCells}</div>`;
 
     // One row per day of week; one square per week column
-    const dayRowsHtml = DAY_LABELS.map((label, d) => {
+    const dayRowsHtml = DAY_LABELS.map((label, dayIndex) => {
       const squares = weeks.map(week => {
-        const { iso, status, kcal, cellGoal, idealKcal } = week[d];
+        const { iso, status, kcal, cellGoal, idealKcal } = week[dayIndex];
         const dataKcal    = kcal !== null ? ` data-kcal="${Math.round(kcal)}"` : '';
         const dataGoal    = cellGoal ? ` data-goal="${cellGoal.kcal}"` : '';
         const dataIdeal   = idealKcal !== null ? ` data-ideal="${idealKcal}"` : '';
@@ -582,31 +582,31 @@ export function setupGoals() {
   async function renderHistoryPanel(panelEl) {
     const records = await Goals.list();
 
-    /** @param {GoalRecord} r @param {boolean} isActive @param {boolean} isLast */
-    const rowHtml = (r, isActive, isLast) => {
-      const g = Goals.derivedGrams(r);
+    /** @param {GoalRecord} record @param {boolean} isActive @param {boolean} isLast */
+    const rowHtml = (record, isActive, isLast) => {
+      const gramGoals = Goals.derivedGrams(record);
       const badge = isActive
         ? '<span class="goal-history-badge">Active</span>'
         : '';
       return `
-        <div class="goal-history-row" data-id="${$.esc(r.id)}">
+        <div class="goal-history-row" data-id="${$.esc(record.id)}">
           <div class="goal-history-row-header">
             ${badge}
             <label class="goal-history-from-label">From</label>
-            <input type="date" class="goal-history-date" value="${$.esc(r.effectiveFrom)}" data-original="${$.esc(r.effectiveFrom)}" />
+            <input type="date" class="goal-history-date" value="${$.esc(record.effectiveFrom)}" data-original="${$.esc(record.effectiveFrom)}" />
             <button class="btn small ghost goal-history-delete" aria-label="Delete goal" title="Delete"
               style="margin-left:auto;min-width:36px;min-height:36px;color:var(--muted)"
               ${isLast ? 'data-last="true"' : ''}>🗑</button>
           </div>
-          <div class="goal-history-summary">${$.fmtNum(r.kcal, 0)} kcal · ${r.protPct}P / ${r.carbsPct}C / ${r.fatPct}F · ${g.protG} g protein</div>
+          <div class="goal-history-summary">${$.fmtNum(record.kcal, 0)} kcal · ${record.protPct}P / ${record.carbsPct}C / ${record.fatPct}F · ${gramGoals.protG} g protein</div>
           <div class="goal-history-date-error hidden" style="font-size:12px;color:var(--bad);margin-top:4px"></div>
         </div>`;
     };
 
     const todayISO = $.isoToday();
     const activeId = Goals.goalForDate(records, todayISO)?.id ?? null;
-    const rowsHtml = records.map((r, i) =>
-      rowHtml(r, r.id === activeId, records.length === 1 && i === 0)
+    const rowsHtml = records.map((record, index) =>
+      rowHtml(record, record.id === activeId, records.length === 1 && index === 0)
     ).join('<hr class="goal-history-sep">');
 
     panelEl.innerHTML = `

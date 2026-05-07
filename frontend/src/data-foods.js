@@ -14,10 +14,10 @@ const FUZZY_THRESHOLD = 0.4;
  * @returns {Set<string>}
  */
 function trigrams(str) {
-  const s = ` ${str} `;
+  const padded = ` ${str} `;
   const grams = new Set();
-  for (let i = 0; i < s.length - 2; i++) {
-    grams.add(s.slice(i, i + 3));
+  for (let i = 0; i < padded.length - 2; i++) {
+    grams.add(padded.slice(i, i + 3));
   }
   return grams;
 }
@@ -46,12 +46,12 @@ function trigramSimilarity(a, b) {
  * @returns {0|1|2}
  */
 function foodMatchScore(queryWords, haystack, haystackWords) {
-  if (queryWords.every(w => haystack.includes(w))) { return 2; }
+  if (queryWords.every(word => haystack.includes(word))) { return 2; }
   const haystackGrams = haystackWords.map(trigrams);
-  const allFuzzy = queryWords.every(qw => {
-    if (haystack.includes(qw)) { return true; }
-    const qg = trigrams(qw);
-    return haystackGrams.some(hg => trigramSimilarity(qg, hg) >= FUZZY_THRESHOLD);
+  const allFuzzy = queryWords.every(queryWord => {
+    if (haystack.includes(queryWord)) { return true; }
+    const queryGrams = trigrams(queryWord);
+    return haystackGrams.some(haystackGramSet => trigramSimilarity(queryGrams, haystackGramSet) >= FUZZY_THRESHOLD);
   });
   return allFuzzy ? 1 : 0;
 }
@@ -94,26 +94,26 @@ export const Foods = {
    */
   async list({ search = '', status = 'active', scores } = {}) {
     const all = await db.getAll('foods');
-    let xs = all.sort((a, b) => {
-      const sa = scores?.get(a.id) ?? 0;
-      const sb = scores?.get(b.id) ?? 0;
-      return sb - sa || a.name.localeCompare(b.name);
+    let foods = all.sort((leftFood, rightFood) => {
+      const leftScore = scores?.get(leftFood.id) ?? 0;
+      const rightScore = scores?.get(rightFood.id) ?? 0;
+      return rightScore - leftScore || leftFood.name.localeCompare(rightFood.name);
     });
-    if (status === 'active') { xs = xs.filter((f) => !f.archived); }
-    if (status === 'archived') { xs = xs.filter((f) => !!f.archived); }
+    if (status === 'active') { foods = foods.filter((food) => !food.archived); }
+    if (status === 'archived') { foods = foods.filter((food) => !!food.archived); }
     if (search) {
-      const q = search.trim().toLowerCase();
-      const queryWords = q.split(/\s+/).filter(Boolean);
-      const withTiers = xs.map(f => {
-        const haystack = `${f.name} ${f.refLabel}`.toLowerCase();
+      const normalizedSearch = search.trim().toLowerCase();
+      const queryWords = normalizedSearch.split(/\s+/).filter(Boolean);
+      const withTiers = foods.map(food => {
+        const haystack = `${food.name} ${food.refLabel}`.toLowerCase();
         const haystackWords = haystack.split(/\W+/).filter(Boolean);
-        return { food: f, tier: foodMatchScore(queryWords, haystack, haystackWords) };
+        return { food, tier: foodMatchScore(queryWords, haystack, haystackWords) };
       }).filter(({ tier }) => tier > 0);
       // Stable sort: tier-2 (direct) before tier-1 (fuzzy); frecency order preserved within each tier.
       withTiers.sort((a, b) => b.tier - a.tier);
-      xs = withTiers.map(({ food }) => food);
+      foods = withTiers.map(({ food }) => food);
     }
-    return xs;
+    return foods;
   },
   /**
    * Creates a new food entry.
@@ -122,7 +122,7 @@ export const Foods = {
    */
   async create(foodIn) {
     const { name, refLabel, kcal, prot, carbs, fats } = /** @type {CreateFoodInput} */ (foodIn);
-    const t = $.now();
+    const timestamp = $.now();
     /** @type {Partial<Food>} */
     const food = {
       name: name.trim(),
@@ -132,7 +132,7 @@ export const Foods = {
       carbs,
       fats,
       archived: false,
-      updatedAt: t,
+      updatedAt: timestamp,
     };
     const id = await db.put('foods', food);
     food.id = id;
@@ -145,11 +145,11 @@ export const Foods = {
    * @returns {Promise<Food|undefined>}
    */
   async update(id, patch) {
-    const cur = await db.get('foods', id);
-    if (!cur) { return; }
-    const next = /** @type {Food} */ ({ ...cur, ...patch, updatedAt: $.now() });
-    await db.put('foods', next);
-    return next;
+    const currentFood = await db.get('foods', id);
+    if (!currentFood) { return; }
+    const nextFood = /** @type {Food} */ ({ ...currentFood, ...patch, updatedAt: $.now() });
+    await db.put('foods', nextFood);
+    return nextFood;
   },
   /**
    * Sets archived status for a food entry.

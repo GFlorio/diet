@@ -10,48 +10,48 @@ const HEADER_BYTES = 9;
 const SCALE = 10;
 const MAX_SCALED = 0xFFFF;
 
-/** @param {Uint8Array} u8 */
-function toBase64Url(u8){
-  let bin = '';
-  for (const b of u8) { bin += String.fromCharCode(b); }
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** @param {Uint8Array} bytes */
+function toBase64Url(bytes){
+  let binary = '';
+  for (const byte of bytes) { binary += String.fromCharCode(byte); }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** @param {string} s */
-function fromBase64Url(s){
-  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-  const u8 = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) { u8[i] = bin.charCodeAt(i); }
-  return u8;
+/** @param {string} value */
+function fromBase64Url(value){
+  const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+  return bytes;
 }
 
-/** @param {number} n */
-function scale(n){
-  const v = Math.round(Number(n) * SCALE);
-  if (!Number.isFinite(v) || v < 0 || v > MAX_SCALED) {
-    throw new RangeError(`value out of range for Uint16 share code: ${n}`);
+/** @param {number} value */
+function scale(value){
+  const scaledValue = Math.round(Number(value) * SCALE);
+  if (!Number.isFinite(scaledValue) || scaledValue < 0 || scaledValue > MAX_SCALED) {
+    throw new RangeError(`value out of range for Uint16 share code: ${value}`);
   }
-  return v;
+  return scaledValue;
 }
 
 /**
- * @param {{ name: string, refLabel: string, kcal: number, prot: number, carbs: number, fats: number }} f
+ * @param {{ name: string, refLabel: string, kcal: number, prot: number, carbs: number, fats: number }} food
  */
-export function encodeFoodCode(f){
-  const enc = new TextEncoder();
-  const nameBytes = enc.encode(f.name);
-  const refBytes = enc.encode(f.refLabel);
+export function encodeFoodCode(food){
+  const encoder = new TextEncoder();
+  const nameBytes = encoder.encode(food.name);
+  const refBytes = encoder.encode(food.refLabel);
   if (nameBytes.length > 255) { throw new RangeError('name too long for share code'); }
-  const u8 = new Uint8Array(HEADER_BYTES + nameBytes.length + refBytes.length);
-  const view = new DataView(u8.buffer);
-  view.setUint16(0, scale(f.kcal));
-  view.setUint16(2, scale(f.prot));
-  view.setUint16(4, scale(f.carbs));
-  view.setUint16(6, scale(f.fats));
-  u8[8] = nameBytes.length;
-  u8.set(nameBytes, HEADER_BYTES);
-  u8.set(refBytes, HEADER_BYTES + nameBytes.length);
-  return toBase64Url(u8);
+  const bytes = new Uint8Array(HEADER_BYTES + nameBytes.length + refBytes.length);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, scale(food.kcal));
+  view.setUint16(2, scale(food.prot));
+  view.setUint16(4, scale(food.carbs));
+  view.setUint16(6, scale(food.fats));
+  bytes[8] = nameBytes.length;
+  bytes.set(nameBytes, HEADER_BYTES);
+  bytes.set(refBytes, HEADER_BYTES + nameBytes.length);
+  return toBase64Url(bytes);
 }
 
 /**
@@ -61,19 +61,19 @@ export function encodeFoodCode(f){
  */
 export function decodeFoodCode(code){
   try {
-    const u8 = fromBase64Url(code);
-    if (u8.length < HEADER_BYTES) { return null; }
-    const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const bytes = fromBase64Url(code);
+    if (bytes.length < HEADER_BYTES) { return null; }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const kcal = view.getUint16(0) / SCALE;
     const prot = view.getUint16(2) / SCALE;
     const carbs = view.getUint16(4) / SCALE;
     const fats = view.getUint16(6) / SCALE;
-    const nameLen = u8[8];
+    const nameLen = bytes[8];
     const nameEnd = HEADER_BYTES + nameLen;
-    if (u8.length < nameEnd) { return null; }
-    const dec = new TextDecoder();
-    const name = dec.decode(u8.subarray(HEADER_BYTES, nameEnd));
-    const refLabel = dec.decode(u8.subarray(nameEnd));
+    if (bytes.length < nameEnd) { return null; }
+    const decoder = new TextDecoder();
+    const name = decoder.decode(bytes.subarray(HEADER_BYTES, nameEnd));
+    const refLabel = decoder.decode(bytes.subarray(nameEnd));
     if (!name || !refLabel) { return null; }
     return { name, refLabel, kcal: String(kcal), prot: String(prot), carbs: String(carbs), fats: String(fats) };
   } catch {

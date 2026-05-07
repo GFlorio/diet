@@ -163,7 +163,7 @@ const LONG_CONFIDENCE_FULL_DAYS = 21;
  */
 export async function list() {
   const all = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
-  return all.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  return all.sort((leftGoal, rightGoal) => rightGoal.effectiveFrom.localeCompare(leftGoal.effectiveFrom));
 }
 
 /**
@@ -185,7 +185,7 @@ export async function getActive(dateISO = $.isoToday()) {
 export async function save(fields) {
   const today   = $.isoToday();
   const all     = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
-  const existing = all.find(r => r.effectiveFrom === today);
+  const existing = all.find(record => record.effectiveFrom === today);
   const sign    = fields.calMode === 'surplus' ? 1 : -1;
   const kcal    = fields.maintenanceKcal + sign * fields.calMagnitude;
   /** @type {GoalRecord} */
@@ -217,9 +217,9 @@ export async function remove() {
  */
 export async function updateEffectiveFrom(id, newDateISO) {
   const all   = /** @type {GoalRecord[]} */ (await db.getAll('goals'));
-  const clash = all.find(r => r.id !== id && r.effectiveFrom === newDateISO);
+  const clash = all.find(record => record.id !== id && record.effectiveFrom === newDateISO);
   if (clash) { throw new Error('Another goal already starts on this date'); }
-  const record = all.find(r => r.id === id);
+  const record = all.find(goalRecord => goalRecord.id === id);
   if (!record) { throw new Error('Goal record not found'); }
   await db.put('goals', { ...record, effectiveFrom: newDateISO });
 }
@@ -241,7 +241,7 @@ export async function deleteRecord(id) {
  * @returns {GoalRecord|null}
  */
 export function goalForDate(records, dateISO) {
-  return records.find(r => r.effectiveFrom <= dateISO) ?? null;
+  return records.find(record => record.effectiveFrom <= dateISO) ?? null;
 }
 
 // ── Pure helper functions ────────────────────────────────────────────────────
@@ -260,8 +260,8 @@ export function lerp(a, b, t) { return a + (b - a) * t; }
  * @param {number} edge0 @param {number} edge1 @param {number} x
  */
 export function smoothstep(edge0, edge1, x) {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
+  const normalized = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return normalized * normalized * (3 - 2 * normalized);
 }
 
 /**
@@ -285,7 +285,7 @@ export function controllerConfidence(loggedDays14) {
 export function shortError(errorsNewestFirst) {
   const days = errorsNewestFirst.slice(0, SHORT_WINDOW);
   if (days.length === 0) { return 0; }
-  return days.reduce((s, e) => s + e, 0) / days.length;
+  return days.reduce((sum, error) => sum + error, 0) / days.length;
 }
 
 /**
@@ -296,15 +296,16 @@ export function shortError(errorsNewestFirst) {
  * @param {number} halfLife
  */
 export function weightedAverageError(days, windowDays, halfLife) {
-  const subset = days.filter(d => d.ageDays < windowDays);
+  const subset = days.filter(day => day.ageDays < windowDays);
   if (subset.length === 0) { return 0; }
-  let sumW = 0, sumWE = 0;
-  for (const d of subset) {
-    const w = expWeight(d.ageDays, halfLife);
-    sumW  += w;
-    sumWE += w * d.error;
+  let weightSum = 0;
+  let weightedErrorSum = 0;
+  for (const day of subset) {
+    const weight = expWeight(day.ageDays, halfLife);
+    weightSum  += weight;
+    weightedErrorSum += weight * day.error;
   }
-  return sumW > 0 ? sumWE / sumW : 0;
+  return weightSum > 0 ? weightedErrorSum / weightSum : 0;
 }
 
 /**
@@ -333,9 +334,9 @@ export function combineErrors(shortErr, longErr, longConfidence = 1) {
  */
 export function overPersistence(days, baseGoalKcal) {
   void baseGoalKcal; // threshold is always 0 (over vs under goal)
-  const window = days.filter(d => d.ageDays < PERSISTENCE_WINDOW_DAYS);
+  const window = days.filter(day => day.ageDays < PERSISTENCE_WINDOW_DAYS);
   if (window.length === 0) { return 0; }
-  return window.filter(d => d.error > 0).length / window.length;
+  return window.filter(day => day.error > 0).length / window.length;
 }
 
 /**
@@ -395,16 +396,16 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
   /** @type {Array<{ageDays: number, error: number}>} */
   const loggedDays = [];
   for (let i = 0; i < LONG_WINDOW; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const iso = $.toISO(d);
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    const iso = $.toISO(date);
     if (iso in kcalByDay) {
       loggedDays.push({ ageDays: i, error: kcalByDay[iso] - baseGoalKcal });
     }
   }
 
-  const loggedDays7  = loggedDays.filter(d => d.ageDays < SHORT_WINDOW).length;
-  const loggedDays14 = loggedDays.filter(d => d.ageDays < PERSISTENCE_WINDOW_DAYS).length;
+  const loggedDays7  = loggedDays.filter(day => day.ageDays < SHORT_WINDOW).length;
+  const loggedDays14 = loggedDays.filter(day => day.ageDays < PERSISTENCE_WINDOW_DAYS).length;
   const loggedDays28 = loggedDays.length;
 
   // Gate: require at least MIN_LOGGED_7 recent days before issuing any adjustment.
@@ -422,7 +423,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
   // early streaks as uncertain rather than fully persistent.
   const confidence = controllerConfidence(loggedDays14);
 
-  const shortErr = shortError(loggedDays.filter(d => d.ageDays < SHORT_WINDOW).map(d => d.error));
+  const shortErr = shortError(loggedDays.filter(day => day.ageDays < SHORT_WINDOW).map(day => day.error));
   const longErr  = weightedAverageError(loggedDays, LONG_WINDOW, HALF_LIFE_DAYS);
 
   // Long signal fades in gradually; trust the short signal more until the
@@ -501,10 +502,10 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
   // meaningful. Small confidence-ramped adjustments (below the base deadband)
   // should not suppress the warn zone — the user's eating is still within normal
   // noise. This threshold matches isGoalClamped so both agree on "is it clamped".
-  const adjDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
-  const effectiveAdj = Math.abs(adjustment) >= adjDeadband ? adjustment : 0;
+  const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
+  const effectiveAdjustment = Math.abs(adjustment) >= adjustmentDeadband ? adjustment : 0;
 
-  if (effectiveAdj < 0) {
+  if (effectiveAdjustment < 0) {
     // Clamped below: idealToday is a ceiling — green only extends downward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
@@ -513,7 +514,7 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
     return 'bad';
   }
 
-  if (effectiveAdj > 0) {
+  if (effectiveAdjustment > 0) {
     // Clamped above: idealToday is a floor — green only extends upward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
@@ -645,13 +646,13 @@ export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = 
   let skipWarnZone = false;
 
   if (macroWin) {
-    const adj = macroWin.adjustment ?? 0;
-    status       = computeDayStatus(consumed, macroWin.target, macroWin.idealToday, adj);
+    const adjustment = macroWin.adjustment ?? 0;
+    status       = computeDayStatus(consumed, macroWin.target, macroWin.idealToday, adjustment);
     barTarget    = macroWin.idealToday;
     // Only suppress the warn zone when the adjustment is large enough to be
     // meaningful (same threshold as computeDayStatus uses for ceiling mode).
-    const adjDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
-    skipWarnZone = adj < -adjDeadband; // clamped below → ceiling → no warn zone above ideal
+    const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
+    skipWarnZone = adjustment < -adjustmentDeadband; // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
     status    = computeDayStatus(consumed, fallbackGoal, fallbackGoal, 0);
     barTarget = fallbackGoal;
@@ -683,11 +684,11 @@ export function derivedGrams(goals) {
  * @returns {'below' | 'above' | false}
  */
 export function isGoalClamped(macroWin, effectiveDays) {
-  const adj      = macroWin.adjustment ?? 0;
+  const adjustment = macroWin.adjustment ?? 0;
   const deadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
   if (macroWin.target === null || effectiveDays < MIN_LOGGED_7) { return false; }
-  if (adj < -deadband) { return 'below'; }
-  if (adj >  deadband) { return 'above'; }
+  if (adjustment < -deadband) { return 'below'; }
+  if (adjustment >  deadband) { return 'above'; }
   return false;
 }
 
@@ -702,40 +703,40 @@ export function isGoalClamped(macroWin, effectiveDays) {
  */
 export function recoveryDays(macroWin, effectiveDays, _direction) {
   if (macroWin.target === null || macroWin.target <= 0) { return 1; }
-  const adj      = macroWin.adjustment ?? 0;
+  const adjustment = macroWin.adjustment ?? 0;
   const deadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * macroWin.target);
-  if (Math.abs(adj) <= deadband) { return 0; }
+  if (Math.abs(adjustment) <= deadband) { return 0; }
   if (effectiveDays < MIN_LOGGED_7) { return 1; }
   // Solve for n: |adj| × 0.5^(n/HALF_LIFE) = deadband → n = HALF_LIFE × log2(|adj|/deadband)
-  return Math.max(1, Math.ceil(HALF_LIFE_DAYS * Math.log2(Math.abs(adj) / deadband)));
+  return Math.max(1, Math.ceil(HALF_LIFE_DAYS * Math.log2(Math.abs(adjustment) / deadband)));
 }
 
-/** @param {number} x @param {number} lo @param {number} hi */
-function clampN(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+/** @param {number} value @param {number} min @param {number} max */
+function clampN(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
 /**
  * @param {number} kcal
- * @param {{ proteinG: number, carbsG: number, fatG: number }} g
+ * @param {{ proteinG: number, carbsG: number, fatG: number }} grams
  * @returns {{ protein: number, carbs: number, fat: number }}
  */
-function gramsToShares(kcal, g) {
+function gramsToShares(kcal, grams) {
   return {
-    protein: (KCAL_PER_G_PROTEIN * g.proteinG) / kcal,
-    carbs:   (KCAL_PER_G_CARBS   * g.carbsG)   / kcal,
-    fat:     (KCAL_PER_G_FAT     * g.fatG)      / kcal,
+    protein: (KCAL_PER_G_PROTEIN * grams.proteinG) / kcal,
+    carbs:   (KCAL_PER_G_CARBS   * grams.carbsG)   / kcal,
+    fat:     (KCAL_PER_G_FAT     * grams.fatG)      / kcal,
   };
 }
 
 /**
  * @param {number} kcal
- * @param {{ protein: number, carbs: number, fat: number }} s
+ * @param {{ protein: number, carbs: number, fat: number }} shares
  * @returns {{ proteinG: number, carbsG: number, fatG: number }}
  */
-function sharesToGrams(kcal, s) {
+function sharesToGrams(kcal, shares) {
   return {
-    proteinG: (kcal * s.protein) / KCAL_PER_G_PROTEIN,
-    carbsG:   (kcal * s.carbs)   / KCAL_PER_G_CARBS,
-    fatG:     (kcal * s.fat)     / KCAL_PER_G_FAT,
+    proteinG: (kcal * shares.protein) / KCAL_PER_G_PROTEIN,
+    carbsG:   (kcal * shares.carbs)   / KCAL_PER_G_CARBS,
+    fatG:     (kcal * shares.fat)     / KCAL_PER_G_FAT,
   };
 }
 
@@ -764,33 +765,33 @@ function directionalAllowance(macro, ratio) {
 /**
  * Project a candidate macro-share split onto the simplex (p+c+f=1)
  * while respecting per-macro bounds. At most 5 passes (1–2 are typical).
- * @param {{ protein: number, carbs: number, fat: number }} x
+ * @param {{ protein: number, carbs: number, fat: number }} candidateShares
  * @param {{ protein: number, carbs: number, fat: number }} lower
  * @param {{ protein: number, carbs: number, fat: number }} upper
  * @returns {{ protein: number, carbs: number, fat: number }}
  */
-function projectToSimplex(x, lower, upper) {
-  const y = {
-    protein: clampN(x.protein, lower.protein, upper.protein),
-    carbs:   clampN(x.carbs,   lower.carbs,   upper.carbs),
-    fat:     clampN(x.fat,     lower.fat,     upper.fat),
+function projectToSimplex(candidateShares, lower, upper) {
+  const projected = {
+    protein: clampN(candidateShares.protein, lower.protein, upper.protein),
+    carbs:   clampN(candidateShares.carbs,   lower.carbs,   upper.carbs),
+    fat:     clampN(candidateShares.fat,     lower.fat,     upper.fat),
   };
   for (let i = 0; i < 5; i++) {
-    const total = y.protein + y.carbs + y.fat;
+    const total = projected.protein + projected.carbs + projected.fat;
     const diff  = 1 - total;
     if (Math.abs(diff) < 1e-6) { break; }
     const room = {
-      protein: diff > 0 ? upper.protein - y.protein : y.protein - lower.protein,
-      carbs:   diff > 0 ? upper.carbs   - y.carbs   : y.carbs   - lower.carbs,
-      fat:     diff > 0 ? upper.fat     - y.fat      : y.fat     - lower.fat,
+      protein: diff > 0 ? upper.protein - projected.protein : projected.protein - lower.protein,
+      carbs:   diff > 0 ? upper.carbs   - projected.carbs   : projected.carbs   - lower.carbs,
+      fat:     diff > 0 ? upper.fat     - projected.fat      : projected.fat     - lower.fat,
     };
     const totalRoom = room.protein + room.carbs + room.fat;
     if (totalRoom <= 1e-9) { break; }
-    y.protein += diff * (room.protein / totalRoom);
-    y.carbs   += diff * (room.carbs   / totalRoom);
-    y.fat     += diff * (room.fat     / totalRoom);
+    projected.protein += diff * (room.protein / totalRoom);
+    projected.carbs   += diff * (room.carbs   / totalRoom);
+    projected.fat     += diff * (room.fat     / totalRoom);
   }
-  return y;
+  return projected;
 }
 
 /**
@@ -907,38 +908,38 @@ export async function computeWindowVM(todayISO, goals) {
   if (!goals) { return null; }
 
   // Fetch 28-day range so the kcal controller has enough history.
-  const d28 = $.localDate(todayISO);
-  d28.setDate(d28.getDate() - (LONG_WINDOW - 1));
-  const from28ISO = $.toISO(d28);
+  const startDate28 = $.localDate(todayISO);
+  startDate28.setDate(startDate28.getDate() - (LONG_WINDOW - 1));
+  const from28ISO = $.toISO(startDate28);
 
   const meals = await Meals.listRange(from28ISO, todayISO);
 
   /** @type {Record<string, import('./db.js').Macros>} */
-  const byDay28 = {};
-  for (const m of meals) {
-    if (!byDay28[m.date]) { byDay28[m.date] = $.zeroMacros(); }
-    $.addScaledMacros(byDay28[m.date], m.foodSnapshot, m.multiplier);
+  const macrosByDay28 = {};
+  for (const meal of meals) {
+    if (!macrosByDay28[meal.date]) { macrosByDay28[meal.date] = $.zeroMacros(); }
+    $.addScaledMacros(macrosByDay28[meal.date], meal.foodSnapshot, meal.multiplier);
   }
 
   // The 7-day window drives windowDays, effectiveDays, prevSum, and the UI display.
-  const d7 = $.localDate(todayISO);
-  d7.setDate(d7.getDate() - (SHORT_WINDOW - 1));
-  const from7ISO = $.toISO(d7);
+  const startDate7 = $.localDate(todayISO);
+  startDate7.setDate(startDate7.getDate() - (SHORT_WINDOW - 1));
+  const from7ISO = $.toISO(startDate7);
 
   /** @type {Record<string, import('./db.js').Macros>} */
-  const byDay7 = {};
-  for (const [k, v] of Object.entries(byDay28)) {
-    if (k >= from7ISO) { byDay7[k] = v; }
+  const macrosByDay7 = {};
+  for (const [dateISO, macros] of Object.entries(macrosByDay28)) {
+    if (dateISO >= from7ISO) { macrosByDay7[dateISO] = macros; }
   }
 
-  const dayKeys7   = Object.keys(byDay7);
+  const dayKeys7   = Object.keys(macrosByDay7);
   const windowDays = dayKeys7.length;
   if (windowDays === 0) { return null; }
 
   // Build kcalByDay for the controller from the full 28-day set.
   /** @type {Record<string, number>} */
   const kcalByDay28 = {};
-  for (const [k, v] of Object.entries(byDay28)) { kcalByDay28[k] = v.kcal; }
+  for (const [dateISO, macros] of Object.entries(macrosByDay28)) { kcalByDay28[dateISO] = macros.kcal; }
 
   const { adjustedGoalKcal, adjustment, gated } = computeKcalAdjustment(
     kcalByDay28, todayISO, goals.kcal, deriveMode(goals),
@@ -946,14 +947,14 @@ export async function computeWindowVM(todayISO, goals) {
   const calIdeal = adjustedGoalKcal;
 
   // prevSum uses only the 7-day window so macro directional allowances are unchanged.
-  const todayMacros = byDay28[todayISO] ?? $.zeroMacros();
+  const todayMacros = macrosByDay28[todayISO] ?? $.zeroMacros();
   const prevSum     = $.zeroMacros();
-  for (const k of dayKeys7) {
-    if (k !== todayISO) { $.addScaledMacros(prevSum, byDay7[k], 1); }
+  for (const dateISO of dayKeys7) {
+    if (dateISO !== todayISO) { $.addScaledMacros(prevSum, macrosByDay7[dateISO], 1); }
   }
 
-  const g = derivedGrams(goals);
-  const todayLogged   = todayISO in byDay7;
+  const gramGoals = derivedGrams(goals);
+  const todayLogged   = todayISO in macrosByDay7;
   const effectiveDays = todayLogged ? windowDays : windowDays + 1;
 
   // When the completeness gate fired, history is too sparse to trust macro signals
@@ -962,7 +963,7 @@ export async function computeWindowVM(todayISO, goals) {
   const { protIdeal, carbIdeal, fatIdeal } = reconcileMacroIdeals({
     kcalIdeal: calIdeal,
     goals,
-    derivedG: g,
+    derivedG: gramGoals,
     prevSum: gated ? $.zeroMacros() : prevSum,
     effectiveDays: gated ? 1 : effectiveDays,
   });
@@ -975,8 +976,8 @@ export async function computeWindowVM(todayISO, goals) {
     windowDays,
     effectiveDays,
     calories: { target: goals.kcal, status: statusFn(todayMacros.kcal,  goals.kcal, calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
-    protein:  { target: g.protG,    status: statusFn(todayMacros.prot,  g.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment },
-    carbs:    { target: g.carbsG,   status: statusFn(todayMacros.carbs, g.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment },
-    fat:      { target: g.fatG,     status: statusFn(todayMacros.fats,  g.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment },
+    protein:  { target: gramGoals.protG,    status: statusFn(todayMacros.prot,  gramGoals.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment },
+    carbs:    { target: gramGoals.carbsG,   status: statusFn(todayMacros.carbs, gramGoals.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment },
+    fat:      { target: gramGoals.fatG,     status: statusFn(todayMacros.fats,  gramGoals.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment },
   };
 }

@@ -228,9 +228,9 @@ export const importDB = async (data) => {
     throw new Error('Invalid backup file format.');
   }
   await resetDB();
-  for (const f of data.foods) { await put('foods', f); }
-  for (const m of data.meals) { await put('meals', m); }
-  for (const g of data.goals) { await put('goals', g); }
+  for (const food of data.foods) { await put('foods', food); }
+  for (const meal of data.meals) { await put('meals', meal); }
+  for (const goal of data.goals) { await put('goals', goal); }
 };
 
 // Expose a minimal test API on window (safe for this offline PWA).
@@ -242,13 +242,13 @@ export const importDB = async (data) => {
    * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number}>} meals
    */
   insertMeals: async (meals) => {
-    for (const m of meals) {
+    for (const meal of meals) {
       await put('meals', {
         foodId: 'food:0',
         foodSnapshot: { id: 'food:0', name: 'Test Food', refLabel: '100g',
-          kcal: m.kcal, prot: m.prot, carbs: m.carbs, fats: m.fats, updatedAt: 0 },
-        multiplier: m.multiplier ?? 1,
-        date: m.date,
+          kcal: meal.kcal, prot: meal.prot, carbs: meal.carbs, fats: meal.fats, updatedAt: 0 },
+        multiplier: meal.multiplier ?? 1,
+        date: meal.date,
         updatedAt: 0,
       });
     }
@@ -258,8 +258,8 @@ export const importDB = async (data) => {
    * @param {Array<Partial<Food>>} foods
    */
   insertFoods: async (foods) => {
-    for (const f of foods) {
-      await put('foods', f);
+    for (const food of foods) {
+      await put('foods', food);
     }
   },
   /**
@@ -267,8 +267,8 @@ export const importDB = async (data) => {
    * @param {Array<Partial<GoalRecord>>} goals
    */
   insertGoals: async (goals) => {
-    for (const g of goals) {
-      await put('goals', g);
+    for (const goal of goals) {
+      await put('goals', goal);
     }
   },
 };

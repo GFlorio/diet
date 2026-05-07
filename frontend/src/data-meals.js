@@ -45,8 +45,8 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listByDate(dateISO) {
-    const xs = await db.getAll('meals', { from: dateISO, to: dateISO });
-    return xs.sort((a, b) => a.id.localeCompare(b.id));
+    const meals = await db.getAll('meals', { from: dateISO, to: dateISO });
+    return meals.sort((leftMeal, rightMeal) => leftMeal.id.localeCompare(rightMeal.id));
   },
   /**
    * Lists meals within an inclusive date range.
@@ -56,8 +56,10 @@ export const Meals = {
    * @returns {Promise<Meal[]>}
    */
   async listRange(fromISO, toISO) {
-    const xs = await db.getAll('meals', { from: fromISO, to: toISO });
-    return xs.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    const meals = await db.getAll('meals', { from: fromISO, to: toISO });
+    return meals.sort((leftMeal, rightMeal) =>
+      leftMeal.date.localeCompare(rightMeal.date) || leftMeal.id.localeCompare(rightMeal.id)
+    );
   },
   /**
    * Computes frecency scores for foods based on meal history in [sinceISO, todayISO].
@@ -85,14 +87,14 @@ export const Meals = {
    * @returns {Promise<Meal>}
    */
   async create({ food, multiplier, date }) {
-    const t = $.now();
+    const timestamp = $.now();
     /** @type {Partial<Meal>} */
     const meal = {
       foodId: food.id,
       foodSnapshot: snapshotFromFood(food),
       multiplier,
       date,
-      updatedAt: t,
+      updatedAt: timestamp,
     };
     const id = await db.put('meals', meal);
     meal.id = id;
@@ -120,8 +122,8 @@ export const Meals = {
    * @returns {Promise<boolean>}
    */
   async hasForFood(foodId) {
-    const xs = await db.getWhere('meals', (m) => m.foodId === foodId);
-    return xs.length > 0;
+    const meals = await db.getWhere('meals', (meal) => meal.foodId === foodId);
+    return meals.length > 0;
   },
   /**
    * Syncs all meals for a given foodId to the latest Food snapshot.
@@ -131,8 +133,8 @@ export const Meals = {
   async syncAllForFood(foodId) {
     const food = await db.get('foods', foodId);
     if (!food) { return 0; }
-    const meals = await db.getWhere('meals', (m) => m.foodId === foodId);
-    let n = 0;
+    const meals = await db.getWhere('meals', (meal) => meal.foodId === foodId);
+    let updatedCount = 0;
     for (const meal of meals) {
       const next = /** @type {Meal} */ ({
         ...meal,
@@ -140,8 +142,8 @@ export const Meals = {
         updatedAt: $.now(),
       });
       await db.put('meals', next);
-      n++;
+      updatedCount++;
     }
-    return n;
+    return updatedCount;
   },
 };

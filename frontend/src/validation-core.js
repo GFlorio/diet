@@ -19,9 +19,9 @@ class ValidationError extends Error {
   }
 }
 
-/** @param {unknown} cond @param {string} msg @param {string[]=} fields */
-function assert(cond, msg, fields){
-  if (!cond) {throw new ValidationError(msg, fields);}
+/** @param {unknown} condition @param {string} message @param {string[]=} fields */
+function assert(condition, message, fields){
+  if (!condition) {throw new ValidationError(message, fields);}
 }
 
 /**
@@ -37,7 +37,7 @@ function collectFieldsFromError(err, into, fallbackField){
     Array.isArray((/** @type {any} */ (err)).fields) &&
     /** @type {any} */ (err).fields.length
   ) {
-    /** @type {{ fields: string[] }} */ (err).fields.forEach((f) => { into.add(f); });
+    /** @type {{ fields: string[] }} */ (err).fields.forEach((field) => { into.add(field); });
   } else {
     into.add(fallbackField);
   }
@@ -55,25 +55,25 @@ function validateAndCollect(validators, message = 'Invalid fields'){
   /** @type {Record<string, any>} */
   const result = {};
   /** @type {Set<string>} */
-  const bad = new Set();
-  for (const [key, fn] of Object.entries(validators)) {
+  const invalidFields = new Set();
+  for (const [key, validator] of Object.entries(validators)) {
     try {
-      const value = fn();
+      const value = validator();
       if (value !== undefined) { result[key] = value; }
     } catch (err) {
-      collectFieldsFromError(err, bad, key);
+      collectFieldsFromError(err, invalidFields, key);
     }
   }
-  if (bad.size) { throw new ValidationError(message, Array.from(bad)); }
+  if (invalidFields.size) { throw new ValidationError(message, Array.from(invalidFields)); }
   return result;
 }
 
 /**
  * Returns true if value is a plain object (not an array).
- * @param {unknown} v
- * @returns {v is Record<string, unknown>}
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
  */
-function isObject(v){ return typeof v === 'object' && v !== null && !Array.isArray(v); }
+function isObject(value){ return typeof value === 'object' && value !== null && !Array.isArray(value); }
 
 /**
  * Sanitize a string input.
@@ -84,12 +84,12 @@ function isObject(v){ return typeof v === 'object' && v !== null && !Array.isArr
 function string(val, opts){
   const { minLen = 1, maxLen = 200, pattern, trim = true } = opts || {};
   assert(typeof val === 'string', 'Expected string');
-  const s = /** @type {string} */ (val);
-  const out = trim ? s.trim() : s;
-  assert(out.length >= minLen, `String too short (min ${minLen})`);
-  assert(out.length <= maxLen, `String too long (max ${maxLen})`);
-  if (pattern) { assert(pattern.test(out), 'String does not match required pattern'); }
-  return out;
+  const rawString = /** @type {string} */ (val);
+  const normalized = trim ? rawString.trim() : rawString;
+  assert(normalized.length >= minLen, `String too short (min ${minLen})`);
+  assert(normalized.length <= maxLen, `String too long (max ${maxLen})`);
+  if (pattern) { assert(pattern.test(normalized), 'String does not match required pattern'); }
+  return normalized;
 }
 
 /**
@@ -104,26 +104,26 @@ function number(val, opts){
     max = Number.POSITIVE_INFINITY,
     integer = false,
   } = opts || {};
-  let n;
+  let parsedNumber;
   if (typeof val === 'number') {
-    n = val;
+    parsedNumber = val;
   } else if (typeof val === 'string') {
-    let s = val.trim();
-    const ok = /^[+-]?\d+(?:[.,]\d+)?$/.test(s);
-    assert(ok, 'Expected a finite number');
-    if (s.includes(',')) { s = s.replace(',', '.'); }
-    n = Number(s);
+    let normalized = val.trim();
+    const hasNumericFormat = /^[+-]?\d+(?:[.,]\d+)?$/.test(normalized);
+    assert(hasNumericFormat, 'Expected a finite number');
+    if (normalized.includes(',')) { normalized = normalized.replace(',', '.'); }
+    parsedNumber = Number(normalized);
   } else {
-    n = NaN;
+    parsedNumber = NaN;
   }
-  assert(Number.isFinite(n), 'Expected a finite number');
-  assert(n >= min, `Number below min (${min})`);
-  assert(n <= max, `Number above max (${max})`);
+  assert(Number.isFinite(parsedNumber), 'Expected a finite number');
+  assert(parsedNumber >= min, `Number below min (${min})`);
+  assert(parsedNumber <= max, `Number above max (${max})`);
   if (integer) {
-    assert(Number.isInteger(n), 'Expected an integer');
-    return n;
+    assert(Number.isInteger(parsedNumber), 'Expected an integer');
+    return parsedNumber;
   }
-  return Number(n.toFixed(1));
+  return Number(parsedNumber.toFixed(1));
 }
 
 /**
@@ -134,9 +134,9 @@ function number(val, opts){
 function boolean(val){
   if (typeof val === 'boolean') { return val; }
   if (typeof val === 'string') {
-    const s = val.trim().toLowerCase();
-    assert(s === 'true' || s === 'false', 'Expected "true" or "false"');
-    return s === 'true';
+    const normalized = val.trim().toLowerCase();
+    assert(normalized === 'true' || normalized === 'false', 'Expected "true" or "false"');
+    return normalized === 'true';
   }
   if (typeof val === 'number') {
     assert(val === 0 || val === 1, 'Expected 0 or 1 for boolean');
@@ -160,8 +160,8 @@ function isoDate(val){
     throw new ValidationError('Expected date string or Date');
   }
   assert(/^\d{4}-\d{2}-\d{2}$/.test(iso), 'Invalid date format, expected YYYY-MM-DD');
-  const d = new Date(`${iso}T00:00:00Z`);
-  assert(!Number.isNaN(d.getTime()), 'Invalid date');
+  const date = new Date(`${iso}T00:00:00Z`);
+  assert(!Number.isNaN(date.getTime()), 'Invalid date');
   return iso;
 }
 

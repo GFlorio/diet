@@ -48,7 +48,7 @@ export function setupMeals(){
     mealsUiState.mode = mode;
   }
 
-  let curDate = $.isoToday();
+  let currentDate = $.isoToday();
   /** @type {Meal[]} */
   let currentMeals = [];
   /** @type {GoalsType | null} */
@@ -58,38 +58,38 @@ export function setupMeals(){
 
   /**
    * Format ISO date (YYYY-MM-DD) to human-friendly short form (e.g., "Oct 30").
-   * @param {string} iso
+   * @param {string} isoDate
    * @returns {string}
    */
-  function fmtHuman(iso){
-    return $.localDate(iso).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  function fmtHuman(isoDate){
+    return $.localDate(isoDate).toLocaleDateString(undefined, { month:'short', day:'numeric' });
   }
 
   function updateHeader(){
-    dayLabel.dataset.iso  = curDate;
-    dayLabel.textContent  = fmtHuman(curDate);
-    const d    = $.localDate(curDate);
-    const prev = new Date(d); prev.setDate(d.getDate()-1);
-    const next = new Date(d); next.setDate(d.getDate()+1);
-    prevDayBox.textContent = fmtHuman($.toISO(prev));
-    nextDayBox.textContent = fmtHuman($.toISO(next));
+    dayLabel.dataset.iso  = currentDate;
+    dayLabel.textContent  = fmtHuman(currentDate);
+    const date = $.localDate(currentDate);
+    const previousDate = new Date(date); previousDate.setDate(date.getDate()-1);
+    const nextDate = new Date(date); nextDate.setDate(date.getDate()+1);
+    prevDayBox.textContent = fmtHuman($.toISO(previousDate));
+    nextDayBox.textContent = fmtHuman($.toISO(nextDate));
   }
   updateHeader();
 
   /**
    * @param {number} delta
    */
-  /** @param {'dateSlideLeft'|'dateSlideRight'} cls */
-  function animateDateChange(cls){
+  /** @param {'dateSlideLeft'|'dateSlideRight'} animationClass */
+  function animateDateChange(animationClass){
     const animEls = [daysHeader, dayTotals, quickAddCard, mealsCard];
-    animEls.forEach(el => { el?.classList.add(cls); });
-    setTimeout(()=> animEls.forEach(el => { el?.classList.remove(cls); }), SWIPE_ANIM_MS);
+    animEls.forEach(element => { element?.classList.add(animationClass); });
+    setTimeout(()=> animEls.forEach(element => { element?.classList.remove(animationClass); }), SWIPE_ANIM_MS);
   }
 
   function shiftDate(/** @type {number} */ delta){
-    const d = $.localDate(curDate);
-    d.setDate(d.getDate() + delta);
-    curDate = $.toISO(d);
+    const date = $.localDate(currentDate);
+    date.setDate(date.getDate() + delta);
+    currentDate = $.toISO(date);
     updateHeader();
     void renderMeals();
     updateTodayBtn();
@@ -117,18 +117,18 @@ export function setupMeals(){
 
   function updateTodayBtn(){
     const onMeals = !mealsPage.classList.contains('hidden');
-    const isToday = curDate === $.isoToday();
+    const isToday = currentDate === $.isoToday();
     todayFab.classList.toggle('today-fab--visible', onMeals && !isToday);
   }
 
   todayFab.addEventListener('click', () => {
     const today = $.isoToday();
-    const cls = curDate < today ? 'dateSlideLeft' : 'dateSlideRight';
-    curDate = today;
+    const animationClass = currentDate < today ? 'dateSlideLeft' : 'dateSlideRight';
+    currentDate = today;
     updateHeader();
     void renderMeals();
     updateTodayBtn();
-    animateDateChange(cls);
+    animateDateChange(animationClass);
   });
 
   new MutationObserver(updateTodayBtn).observe(mealsPage, { attributeFilter: ['class'] });
@@ -139,39 +139,39 @@ export function setupMeals(){
   /**
    * Build quantity-adjusted macro contribution line HTML.
    * Each segment is colored: green up to 5% over goal, yellow up to 10%, red beyond.
-   * @param {import('../data.js').Food} f
-   * @param {number} qty
+   * @param {import('../data.js').Food} food
+   * @param {number} quantity
    * @param {Macros} totals
    * @returns {string}
    */
-  function macroContribHtml(f, qty, totals){
-    const dKcal  = f.kcal  * qty;
-    const dProt  = f.prot  * qty;
-    const dCarbs = f.carbs * qty;
-    const dFats  = f.fats  * qty;
-    const g = currentGoals ? Goals.derivedGrams(currentGoals) : null;
+  function macroContribHtml(food, quantity, totals){
+    const kcalDelta  = food.kcal  * quantity;
+    const protDelta  = food.prot  * quantity;
+    const carbsDelta = food.carbs * quantity;
+    const fatsDelta  = food.fats  * quantity;
+    const gramGoals = currentGoals ? Goals.derivedGrams(currentGoals) : null;
 
-    const wvm = currentWindowVM;
-    const ed  = wvm?.effectiveDays ?? 1;
+    const windowViewModel = currentWindowVM;
+    const effectiveDays  = windowViewModel?.effectiveDays ?? 1;
 
-    const kcalSt  = Goals.macroVisuals(totals.kcal + dKcal,  wvm?.calories, ed, currentGoals?.kcal ?? null).status;
-    const protSt  = Goals.macroVisuals(totals.prot + dProt,   wvm?.protein,  ed, g?.protG ?? null).status;
-    const carbsSt = Goals.macroVisuals(totals.carbs + dCarbs,  wvm?.carbs,    ed, g?.carbsG ?? null).status;
-    const fatSt   = Goals.macroVisuals(totals.fats + dFats,    wvm?.fat,      ed, g?.fatG ?? null).status;
+    const kcalStatus  = Goals.macroVisuals(totals.kcal + kcalDelta,  windowViewModel?.calories, effectiveDays, currentGoals?.kcal ?? null).status;
+    const protStatus  = Goals.macroVisuals(totals.prot + protDelta,   windowViewModel?.protein,  effectiveDays, gramGoals?.protG ?? null).status;
+    const carbsStatus = Goals.macroVisuals(totals.carbs + carbsDelta,  windowViewModel?.carbs,    effectiveDays, gramGoals?.carbsG ?? null).status;
+    const fatStatus   = Goals.macroVisuals(totals.fats + fatsDelta,    windowViewModel?.fat,      effectiveDays, gramGoals?.fatG ?? null).status;
 
-    /** @param {number} v @param {string} unit @param {string} st @returns {string} */
-    const seg = (v, unit, st) => {
-      const text = `+${$.fmtNum(v, 0)}${unit}`;
-      return st === 'none'
+    /** @param {number} value @param {string} unit @param {string} status @returns {string} */
+    const segmentHtml = (value, unit, status) => {
+      const text = `+${$.fmtNum(value, 0)}${unit}`;
+      return status === 'none'
         ? `<span>${text}</span>`
-        : `<span class="status-${st}">${text}</span>`;
+        : `<span class="status-${status}">${text}</span>`;
     };
 
     return [
-      seg(dKcal, ' kcal', kcalSt),
-      seg(dProt, ' g protein', protSt),
-      seg(dCarbs, ' g carbs', carbsSt),
-      seg(dFats, ' g fat', fatSt),
+      segmentHtml(kcalDelta, ' kcal', kcalStatus),
+      segmentHtml(protDelta, ' g protein', protStatus),
+      segmentHtml(carbsDelta, ' g carbs', carbsStatus),
+      segmentHtml(fatsDelta, ' g fat', fatStatus),
     ].join('');
   }
 
@@ -179,13 +179,13 @@ export function setupMeals(){
    * Render the quick-add food search results (limited to 3 foods).
    */
   async function renderQuickList(){
-    const q        = quickSearch.value.trim();
+    const query = quickSearch.value.trim();
     const todayISO = $.isoToday();
     const sinceDate = $.localDate(todayISO);
     sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
     const sinceISO = $.toISO(sinceDate);
     const scores   = await Meals.frecencyScores(sinceISO, todayISO);
-    const foods    = await Foods.list({ search: q, status: 'active', scores });
+    const foods    = await Foods.list({ search: query, status: 'active', scores });
     const totals   = computeTotals(currentMeals);
 
     quickList.innerHTML = foods.slice(0, QUICK_LIST_LIMIT).map(f => `
@@ -209,7 +209,7 @@ export function setupMeals(){
     const createLink = document.getElementById('quickNew');
     if (createLink) {
       $.html(createLink).addEventListener('click', (e) => {
-        e.preventDefault(); goFoodsWithPrefill(q);
+        e.preventDefault(); goFoodsWithPrefill(query);
       });
     }
 
@@ -218,12 +218,12 @@ export function setupMeals(){
       const itemEl = /** @type {HTMLElement} */ (el);
       const food = foods.find(f => String(f.id) === itemEl.dataset.id);
       if (!food) {return;}
-      const qtyInput = /** @type {HTMLInputElement|null} */ (itemEl.querySelector('.qty'));
+      const quantityInput = /** @type {HTMLInputElement|null} */ (itemEl.querySelector('.qty'));
       const macrosDiv = itemEl.querySelector('.food-card-macros');
-      if (!qtyInput || !macrosDiv) {return;}
-      qtyInput.addEventListener('input', () => {
-        const qty = Math.max(0, Number(qtyInput.value) || 0);
-        macrosDiv.innerHTML = macroContribHtml(food, qty, totals);
+      if (!quantityInput || !macrosDiv) {return;}
+      quantityInput.addEventListener('input', () => {
+        const quantity = Math.max(0, Number(quantityInput.value) || 0);
+        macrosDiv.innerHTML = macroContribHtml(food, quantity, totals);
       });
     });
   }
@@ -305,17 +305,17 @@ export function setupMeals(){
       }
     }
     if (e.key === 'Tab') {
-      const qtys = /** @type {NodeListOf<HTMLInputElement>} */ (quickList.querySelectorAll('.qty'));
-      const idx  = Array.prototype.indexOf.call(qtys, target);
-      if (!e.shiftKey && idx < qtys.length - 1) {
-        qtys[idx + 1].focus();
-        qtys[idx + 1].select(); e.preventDefault();
-      } else if (!e.shiftKey && idx === qtys.length - 1) {
+      const quantityInputs = /** @type {NodeListOf<HTMLInputElement>} */ (quickList.querySelectorAll('.qty'));
+      const inputIndex  = Array.prototype.indexOf.call(quantityInputs, target);
+      if (!e.shiftKey && inputIndex < quantityInputs.length - 1) {
+        quantityInputs[inputIndex + 1].focus();
+        quantityInputs[inputIndex + 1].select(); e.preventDefault();
+      } else if (!e.shiftKey && inputIndex === quantityInputs.length - 1) {
         setMealsMode('overview');
-      } else if (e.shiftKey && idx > 0) {
-        qtys[idx - 1].focus();
-        qtys[idx - 1].select(); e.preventDefault();
-      } else if (e.shiftKey && idx === 0) {
+      } else if (e.shiftKey && inputIndex > 0) {
+        quantityInputs[inputIndex - 1].focus();
+        quantityInputs[inputIndex - 1].select(); e.preventDefault();
+      } else if (e.shiftKey && inputIndex === 0) {
         quickSearch.focus(); e.preventDefault();
       }
     }
@@ -349,15 +349,15 @@ export function setupMeals(){
     const id      = itemEl.dataset.id;
     if (!id) { return; }
     // Read qty synchronously before any await so the value isn't stale after a re-render.
-    const qtyEl = $.input(item.querySelector('.qty'));
+    const quantityEl = $.input(item.querySelector('.qty'));
     if (target.classList.contains('add')) {
-      let qty;
+      let quantity;
       try {
-        qty = V.number(qtyEl.value || '0', { min: 0, max: 100 });
-        if (qty <= 0) { throw new Error(); }
+        quantity = V.number(quantityEl.value || '0', { min: 0, max: 100 });
+        if (quantity <= 0) { throw new Error(); }
       } catch {
-        qtyEl.classList.add('error');
-        qtyEl.addEventListener('input', () => qtyEl.classList.remove('error'), { once: true });
+        quantityEl.classList.add('error');
+        quantityEl.addEventListener('input', () => quantityEl.classList.remove('error'), { once: true });
         return;
       }
       const food = await Foods.byId(id);
@@ -367,8 +367,8 @@ export function setupMeals(){
         return;
       }
       await $.withConfirm($.button(target), async () => {
-        await Meals.create(V.mealCreate({ food, multiplier: qty, date: curDate }));
-        qtyEl.value = '1';
+        await Meals.create(V.mealCreate({ food, multiplier: quantity, date: currentDate }));
+        quantityEl.value = '1';
         quickSearch.value = '';
         await renderMeals(true);
         quickSearch.focus();
@@ -382,13 +382,13 @@ export function setupMeals(){
       return;
     }
     if (target.classList.contains('add1')) {
-      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 1)));
-      qtyEl.dispatchEvent(new Event('input'));
+      quantityEl.value = String(V.number((Number(quantityEl.value || '0') + 1)));
+      quantityEl.dispatchEvent(new Event('input'));
       quickSearch.focus(); return;
     }
     if (target.classList.contains('add05')) {
-      qtyEl.value = String(V.number((Number(qtyEl.value || '0') + 0.5)));
-      qtyEl.dispatchEvent(new Event('input'));
+      quantityEl.value = String(V.number((Number(quantityEl.value || '0') + 0.5)));
+      quantityEl.dispatchEvent(new Event('input'));
       quickSearch.focus(); return;
     }
     if (target.classList.contains('food-link')) {
@@ -402,7 +402,7 @@ export function setupMeals(){
    */
   function computeTotals(meals){
     const total = $.zeroMacros();
-    for (const m of meals) { $.addScaledMacros(total, m.foodSnapshot, m.multiplier); }
+    for (const meal of meals) { $.addScaledMacros(total, meal.foodSnapshot, meal.multiplier); }
     return total;
   }
 
@@ -422,7 +422,7 @@ export function setupMeals(){
         fat:      stub(totals.fats),
       };
     }
-    const g = Goals.derivedGrams(currentGoals);
+    const gramGoals = Goals.derivedGrams(currentGoals);
     /** @param {number} consumed @param {number} target @returns {MacroVM} */
     const macro = (consumed, target) => ({
       consumed,
@@ -432,9 +432,9 @@ export function setupMeals(){
     });
     return {
       calories: macro(totals.kcal, currentGoals.kcal),
-      protein:  macro(totals.prot, g.protG),
-      carbs:    macro(totals.carbs, g.carbsG),
-      fat:      macro(totals.fats, g.fatG),
+      protein:  macro(totals.prot, gramGoals.protG),
+      carbs:    macro(totals.carbs, gramGoals.carbsG),
+      fat:      macro(totals.fats, gramGoals.fatG),
     };
   }
 
@@ -443,9 +443,9 @@ export function setupMeals(){
    * @param {Macros} totals
    */
   function renderDayInfo(totals){
-    const vm   = buildTotalsViewModel(totals);
-    const wvm  = currentWindowVM;
-    const avgMode = mealsUiState.summaryMode === 'average' && wvm !== null && currentGoals !== null;
+    const totalsViewModel = buildTotalsViewModel(totals);
+    const windowViewModel = currentWindowVM;
+    const avgMode = mealsUiState.summaryMode === 'average' && windowViewModel !== null && currentGoals !== null;
 
     /** @param {number} delta @param {'kcal'|'g'} unit @returns {string} */
     const deltaStr = (delta, unit) => delta >= 0
@@ -457,223 +457,220 @@ export function setupMeals(){
       ? `${$.fmtNum(delta, 0)} ${unit} under`
       : `${$.fmtNum(Math.abs(delta), 0)} ${unit} over`;
 
-    const ed = wvm?.effectiveDays ?? 1;
-    const avgDivisor = wvm ? Math.max(1, wvm.windowDays) : 1;
+    const effectiveDays = windowViewModel?.effectiveDays ?? 1;
+    const avgDivisor = windowViewModel ? Math.max(1, windowViewModel.windowDays) : 1;
 
     /**
      * Render a multi-segment progress bar from pre-computed bar segments.
-     * @param {{ basePct: number, warnPct: number, badPct: number }} seg
+     * @param {{ basePct: number, warnPct: number, badPct: number }} segments
      * @param {'none'|'low'|'ok'|'warn'|'bad'} status
+     * @param {{ root: string, fill: string, low: string, ok: string, warn: string, bad: string }} classes
      * @returns {string}
      */
-    const barHtml = (seg, status) => {
-      const baseClass = status === 'low' ? 'macro-bar-low' : 'macro-bar-ok';
-      return `<div class="macro-bar">`
-        + `<div class="macro-bar-fill ${baseClass}" style="width:${seg.basePct}%"></div>`
-        + (seg.warnPct > 0 ? `<div class="macro-bar-fill macro-bar-warn" style="width:${seg.warnPct}%"></div>` : '')
-        + (seg.badPct > 0 ? `<div class="macro-bar-fill macro-bar-bad" style="width:${seg.badPct}%"></div>` : '')
+    const progressBarHtml = (segments, status, classes) => {
+      const baseClass = status === 'low' ? classes.low : classes.ok;
+      /** @param {string} className @param {number} percent @returns {string} */
+      const fill = (className, percent) => percent > 0
+        ? `<div class="${classes.fill} ${className}" style="width:${percent}%"></div>`
+        : '';
+      return `<div class="${classes.root}">`
+        + fill(baseClass, segments.basePct)
+        + fill(classes.warn, segments.warnPct)
+        + fill(classes.bad, segments.badPct)
         + `</div>`;
     };
+
+    const macroBarClasses = {
+      root: 'macro-bar',
+      fill: 'macro-bar-fill',
+      low:  'macro-bar-low',
+      ok:   'macro-bar-ok',
+      warn: 'macro-bar-warn',
+      bad:  'macro-bar-bad',
+    };
+    const heroBarClasses = {
+      root: 'summary-hero-bar',
+      fill: 'summary-hero-bar-fill',
+      low:  'low',
+      ok:   'ok',
+      warn: 'warn',
+      bad:  'bad',
+    };
+
+    /** @param {{ basePct: number, warnPct: number, badPct: number }} segments @param {'none'|'low'|'ok'|'warn'|'bad'} status @returns {string} */
+    const barHtml = (segments, status) => progressBarHtml(segments, status, macroBarClasses);
 
     /**
-     * Render a hero-sized progress bar from pre-computed bar segments.
-     * @param {{ basePct: number, warnPct: number, badPct: number }} seg
-     * @param {'none'|'low'|'ok'|'warn'|'bad'} status
+     * @param {string} label
+     * @param {import('../data-goals.js').MacroWindow | null | undefined} macroWin
+     * @param {string} [extraClass]
      * @returns {string}
      */
-    const heroBarHtml = (seg, status) => {
-      const baseClass = status === 'low' ? 'low' : 'ok';
-      return `<div class="summary-hero-bar">`
-        + `<div class="summary-hero-bar-fill ${baseClass}" style="width:${seg.basePct}%"></div>`
-        + (seg.warnPct > 0 ? `<div class="summary-hero-bar-fill warn" style="width:${seg.warnPct}%"></div>` : '')
-        + (seg.badPct > 0 ? `<div class="summary-hero-bar-fill bad" style="width:${seg.badPct}%"></div>` : '')
-        + `</div>`;
-    };
-
-    // --- Hero section ---
-    const heroClampHtml = (() => {
-      if (!wvm) { return ''; }
-      const clamped = Goals.isGoalClamped(wvm.calories, wvm.effectiveDays);
+    const clampHtml = (label, macroWin, extraClass = '') => {
+      if (!windowViewModel || !macroWin) { return ''; }
+      const clamped = Goals.isGoalClamped(macroWin, windowViewModel.effectiveDays);
       if (!clamped) { return ''; }
-      const n   = Goals.recoveryDays(wvm.calories, wvm.effectiveDays, clamped);
-      const dir = clamped === 'below' ? 'over' : 'under';
-      const adj = clamped === 'below' ? 'reduced' : 'increased';
-      return `<span class="macro-clamp-wrap summary-hero-clamp">
+      const recoveryDays = Goals.recoveryDays(macroWin, windowViewModel.effectiveDays, clamped);
+      const direction = clamped === 'below' ? 'over' : 'under';
+      const adjustmentText = clamped === 'below' ? 'reduced' : 'increased';
+      const classes = `macro-clamp-wrap${extraClass ? ` ${extraClass}` : ''}`;
+      return `<span class="${classes}">
           <button class="macro-clamp-btn" type="button" aria-label="Recovery mode">${recoveryIcon}</button>
           <div class="macro-clamp-tooltip" role="tooltip">
             <strong>Recovery mode</strong><br>
-            Your daily calorie target has been ${adj} to compensate for recent
-            ${dir}-consumption. Adjusted target applies for ~${n} more day${n !== 1 ? 's' : ''}.
+            Your daily ${label.toLowerCase()} target has been ${adjustmentText} to compensate for recent
+            ${direction}-consumption. Adjusted target applies for ~${recoveryDays} more day${recoveryDays !== 1 ? 's' : ''}.
           </div>
         </span>`;
-    })();
-    let heroValueHtml;
-    let heroExtras = '';
-    const heroLabel = 'Calories';
+    };
 
-    if (avgMode && wvm && currentGoals) {
-      const avgKcal = (wvm.calories.prevSum + vm.calories.consumed) / avgDivisor;
-      const calVis  = Goals.macroVisuals(avgKcal, null, 1, currentGoals.kcal);
-      const delta   = currentGoals.kcal - avgKcal;
-      heroValueHtml = `
-        <div class="summary-hero-value status-${calVis.status}">
-          ${heroClampHtml}
-          <span class="num">${$.fmtNum(avgKcal, 0)}</span>
-          <span class="unit">kcal</span>
-        </div>`;
-      heroExtras = `
-        <div class="summary-hero-subtext status-${calVis.status}">${avgDeltaStr(delta, 'kcal')}</div>
-        ${heroBarHtml(calVis.bar, calVis.status)}`;
-    } else if (wvm) {
-      const calVis   = Goals.macroVisuals(vm.calories.consumed, wvm.calories, ed);
-      const calDelta = wvm.calories.idealToday - vm.calories.consumed;
-      heroValueHtml = `
-        <div class="summary-hero-value status-${calVis.status}">
-          ${heroClampHtml}
-          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
-          <span class="unit">kcal</span>
-        </div>`;
-      heroExtras = `
-        <div class="summary-hero-subtext status-${calVis.status}">${deltaStr(calDelta, 'kcal')}</div>
-        ${heroBarHtml(calVis.bar, calVis.status)}`;
-    } else if (currentGoals) {
-      // Fallback: goals set but no window data yet (brand-new user)
-      const calVis    = Goals.macroVisuals(vm.calories.consumed, null, ed, vm.calories.target);
-      const remaining = vm.calories.remaining;
-      const subtext   = remaining !== null
-        ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)} kcal left` : `${$.fmtNum(Math.abs(remaining), 0)} kcal over`)
-        : '';
+    /** @param {number} value @param {'kcal'|'g'} unit @param {'none'|'low'|'ok'|'warn'|'bad'} [status] @param {string} [prefix] @returns {string} */
+    const metricValueHtml = (value, unit, status = 'none', prefix = '') => `
+      <div class="summary-hero-value${status !== 'none' ? ` status-${status}` : ''}">
+        ${prefix}
+        <span class="num">${$.fmtNum(value, 0)}</span>
+        <span class="unit">${unit}</span>
+      </div>`;
 
-      heroValueHtml = `
-        <div class="summary-hero-value status-${calVis.status}">
-          ${heroClampHtml}
-          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
-          <span class="unit">kcal</span>
-        </div>`;
-      heroExtras = `
-        <div class="summary-hero-subtext status-${calVis.status}">${subtext}</div>
-        ${heroBarHtml(calVis.bar, calVis.status)}`;
-    } else {
-      heroValueHtml = `
-        <div class="summary-hero-value">
-          ${heroClampHtml}
-          <span class="num">${$.fmtNum(vm.calories.consumed, 0)}</span>
-          <span class="unit">kcal</span>
-        </div>`;
-    }
+    /** @param {number|null} remaining @param {'kcal'|'g'} unit @returns {string} */
+    const remainingText = (remaining, unit) => {
+      if (remaining === null) { return ''; }
+      return remaining >= 0
+        ? `${$.fmtNum(remaining, 0)}${unit === 'g' ? 'g' : ' kcal'} left`
+        : `${$.fmtNum(Math.abs(remaining), 0)}${unit === 'g' ? 'g' : ' kcal'} over`;
+    };
+
+    /** @returns {{ value: number, status: 'none'|'low'|'ok'|'warn'|'bad', subtext: string, bar: string }} */
+    const buildHero = () => {
+      if (avgMode && windowViewModel && currentGoals) {
+        const avgKcal = (windowViewModel.calories.prevSum + totalsViewModel.calories.consumed) / avgDivisor;
+        const visuals = Goals.macroVisuals(avgKcal, null, 1, currentGoals.kcal);
+        return {
+          value:   avgKcal,
+          status:  visuals.status,
+          subtext: avgDeltaStr(currentGoals.kcal - avgKcal, 'kcal'),
+          bar:     progressBarHtml(visuals.bar, visuals.status, heroBarClasses),
+        };
+      }
+      if (windowViewModel) {
+        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, windowViewModel.calories, effectiveDays);
+        return {
+          value:   totalsViewModel.calories.consumed,
+          status:  visuals.status,
+          subtext: deltaStr(windowViewModel.calories.idealToday - totalsViewModel.calories.consumed, 'kcal'),
+          bar:     progressBarHtml(visuals.bar, visuals.status, heroBarClasses),
+        };
+      }
+      if (currentGoals) {
+        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, null, effectiveDays, totalsViewModel.calories.target);
+        return {
+          value:   totalsViewModel.calories.consumed,
+          status:  visuals.status,
+          subtext: remainingText(totalsViewModel.calories.remaining, 'kcal'),
+          bar:     progressBarHtml(visuals.bar, visuals.status, heroBarClasses),
+        };
+      }
+      return { value: totalsViewModel.calories.consumed, status: 'none', subtext: '', bar: '' };
+    };
+
+    const hero = buildHero();
+    const heroValueHtml = metricValueHtml(
+      hero.value,
+      'kcal',
+      hero.status,
+      clampHtml('calorie', windowViewModel?.calories, 'summary-hero-clamp'),
+    );
+    const heroExtras = hero.subtext || hero.bar
+      ? `${hero.subtext ? `<div class="summary-hero-subtext status-${hero.status}">${hero.subtext}</div>` : ''}${hero.bar}`
+      : '';
 
     // --- Macro cards ---
     /**
      * @param {string} label
      * @param {MacroVM} macroVM
      * @param {import('../data-goals.js').MacroWindow | undefined} macroWin
-     * @param {string} cls
+     * @param {string} className
      * @returns {string}
      */
-    const macroCard = (label, macroVM, macroWin, cls) => {
-      const clamped = wvm && macroWin ? Goals.isGoalClamped(macroWin, wvm.effectiveDays) : false;
-      const clampInline = (() => {
-        if (!clamped || !wvm || !macroWin) { return ''; }
-        const n   = Goals.recoveryDays(macroWin, wvm.effectiveDays, clamped);
-        const dir = clamped === 'below' ? 'over' : 'under';
-        const adj = clamped === 'below' ? 'reduced' : 'increased';
-        return `<span class="macro-clamp-wrap">
-            <button class="macro-clamp-btn" type="button" aria-label="Recovery mode">${recoveryIcon}</button>
-            <div class="macro-clamp-tooltip" role="tooltip">
-              <strong>Recovery mode</strong><br>
-              Your daily ${label.toLowerCase()} target has been ${adj} to compensate for recent
-              ${dir}-consumption. Adjusted target applies for ~${n} more day${n !== 1 ? 's' : ''}.
-            </div>
-          </span>`;
-      })();
+    const macroCard = (label, macroVM, macroWin, className) => {
+      const clampInline = clampHtml(label, macroWin);
+      /** @param {string} valueHtml @param {string} [bar] @param {string} [subtext] @returns {string} */
+      const rowHtml = (valueHtml, bar = '', subtext = '') => `
+        <div class="macro-row ${className}">
+          <div class="macro-row-hd">
+            <div class="macro-label">${label}</div>
+            <div class="macro-value">${valueHtml}</div>
+          </div>
+          ${bar}
+          ${subtext}
+        </div>`;
 
       if (avgMode && macroWin && macroWin.target !== null) {
         const avg   = (macroWin.prevSum + macroVM.consumed) / avgDivisor;
-        const vis   = Goals.macroVisuals(avg, null, 1, macroWin.target);
+        const visuals = Goals.macroVisuals(avg, null, 1, macroWin.target);
         const delta = macroWin.target - avg;
-        return `
-          <div class="macro-row ${cls}">
-            <div class="macro-row-hd">
-              <div class="macro-label">${label}</div>
-              <div class="macro-value">${clampInline}${$.fmtNum(avg, 0)}<span class="unit"> / ${macroWin.target}g</span></div>
-            </div>
-            ${barHtml(vis.bar, vis.status)}
-            <div class="macro-subtext status-${vis.status}">${avgDeltaStr(delta, 'g')}</div>
-          </div>`;
+        return rowHtml(
+          `${clampInline}${$.fmtNum(avg, 0)}<span class="unit"> / ${macroWin.target}g</span>`,
+          barHtml(visuals.bar, visuals.status),
+          `<div class="macro-subtext status-${visuals.status}">${avgDeltaStr(delta, 'g')}</div>`,
+        );
       }
-      if (wvm && macroWin) {
-        const vis = Goals.macroVisuals(macroVM.consumed, macroWin, ed);
-        const d   = macroWin.idealToday - macroVM.consumed;
-        return `
-          <div class="macro-row ${cls}">
-            <div class="macro-row-hd">
-              <div class="macro-label">${label}</div>
-              <div class="macro-value">${clampInline}${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${$.fmtNum(macroWin.idealToday, 0)}g</span></div>
-            </div>
-            ${barHtml(vis.bar, vis.status)}
-            <div class="macro-subtext status-${vis.status}">${deltaStr(d, 'g')}</div>
-          </div>`;
+      if (windowViewModel && macroWin) {
+        const visuals = Goals.macroVisuals(macroVM.consumed, macroWin, effectiveDays);
+        const delta   = macroWin.idealToday - macroVM.consumed;
+        return rowHtml(
+          `${clampInline}${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${$.fmtNum(macroWin.idealToday, 0)}g</span>`,
+          barHtml(visuals.bar, visuals.status),
+          `<div class="macro-subtext status-${visuals.status}">${deltaStr(delta, 'g')}</div>`,
+        );
       }
       if (currentGoals) {
-        const vis       = Goals.macroVisuals(macroVM.consumed, null, ed, macroVM.target);
-        const remaining = macroVM.remaining;
-        const subtext   = remaining !== null
-          ? (remaining >= 0 ? `${$.fmtNum(remaining, 0)}g left` : `${$.fmtNum(Math.abs(remaining), 0)}g over`)
-          : '';
-        return `
-          <div class="macro-row ${cls}">
-            <div class="macro-row-hd">
-              <div class="macro-label">${label}</div>
-              <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${macroVM.target ?? '?'}g</span></div>
-            </div>
-            ${barHtml(vis.bar, vis.status)}
-            ${subtext ? `<div class="macro-subtext status-${vis.status}">${subtext}</div>` : ''}
-          </div>`;
+        const visuals   = Goals.macroVisuals(macroVM.consumed, null, effectiveDays, macroVM.target);
+        const subtext   = remainingText(macroVM.remaining, 'g');
+        return rowHtml(
+          `${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> / ${macroVM.target ?? '?'}g</span>`,
+          barHtml(visuals.bar, visuals.status),
+          subtext ? `<div class="macro-subtext status-${visuals.status}">${subtext}</div>` : '',
+        );
       }
-      return `
-        <div class="macro-row ${cls}">
-          <div class="macro-row-hd">
-            <div class="macro-label">${label}</div>
-            <div class="macro-value">${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> g</span></div>
-          </div>
-        </div>`;
+      return rowHtml(`${$.fmtNum(macroVM.consumed, 0)}<span class="unit"> g</span>`);
     };
 
     // --- Compact summary ---
     let compactLine1;
     let compactLine2;
 
-    if (wvm) {
-      const calDelta = wvm.calories.idealToday - vm.calories.consumed;
+    if (windowViewModel) {
+      const calDelta = windowViewModel.calories.idealToday - totalsViewModel.calories.consumed;
       compactLine1   = deltaStr(calDelta, 'kcal');
 
-      /** @param {string} lbl @param {MacroVM} macroVM @param {import('../data-goals.js').MacroWindow} macroWin @returns {string} */
-      const compactMacroDelta = (lbl, macroVM, macroWin) => {
-        const d = macroWin.idealToday - macroVM.consumed;
-        return d >= 0
-          ? `${lbl} ${$.fmtNum(d, 0)}g left`
-          : `${lbl} ${$.fmtNum(Math.abs(d), 0)}g over`;
+      /** @param {string} label @param {MacroVM} macroVM @param {import('../data-goals.js').MacroWindow} macroWin @returns {string} */
+      const compactMacroDelta = (label, macroVM, macroWin) => {
+        const delta = macroWin.idealToday - macroVM.consumed;
+        return delta >= 0
+          ? `${label} ${$.fmtNum(delta, 0)}g left`
+          : `${label} ${$.fmtNum(Math.abs(delta), 0)}g over`;
       };
-      compactLine2 = `${compactMacroDelta('P', vm.protein, wvm.protein)} · ${compactMacroDelta('C', vm.carbs, wvm.carbs)} · ${compactMacroDelta('F', vm.fat, wvm.fat)}`;
+      compactLine2 = `${compactMacroDelta('P', totalsViewModel.protein, windowViewModel.protein)} · ${compactMacroDelta('C', totalsViewModel.carbs, windowViewModel.carbs)} · ${compactMacroDelta('F', totalsViewModel.fat, windowViewModel.fat)}`;
     } else {
-      compactLine1 = `${$.fmtNum(vm.calories.consumed, 0)} kcal`;
-      if (currentGoals && vm.calories.remaining !== null) {
-        const r = vm.calories.remaining;
-        const s = r >= 0 ? `${$.fmtNum(r, 0)} kcal left` : `${$.fmtNum(Math.abs(r), 0)} kcal over`;
-        compactLine1 += ` — ${s}`;
+      compactLine1 = `${$.fmtNum(totalsViewModel.calories.consumed, 0)} kcal`;
+      if (currentGoals && totalsViewModel.calories.remaining !== null) {
+        const remaining = totalsViewModel.calories.remaining;
+        const remainingSummary = remaining >= 0 ? `${$.fmtNum(remaining, 0)} kcal left` : `${$.fmtNum(Math.abs(remaining), 0)} kcal over`;
+        compactLine1 += ` — ${remainingSummary}`;
       }
-      /** @param {string} lbl @param {MacroVM} mvm @returns {string} */
-      const compactMacro = (lbl, mvm) => {
-        if (currentGoals && mvm.remaining !== null) {
-          const r = mvm.remaining;
-          return `${lbl} ${r >= 0 ? `${$.fmtNum(r, 0)}g left` : `${$.fmtNum(Math.abs(r), 0)}g over`}`;
+      /** @param {string} label @param {MacroVM} macroVM @returns {string} */
+      const compactMacro = (label, macroVM) => {
+        if (currentGoals && macroVM.remaining !== null) {
+          const remaining = macroVM.remaining;
+          return `${label} ${remaining >= 0 ? `${$.fmtNum(remaining, 0)}g left` : `${$.fmtNum(Math.abs(remaining), 0)}g over`}`;
         }
-        return `${lbl} ${$.fmtNum(mvm.consumed, 0)}g`;
+        return `${label} ${$.fmtNum(macroVM.consumed, 0)}g`;
       };
-      compactLine2 = `${compactMacro('P', vm.protein)} · ${compactMacro('C', vm.carbs)} · ${compactMacro('F', vm.fat)}`;
+      compactLine2 = `${compactMacro('P', totalsViewModel.protein)} · ${compactMacro('C', totalsViewModel.carbs)} · ${compactMacro('F', totalsViewModel.fat)}`;
     }
 
-    const canToggleMode = wvm !== null && currentGoals !== null;
+    const canToggleMode = windowViewModel !== null && currentGoals !== null;
     const toggleBtnHtml = canToggleMode
       ? `<button type="button" class="summary-mode-toggle"
             data-mode="${avgMode ? 'average' : 'daily'}"
@@ -683,22 +680,22 @@ export function setupMeals(){
             ${avgMode ? calendarIcon : trendIcon}
           </button>`
       : '';
-    const avgIndicatorHtml = avgMode && wvm
-      ? `<div class="summary-avg-indicator">7-day average · ${wvm.windowDays} ${wvm.windowDays === 1 ? 'day' : 'days'} logged</div>`
+    const avgIndicatorHtml = avgMode && windowViewModel
+      ? `<div class="summary-avg-indicator">7-day average · ${windowViewModel.windowDays} ${windowViewModel.windowDays === 1 ? 'day' : 'days'} logged</div>`
       : '';
 
     dayTotals.innerHTML = `
       <div class="day-summary day-summary-expanded${avgMode ? ' summary-avg' : ''}">
         ${toggleBtnHtml}
         <div class="summary-hero">
-          <div class="summary-hero-label">${heroLabel}</div>
+          <div class="summary-hero-label">Calories</div>
           ${heroValueHtml}
           ${heroExtras}
         </div>
         <div class="summary-macros">
-          ${macroCard('Protein', vm.protein, wvm?.protein, 'macro-protein')}
-          ${macroCard('Carbs',   vm.carbs,   wvm?.carbs,   'macro-carbs')}
-          ${macroCard('Fat',     vm.fat,     wvm?.fat,     'macro-fat')}
+          ${macroCard('Protein', totalsViewModel.protein, windowViewModel?.protein, 'macro-protein')}
+          ${macroCard('Carbs',   totalsViewModel.carbs,   windowViewModel?.carbs,   'macro-carbs')}
+          ${macroCard('Fat',     totalsViewModel.fat,     windowViewModel?.fat,     'macro-fat')}
         </div>
         ${avgIndicatorHtml}
       </div>
@@ -741,7 +738,7 @@ export function setupMeals(){
   });
 
   document.addEventListener('click', () => {
-    dayTotals.querySelectorAll('.macro-clamp-tooltip.open').forEach(t => { t.classList.remove('open'); });
+    dayTotals.querySelectorAll('.macro-clamp-tooltip.open').forEach(tooltip => { tooltip.classList.remove('open'); });
   });
 
   /**
@@ -749,15 +746,15 @@ export function setupMeals(){
    * @param {boolean} [animateFirst]
    */
   function renderMealsList(meals, animateFirst = false){
-    mealsList.innerHTML = [...meals].reverse().map(/** @param {Meal} m */ m => {
-      const snap     = m.foodSnapshot;
-      const mul      = m.multiplier;
-      const mealMeta = $.nutrMeta(snap.kcal*mul, snap.prot*mul, snap.carbs*mul, snap.fats*mul);
+    mealsList.innerHTML = [...meals].reverse().map(/** @param {Meal} meal */ meal => {
+      const foodSnapshot = meal.foodSnapshot;
+      const multiplier = meal.multiplier;
+      const mealMeta = $.nutrMeta(foodSnapshot.kcal*multiplier, foodSnapshot.prot*multiplier, foodSnapshot.carbs*multiplier, foodSnapshot.fats*multiplier);
       return `
-      <div class="meal-row" data-id="${m.id}">
+      <div class="meal-row" data-id="${meal.id}">
         <div class="meal-row-body">
-          <span class="meal-name">${$.esc(snap.name)}</span>
-          <span class="meal-row-qty">${$.esc(snap.refLabel)} <span class="meal-row-mul">×${$.fmtNum(mul)}</span></span>
+          <span class="meal-name">${$.esc(foodSnapshot.name)}</span>
+          <span class="meal-row-qty">${$.esc(foodSnapshot.refLabel)} <span class="meal-row-mul">×${$.fmtNum(multiplier)}</span></span>
           <span class="meal-row-meta">${mealMeta}</span>
         </div>
         <button class="btn small ghost del" title="Delete">🗑️</button>
@@ -778,10 +775,10 @@ export function setupMeals(){
    */
   async function renderMeals(animateFirst = false){
     [currentMeals, currentGoals] = await Promise.all([
-      /** @type {Promise<Meal[]>} */ (Meals.listByDate(curDate)),
+      /** @type {Promise<Meal[]>} */ (Meals.listByDate(currentDate)),
       Goals.getActive(),
     ]);
-    currentWindowVM = await Goals.computeWindowVM(curDate, currentGoals);
+    currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
     mealsUiState.goalsEnabled = currentGoals !== null;
     const totals = computeTotals(currentMeals);
     renderDayInfo(totals);
@@ -795,7 +792,7 @@ export function setupMeals(){
     if (!row) { return; }
     const rowEl  = /** @type {HTMLElement} */ (row);
     const id     = rowEl.dataset.id;
-    const meal   = currentMeals.find(m => m.id === id);
+    const meal   = currentMeals.find(currentMeal => currentMeal.id === id);
     if (!meal) { return; }
     if (target.classList.contains('del')) {
       await Meals.remove(meal.id);
