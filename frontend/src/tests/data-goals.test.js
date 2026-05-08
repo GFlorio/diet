@@ -1043,6 +1043,22 @@ describe('computeWindowVM – macro coherence', () => {
   test('mixed history: macro imbalance → coherent ideals, eating them is green', async () => {
     await assertGreenState(priorDates(14).map(d => coherentMeal(d, 135, 270, 44.8)));
   });
+
+  test('protein under-eaten: protein absorbs the gap, fat idealToday does not exceed fat goal', async () => {
+    // Protein chronically under (ratio < 0.90), fat chronically over.
+    // With protein up-allowance unlocked, the simplex should push protein's ideal UP
+    // to reclaim the unaccounted kcal rather than spilling them into fat.
+    // goals: 2000 kcal, 30% prot = 150g, 25% fat = 56g
+    const priorMeals = priorDates(14).map(d => coherentMeal(d, 120, 200, 75)); // prot 80%, fat 134%
+    vi.mocked(Meals.listRange).mockResolvedValue(priorMeals);
+    const result = await computeWindowVM(TODAY, g);
+    expect(result).not.toBeNull();
+    const { protein, fat } = /** @type {NonNullable<typeof result>} */ (result);
+    // Protein should be offered more than its base goal to compensate.
+    expect(protein.idealToday).toBeGreaterThan(150);
+    // Fat should be at or below its base goal — over-eaten fat must not receive a higher target.
+    expect(fat.idealToday).toBeLessThanOrEqual(56);
+  });
 });
 
 // ---------------------------------------------------------------------------

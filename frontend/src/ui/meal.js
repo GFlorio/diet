@@ -707,6 +707,51 @@ export function setupMeals(){
       </div>`;
   }
 
+  // --- Long-press on a macro card → log goal story to console ---
+  const MACRO_HOLD_MS = 10_000;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let macroHoldTimer = null;
+
+  /**
+   * Print a structured explanation of why a macro's ideal-today is what it is.
+   * @param {'calories'|'protein'|'carbs'|'fat'} macroKey
+   */
+  function logMacroGoalStory(macroKey) {
+    if (!currentWindowVM || !currentGoals) {
+      console.log('[macro goal story] No window view model available — goals not set or no meals in window.');
+      return;
+    }
+    console.log(Goals.explainMacroGoal(macroKey, currentWindowVM, currentGoals, currentDate));
+  }
+
+  dayTotals.addEventListener('pointerdown', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    const row = target.closest('.macro-row');
+    if (!row) { return; }
+    /** @type {'calories'|'protein'|'carbs'|'fat'} */
+    let macroKey;
+    if (row.classList.contains('macro-protein'))      { macroKey = 'protein'; }
+    else if (row.classList.contains('macro-carbs'))   { macroKey = 'carbs'; }
+    else if (row.classList.contains('macro-fat'))     { macroKey = 'fat'; }
+    else                                              { macroKey = 'calories'; }
+    macroHoldOrigin = { x: e.clientX, y: e.clientY };
+    macroHoldTimer = setTimeout(() => { logMacroGoalStory(macroKey); }, MACRO_HOLD_MS);
+  });
+
+  const cancelMacroHold = () => {
+    if (macroHoldTimer !== null) { clearTimeout(macroHoldTimer); macroHoldTimer = null; }
+  };
+  /** @type {{ x: number, y: number } | null} */
+  let macroHoldOrigin = null;
+  dayTotals.addEventListener('pointermove', (e) => {
+    if (!macroHoldOrigin || macroHoldTimer === null) { return; }
+    const dx = e.clientX - macroHoldOrigin.x;
+    const dy = e.clientY - macroHoldOrigin.y;
+    if (dx * dx + dy * dy > 100) { cancelMacroHold(); } // >10px movement cancels
+  });
+  dayTotals.addEventListener('pointerup',     cancelMacroHold);
+  dayTotals.addEventListener('pointercancel', cancelMacroHold);
+
   dayTotals.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
 
