@@ -698,10 +698,14 @@ export function derivedGrams(goals) {
 export function isGoalClamped(macroWin, effectiveDays) {
   if (macroWin.target === null || effectiveDays < MIN_LOGGED_7) { return false; }
   if (macroWin.gramAdj !== undefined) {
-    // Per-macro gram adjustment: use half the IDEAL_CLAMP as the significance threshold.
-    const gramDeadband = (IDEAL_CLAMP * 0.8) * macroWin.target;
-    if (macroWin.gramAdj < -gramDeadband) { return 'below'; }
-    if (macroWin.gramAdj >  gramDeadband) { return 'above'; }
+    // Use the visible idealToday deviation from base target, not the controller's
+    // intermediate gramAdj: the reconciler can partially reverse a large gramAdj,
+    // so gramAdj alone doesn't reflect what the user actually sees.
+    if (macroWin.target === null || macroWin.target <= 0) { return false; }
+    const deviation = (macroWin.idealToday - macroWin.target) / macroWin.target;
+    const threshold = IDEAL_CLAMP * 0.9; // show when idealToday is >7.5% from base
+    if (deviation < -threshold) { return 'below'; }
+    if (deviation >  threshold) { return 'above'; }
     return false;
   }
   const adjustment = macroWin.adjustment ?? 0;
@@ -724,7 +728,7 @@ export function recoveryDays(macroWin, effectiveDays, _direction) {
   if (macroWin.target === null || macroWin.target <= 0) { return 1; }
   if (effectiveDays < MIN_LOGGED_7) { return 1; }
   if (macroWin.gramAdj !== undefined) {
-    const gramDeadband = (IDEAL_CLAMP * 0.8) * macroWin.target;
+    const gramDeadband = (IDEAL_CLAMP * 0.9) * macroWin.target;
     if (Math.abs(macroWin.gramAdj) <= gramDeadband) { return 0; }
     // Solve for n: |adj| × 0.5^(n/HALF_LIFE) = deadband → n = HALF_LIFE × log2(|adj|/deadband)
     return Math.max(1, Math.ceil(HALF_LIFE_DAYS * Math.log2(Math.abs(macroWin.gramAdj) / gramDeadband)));
@@ -889,6 +893,23 @@ function reconcileMacroIdeals({ kcalIdeal, goals, derivedG, prevSum, effectiveDa
     carbs:   desired.carbs   * (1 + cAllow.up),
     fat:     desired.fat     * (1 + fAllow.up),
   };
+
+  // Hard cap: ensure idealToday stays within ±IDEAL_CLAMP of the base gram goals,
+  // matching the limit the per-macro controller imposes on its own adjustment.
+  // The directional-allowance bounds above are ±15% of the desired *share*, which
+  // can exceed ±15% of the base *grams* when adjTotalKcal ≠ kcalIdeal.
+  if (kcalIdeal > 0) {
+    upper.protein = Math.min(upper.protein, (baseProtG  * (1 + IDEAL_CLAMP) * KCAL_PER_G_PROTEIN) / kcalIdeal);
+    lower.protein = Math.max(lower.protein, (baseProtG  * (1 - IDEAL_CLAMP) * KCAL_PER_G_PROTEIN) / kcalIdeal);
+    upper.carbs   = Math.min(upper.carbs,   (baseCarbsG * (1 + IDEAL_CLAMP) * KCAL_PER_G_CARBS)   / kcalIdeal);
+    lower.carbs   = Math.max(lower.carbs,   (baseCarbsG * (1 - IDEAL_CLAMP) * KCAL_PER_G_CARBS)   / kcalIdeal);
+    upper.fat     = Math.min(upper.fat,     (baseFatG   * (1 + IDEAL_CLAMP) * KCAL_PER_G_FAT)     / kcalIdeal);
+    lower.fat     = Math.max(lower.fat,     (baseFatG   * (1 - IDEAL_CLAMP) * KCAL_PER_G_FAT)     / kcalIdeal);
+    // If tightening created an infeasible range for a macro, pin it to its desired share.
+    for (const key of /** @type {const} */ (['protein', 'carbs', 'fat'])) {
+      if (lower[key] > upper[key]) { lower[key] = upper[key] = desired[key]; }
+    }
+  }
 
   // Feasibility: if bounds can't contain sum=1, relax carbs → fat → protein.
   const minPossible = lower.protein + lower.carbs + lower.fat;
