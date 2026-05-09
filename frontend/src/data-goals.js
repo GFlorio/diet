@@ -38,6 +38,8 @@ export const HALF_LIFE_DAYS = 9;
 
 /** Clamp factor for idealToday: ±15% of the daily target. */
 const IDEAL_CLAMP = 0.15;
+/** Fraction of IDEAL_CLAMP at which the recovery tooltip becomes visible. */
+const CLAMP_TOOLTIP_THRESHOLD = IDEAL_CLAMP * 0.80;
 
 /**
  * Deadband at zero persistence intensity (floors to this many kcal or 2.5% of
@@ -703,7 +705,7 @@ export function isGoalClamped(macroWin, effectiveDays) {
     // so gramAdj alone doesn't reflect what the user actually sees.
     if (macroWin.target === null || macroWin.target <= 0) { return false; }
     const deviation = (macroWin.idealToday - macroWin.target) / macroWin.target;
-    const threshold = IDEAL_CLAMP * 0.9; // show when idealToday is >7.5% from base
+    const threshold = CLAMP_TOOLTIP_THRESHOLD; // show when idealToday is >7.5% from base
     if (deviation < -threshold) { return 'below'; }
     if (deviation >  threshold) { return 'above'; }
     return false;
@@ -728,7 +730,7 @@ export function recoveryDays(macroWin, effectiveDays, _direction) {
   if (macroWin.target === null || macroWin.target <= 0) { return 1; }
   if (effectiveDays < MIN_LOGGED_7) { return 1; }
   if (macroWin.gramAdj !== undefined) {
-    const gramDeadband = (IDEAL_CLAMP * 0.9) * macroWin.target;
+    const gramDeadband = (CLAMP_TOOLTIP_THRESHOLD) * macroWin.target;
     if (Math.abs(macroWin.gramAdj) <= gramDeadband) { return 0; }
     // Solve for n: |adj| × 0.5^(n/HALF_LIFE) = deadband → n = HALF_LIFE × log2(|adj|/deadband)
     return Math.max(1, Math.ceil(HALF_LIFE_DAYS * Math.log2(Math.abs(macroWin.gramAdj) / gramDeadband)));
