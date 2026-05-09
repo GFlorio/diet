@@ -942,8 +942,9 @@ export async function computeWindowVM(todayISO, goals) {
   const kcalByDay28 = {};
   for (const [dateISO, macros] of Object.entries(macrosByDay28)) { kcalByDay28[dateISO] = macros.kcal; }
 
+  const calMode = deriveMode(goals);
   const { adjustedGoalKcal, adjustment, gated, debug: controllerDebug } = computeKcalAdjustment(
-    kcalByDay28, todayISO, goals.kcal, deriveMode(goals),
+    kcalByDay28, todayISO, goals.kcal, calMode,
   );
   const calIdeal = adjustedGoalKcal;
 
@@ -954,9 +955,35 @@ export async function computeWindowVM(todayISO, goals) {
     if (dateISO !== todayISO) { $.addScaledMacros(prevSum, macrosByDay7[dateISO], 1); }
   }
 
-  const gramGoals = derivedGrams(goals);
+  const baseGramGoals = derivedGrams(goals);
   const todayLogged   = todayISO in macrosByDay7;
   const effectiveDays = todayLogged ? windowDays : windowDays + 1;
+
+  // Per-macro adaptive controllers. Each macro's gram history is converted to
+  // kcal so the controller's kcal-calibrated deadbands and clamp apply correctly;
+  // results are converted back to grams. Protein always uses 'gain' mode to
+  // resist chronic under-eating regardless of the calorie goal direction.
+  // Carbs and fat follow the calorie mode.
+  /** @type {Record<string, number>} */
+  const protKcalByDay28  = {};
+  /** @type {Record<string, number>} */
+  const carbsKcalByDay28 = {};
+  /** @type {Record<string, number>} */
+  const fatKcalByDay28   = {};
+  for (const [dateISO, macros] of Object.entries(macrosByDay28)) {
+    protKcalByDay28[dateISO]  = macros.prot  * KCAL_PER_G_PROTEIN;
+    carbsKcalByDay28[dateISO] = macros.carbs * KCAL_PER_G_CARBS;
+    fatKcalByDay28[dateISO]   = macros.fats  * KCAL_PER_G_FAT;
+  }
+  const { adjustedGoalKcal: adjProtKcal,  debug: protCtrlDbg  } =
+    computeKcalAdjustment(protKcalByDay28,  todayISO, baseGramGoals.protG  * KCAL_PER_G_PROTEIN, 'gain');
+  const { adjustedGoalKcal: adjCarbsKcal, debug: carbsCtrlDbg } =
+    computeKcalAdjustment(carbsKcalByDay28, todayISO, baseGramGoals.carbsG * KCAL_PER_G_CARBS,   calMode);
+  const { adjustedGoalKcal: adjFatKcal,   debug: fatCtrlDbg   } =
+    computeKcalAdjustment(fatKcalByDay28,   todayISO, baseGramGoals.fatG   * KCAL_PER_G_FAT,     calMode);
+  const adjProtG  = adjProtKcal  / KCAL_PER_G_PROTEIN;
+  const adjCarbsG = adjCarbsKcal / KCAL_PER_G_CARBS;
+  const adjFatG   = adjFatKcal   / KCAL_PER_G_FAT;
 
   // When the completeness gate fired, history is too sparse to trust macro signals
   // either — reconcile against a zeroed prevSum so no past eating drifts the ideals,
@@ -964,7 +991,7 @@ export async function computeWindowVM(todayISO, goals) {
   const { protIdeal, carbIdeal, fatIdeal } = reconcileMacroIdeals({
     kcalIdeal: calIdeal,
     goals,
-    derivedG: gramGoals,
+    derivedG: gated ? baseGramGoals : { protG: adjProtG, carbsG: adjCarbsG, fatG: adjFatG },
     prevSum: gated ? $.zeroMacros() : prevSum,
     effectiveDays: gated ? 1 : effectiveDays,
   });
@@ -976,11 +1003,18 @@ export async function computeWindowVM(todayISO, goals) {
   return {
     windowDays,
     effectiveDays,
-    calories: { target: goals.kcal, status: statusFn(todayMacros.kcal,  goals.kcal, calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
-    protein:  { target: gramGoals.protG,    status: statusFn(todayMacros.prot,  gramGoals.protG,    protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment },
-    carbs:    { target: gramGoals.carbsG,   status: statusFn(todayMacros.carbs, gramGoals.carbsG,   carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment },
-    fat:      { target: gramGoals.fatG,     status: statusFn(todayMacros.fats,  gramGoals.fatG,     fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment },
-    controllerDebug: { ...controllerDebug, gated: !!gated, mode: deriveMode(goals) },
+    calories: { target: goals.kcal,          status: statusFn(todayMacros.kcal,  goals.kcal,          calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
+    protein:  { target: baseGramGoals.protG,  status: statusFn(todayMacros.prot,  baseGramGoals.protG,  protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment },
+    carbs:    { target: baseGramGoals.carbsG, status: statusFn(todayMacros.carbs, baseGramGoals.carbsG, carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment },
+    fat:      { target: baseGramGoals.fatG,   status: statusFn(todayMacros.fats,  baseGramGoals.fatG,   fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment },
+    controllerDebug: {
+      ...controllerDebug, gated: !!gated, mode: calMode,
+      macroControllers: {
+        protein: { ...protCtrlDbg,  adjGoalG: adjProtG  },
+        carbs:   { ...carbsCtrlDbg, adjGoalG: adjCarbsG },
+        fat:     { ...fatCtrlDbg,   adjGoalG: adjFatG   },
+      },
+    },
   };
 }
 
@@ -1034,25 +1068,51 @@ export function explainMacroGoal(macroKey, wvm, goals, dateISO) {
   }
 
   if (!isCalories) {
-    const goalG        = macroWin.target ?? 0;
+    const macroCtrl   = /** @type {any} */ (dbg.macroControllers?.[macroKey]);
+    const baseGoalG   = macroWin.target ?? 0;
+    const adjGoalG    = macroCtrl?.adjGoalG ?? baseGoalG;
+    const reconcGoalG = dbg.gated ? baseGoalG : adjGoalG;
+    const kpg         = macroKey === 'fat' ? KCAL_PER_G_FAT : KCAL_PER_G_PROTEIN;
+
+    lines.push(``);
+    lines.push(`─ Step 1.5: Per-macro controller (${macroKey}) ─`);
+    if (!macroCtrl || dbg.gated) {
+      lines.push(`  Skipped — kcal controller gated; base goal used: ${baseGoalG}g`);
+    } else if (macroCtrl.gate) {
+      lines.push(`  GATED (${macroCtrl.gate}) — base goal used: ${baseGoalG}g`);
+      lines.push(`  loggedDays7=${macroCtrl.loggedDays7}  loggedDays14=${macroCtrl.loggedDays14}`);
+    } else {
+      const modeStr = macroKey === 'protein' ? "'gain' (always, to protect protein)" : `'${dbg.mode}'`;
+      lines.push(`  Mode: ${modeStr}`);
+      lines.push(`  Logged days — 7d: ${macroCtrl.loggedDays7}  14d: ${macroCtrl.loggedDays14}  28d: ${macroCtrl.loggedDays28}`);
+      lines.push(`  Confidence: ${r(macroCtrl.confidence, 4)}`);
+      lines.push(`  Short error (7d): ${r(macroCtrl.shortErr / kpg, 2)}g  Long error (28d): ${r(macroCtrl.longErr / kpg, 2)}g  Effective: ${r(macroCtrl.effectiveError / kpg, 2)}g`);
+      lines.push(`  Persistence intensity: ${r(macroCtrl.persistenceIntensity, 4)}  Deadband: ${r(macroCtrl.deadband / kpg, 2)}g`);
+      if (macroCtrl.deadbandApplied) {
+        lines.push(`  |effectiveError| < deadband → NO adjustment`);
+      } else {
+        lines.push(`  Gain: ${r(macroCtrl.gain, 4)}  adj: ${r(macroCtrl.clampedAdj / kpg, 2)}g${macroCtrl.clampApplied ? ' (clamped)' : ''}`);
+      }
+      lines.push(`  → adjusted gram goal: ${r(adjGoalG, 1)}g  (base: ${baseGoalG}g)`);
+    }
+
     const prevDays     = wvm.effectiveDays - 1;
     const prevAvg      = prevDays > 0 ? macroWin.prevSum / prevDays : 0;
-    const ratio        = goalG > 0 && prevDays > 0 ? prevAvg / goalG : 1;
+    const ratio        = reconcGoalG > 0 && prevDays > 0 ? prevAvg / reconcGoalG : 1;
     const allow        = directionalAllowance(macroKey === 'fat' ? 'fat' : macroKey, ratio);
     const desiredPct   = macroKey === 'protein' ? goals.protPct : macroKey === 'carbs' ? goals.carbsPct : goals.fatPct;
     const desiredShare = desiredPct / 100;
-    const kcalPerG     = macroKey === 'fat' ? KCAL_PER_G_FAT : KCAL_PER_G_PROTEIN;
-    const rawG         = wvm.effectiveDays * goalG - macroWin.prevSum;
-    const rawShare     = (kcalPerG * rawG) / wvm.calories.idealToday;
+    const rawG         = wvm.effectiveDays * reconcGoalG - macroWin.prevSum;
+    const rawShare     = (kpg * rawG) / wvm.calories.idealToday;
 
     lines.push(``);
     lines.push(`─ Step 2: Macro reconciler (${macroKey}) ─`);
     lines.push(`  effectiveDays: ${wvm.effectiveDays}  (${prevDays} prior logged + ${wvm.effectiveDays - prevDays} today)`);
-    lines.push(`  base goal: ${goalG}g  (${desiredPct}% of ${goals.kcal} kcal)`);
+    lines.push(`  effective gram goal: ${r(reconcGoalG, 1)}g  (base: ${baseGoalG}g = ${desiredPct}% of ${goals.kcal} kcal)`);
     lines.push(`  prevSum (prior ${prevDays}d): ${r(macroWin.prevSum, 1)}g  → prevAvg: ${r(prevAvg, 1)}g/day`);
-    lines.push(`  adherence ratio: ${r(prevAvg, 1)} / ${goalG} = ${r(ratio, 3)}`);
+    lines.push(`  adherence ratio: ${r(prevAvg, 1)} / ${r(reconcGoalG, 1)} = ${r(ratio, 3)}`);
     lines.push(`  directional allowance: down=${pct(allow.down)}  up=${pct(allow.up)}`);
-    lines.push(`  rawG: ${wvm.effectiveDays}×${goalG} − ${r(macroWin.prevSum, 1)} = ${r(rawG, 1)}g  → rawShare: ${pct(rawShare)}`);
+    lines.push(`  rawG: ${wvm.effectiveDays}×${r(reconcGoalG, 1)} − ${r(macroWin.prevSum, 1)} = ${r(rawG, 1)}g  → rawShare: ${pct(rawShare)}`);
     lines.push(`  share bounds: [${pct(desiredShare * (1 - allow.down))}, ${pct(desiredShare * (1 + allow.up))}]  (desired: ${pct(desiredShare)})`);
     lines.push(`  → ideal today: ${macroWin.idealToday}g  (after simplex projection + rounding)`);
   }
