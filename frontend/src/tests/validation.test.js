@@ -148,7 +148,7 @@ describe('validation.number — exact boundaries and scientific notation', () =>
 });
 
 // The canonical name pattern — kept in sync with validateName() in validation-schemas.js
-const NAME_PATTERN = /^[\p{L}\p{N}\s'\-_.,()&]+$/u;
+const NAME_PATTERN = /^[\p{L}\p{M}\p{N}\s'\-_.,()&]+$/u;
 
 describe('validation.string — name pattern and length boundaries', () => {
   test('pattern accepts Unicode letters, digits, and allowed punctuation', () => {
@@ -159,6 +159,26 @@ describe('validation.string — name pattern and length boundaries', () => {
     expect(v.string("O'Brien", { pattern: NAME_PATTERN })).toBe("O'Brien");
     expect(v.string('Apple & Banana', { pattern: NAME_PATTERN })).toBe('Apple & Banana');
     expect(v.string('Milk, whole', { pattern: NAME_PATTERN })).toBe('Milk, whole');
+  });
+
+  test('pattern accepts accented Latin characters (NFC composed form)', () => {
+    expect(v.string('ç', { pattern: NAME_PATTERN })).toBe('ç');
+    expect(v.string('ã', { pattern: NAME_PATTERN })).toBe('ã');
+    expect(v.string('ü', { pattern: NAME_PATTERN })).toBe('ü');
+    expect(v.string('ó', { pattern: NAME_PATTERN })).toBe('ó');
+    expect(v.string('à', { pattern: NAME_PATTERN })).toBe('à');
+    expect(v.string('Feijão', { pattern: NAME_PATTERN })).toBe('Feijão');
+    expect(v.string('Maçã', { pattern: NAME_PATTERN })).toBe('Maçã');
+    expect(v.string('Grão-de-bico', { pattern: NAME_PATTERN })).toBe('Grão-de-bico');
+  });
+
+  test('pattern accepts accented Latin characters (NFD decomposed form)', () => {
+    // NFD: base letter + combining mark — \p{M} in the pattern handles the combining character
+    expect(v.string('ç'.normalize('NFD'), { pattern: NAME_PATTERN })).toBe('ç'.normalize('NFD'));
+    expect(v.string('ã'.normalize('NFD'), { pattern: NAME_PATTERN })).toBe('ã'.normalize('NFD'));
+    expect(v.string('ü'.normalize('NFD'), { pattern: NAME_PATTERN })).toBe('ü'.normalize('NFD'));
+    expect(v.string('ó'.normalize('NFD'), { pattern: NAME_PATTERN })).toBe('ó'.normalize('NFD'));
+    expect(v.string('à'.normalize('NFD'), { pattern: NAME_PATTERN })).toBe('à'.normalize('NFD'));
   });
 
   test('pattern rejects disallowed characters', () => {
@@ -226,6 +246,15 @@ describe('schema: createFoodInput — name pattern and length', () => {
     expect(() => v.createFoodInput({ ...base, name: '食品' })).not.toThrow();
     expect(() => v.createFoodInput({ ...base, name: 'M&Ms' })).not.toThrow();
     expect(() => v.createFoodInput({ ...base, name: 'Milk, whole' })).not.toThrow();
+  });
+
+  test('accepts names with accented Latin characters', () => {
+    expect(() => v.createFoodInput({ ...base, name: 'Feijão' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Maçã' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Grão-de-bico' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Frango à milanesa' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Müsli' })).not.toThrow();
+    expect(() => v.createFoodInput({ ...base, name: 'Fécula de batata' })).not.toThrow();
   });
 
   test('accepts refLabel with brand-name characters', () => {

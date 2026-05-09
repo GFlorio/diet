@@ -21,11 +21,11 @@ function nonEmptyString(value) {
 
 /** @param {unknown} val */
 const validateName = (val) => string(val, {
-    minLen: 1, maxLen: NAME_MAX_LEN, pattern: /^[\p{L}\p{N}\s'\-_.,()&]+$/u,
+    minLen: 1, maxLen: NAME_MAX_LEN, pattern: /^[\p{L}\p{M}\p{N}\s'\-/_.,()&]+$/u,
 });
 /** @param {unknown} val */
 const validateRefLabel = (val) => string(val, {
-    minLen: 1, maxLen: NAME_MAX_LEN, pattern: /^[\p{L}\p{N}\s'\-_.,()&]+$/u,
+    minLen: 1, maxLen: NAME_MAX_LEN, pattern: /^[\p{L}\p{M}\p{N}\s'\-/_.,()&]+$/u,
 });
 
 /**
