@@ -384,12 +384,12 @@ export function setupMeals(){
     if (target.classList.contains('add1')) {
       quantityEl.value = String(V.number((Number(quantityEl.value || '0') + 1)));
       quantityEl.dispatchEvent(new Event('input'));
-      quickSearch.focus(); return;
+      quickSearch.focus({ preventScroll: true }); return;
     }
     if (target.classList.contains('add05')) {
       quantityEl.value = String(V.number((Number(quantityEl.value || '0') - 0.5)));
       quantityEl.dispatchEvent(new Event('input'));
-      quickSearch.focus(); return;
+      quickSearch.focus({ preventScroll: true }); return;
     }
     if (target.classList.contains('food-link')) {
       window.dispatchEvent(new CustomEvent('go-foods', { detail: { id: food.id } })); return;
@@ -708,7 +708,7 @@ export function setupMeals(){
   }
 
   // --- Long-press on a macro card → log goal story to console ---
-  const MACRO_HOLD_MS = 10_000;
+  const MACRO_HOLD_MS = 5_000;
   /** @type {ReturnType<typeof setTimeout> | null} */
   let macroHoldTimer = null;
 
