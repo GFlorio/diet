@@ -56,6 +56,14 @@ const PERSISTENT_DEADBAND_KCAL = 25;    // kcal — absolute floor at full persi
 const PERSISTENT_DEADBAND_PCT  = 0.0125; // 1.25% of goal
 
 /**
+ * Same deadband floors for per-macro controllers, which operate in kcal space
+ * but on much smaller budgets (e.g. 600 kcal for protein). The calorie-goal
+ * floors (50/25 kcal) are too coarse there and would swallow real drift.
+ */
+const MACRO_BASE_DEADBAND_KCAL       = 10;
+const MACRO_PERSISTENT_DEADBAND_KCAL = 5;
+
+/**
  * How many calendar days of logged history the persistence detector looks at.
  * Longer = slower to declare "chronic"; shorter = quicker to fire.
  */
@@ -345,10 +353,12 @@ export function overPersistence(days, baseGoalKcal) {
  * Interpolate between base and persistent deadband using persistence intensity.
  * @param {number} baseGoalKcal
  * @param {number} intensity — 0 (no persistence) to 1 (fully persistent)
+ * @param {number} [baseFloor]
+ * @param {number} [persistentFloor]
  */
-export function adaptiveDeadband(baseGoalKcal, intensity) {
-  const base       = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * baseGoalKcal);
-  const persistent = Math.max(PERSISTENT_DEADBAND_KCAL, PERSISTENT_DEADBAND_PCT * baseGoalKcal);
+export function adaptiveDeadband(baseGoalKcal, intensity, baseFloor = BASE_DEADBAND_KCAL, persistentFloor = PERSISTENT_DEADBAND_KCAL) {
+  const base       = Math.max(baseFloor, BASE_DEADBAND_PCT * baseGoalKcal);
+  const persistent = Math.max(persistentFloor, PERSISTENT_DEADBAND_PCT * baseGoalKcal);
   return lerp(base, persistent, intensity);
 }
 
@@ -387,7 +397,7 @@ export function adaptiveGain(mode, effectiveError, intensity) {
  * @param {'loss'|'maintenance'|'gain'} [mode]
  * @returns {{ adjustedGoalKcal: number, adjustment: number, gated?: true, debug: object }}
  */
-export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = 'maintenance') {
+export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = 'maintenance', deadbandFloorKcal = BASE_DEADBAND_KCAL, persistentDeadbandFloorKcal = PERSISTENT_DEADBAND_KCAL) {
   if (baseGoalKcal <= 0) {
     return { adjustedGoalKcal: baseGoalKcal, adjustment: 0, debug: { gate: 'zero-goal' } };
   }
@@ -397,7 +407,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
   // Build logged-day array (newest first, including dateISO if logged).
   /** @type {Array<{ageDays: number, error: number}>} */
   const loggedDays = [];
-  for (let i = 0; i < LONG_WINDOW; i++) {
+  for (let i = 1; i < LONG_WINDOW; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
     const iso = $.toISO(date);
@@ -439,7 +449,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
   const effectivePersistence = 0.5 + confidence * (rawPersistence - 0.5);
   const persistenceIntensity = smoothstep(PERSISTENCE_START, PERSISTENCE_FULL, effectivePersistence);
 
-  const deadband = adaptiveDeadband(baseGoalKcal, persistenceIntensity);
+  const deadband = adaptiveDeadband(baseGoalKcal, persistenceIntensity, deadbandFloorKcal, persistentDeadbandFloorKcal);
 
   if (Math.abs(effectiveError) < deadband) {
     return {
@@ -1006,11 +1016,11 @@ export async function computeWindowVM(todayISO, goals) {
     fatKcalByDay28[dateISO]   = macros.fats  * KCAL_PER_G_FAT;
   }
   const { adjustedGoalKcal: adjProtKcal,  debug: protCtrlDbg  } =
-    computeKcalAdjustment(protKcalByDay28,  todayISO, baseGramGoals.protG  * KCAL_PER_G_PROTEIN, 'gain');
+    computeKcalAdjustment(protKcalByDay28,  todayISO, baseGramGoals.protG  * KCAL_PER_G_PROTEIN, 'gain',   MACRO_BASE_DEADBAND_KCAL, MACRO_PERSISTENT_DEADBAND_KCAL);
   const { adjustedGoalKcal: adjCarbsKcal, debug: carbsCtrlDbg } =
-    computeKcalAdjustment(carbsKcalByDay28, todayISO, baseGramGoals.carbsG * KCAL_PER_G_CARBS,   calMode);
+    computeKcalAdjustment(carbsKcalByDay28, todayISO, baseGramGoals.carbsG * KCAL_PER_G_CARBS,   calMode,  MACRO_BASE_DEADBAND_KCAL, MACRO_PERSISTENT_DEADBAND_KCAL);
   const { adjustedGoalKcal: adjFatKcal,   debug: fatCtrlDbg   } =
-    computeKcalAdjustment(fatKcalByDay28,   todayISO, baseGramGoals.fatG   * KCAL_PER_G_FAT,     calMode);
+    computeKcalAdjustment(fatKcalByDay28,   todayISO, baseGramGoals.fatG   * KCAL_PER_G_FAT,     calMode,  MACRO_BASE_DEADBAND_KCAL, MACRO_PERSISTENT_DEADBAND_KCAL);
   const adjProtG  = adjProtKcal  / KCAL_PER_G_PROTEIN;
   const adjCarbsG = adjCarbsKcal / KCAL_PER_G_CARBS;
   const adjFatG   = adjFatKcal   / KCAL_PER_G_FAT;
