@@ -7,6 +7,14 @@ import * as $ from './utils.js';
  */
 const FUZZY_THRESHOLD = 0.4;
 
+/** 
+ * Removes diacritical marks so accented chars match their base letter.
+ * @param {string} str
+ */
+function stripAccents(str) {
+  return str.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 /**
  * Returns the set of all 3-char n-grams in a (pre-lowercased) string,
  * padded with a leading and trailing space for better boundary matching.
@@ -102,10 +110,10 @@ export const Foods = {
     if (status === 'active') { foods = foods.filter((food) => !food.archived); }
     if (status === 'archived') { foods = foods.filter((food) => !!food.archived); }
     if (search) {
-      const normalizedSearch = search.trim().toLowerCase();
+      const normalizedSearch = stripAccents(search.trim().toLowerCase());
       const queryWords = normalizedSearch.split(/\s+/).filter(Boolean);
       const withTiers = foods.map(food => {
-        const haystack = `${food.name} ${food.refLabel}`.toLowerCase();
+        const haystack = stripAccents(`${food.name} ${food.refLabel}`.toLowerCase());
         const haystackWords = haystack.split(/\W+/).filter(Boolean);
         return { food, tier: foodMatchScore(queryWords, haystack, haystackWords) };
       }).filter(({ tier }) => tier > 0);
