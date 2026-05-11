@@ -154,7 +154,7 @@ export function setupMeals(){
     const windowViewModel = currentWindowVM;
     const effectiveDays  = windowViewModel?.effectiveDays ?? 1;
 
-    const kcalStatus  = Goals.macroVisuals(totals.kcal  + kcalDelta,  windowViewModel?.calories, effectiveDays, currentGoals?.kcal ?? null).status;
+    const kcalStatus  = Goals.macroVisuals(totals.kcal  + kcalDelta,  windowViewModel?.calories, effectiveDays, currentGoals?.kcal ?? null, Goals.computeKcalDayStatus).status;
     const protStatus  = Goals.macroVisuals(totals.prot  + protDelta,  windowViewModel?.protein,  effectiveDays, gramGoals?.protG ?? null).status;
     const carbsStatus = Goals.macroVisuals(totals.carbs + carbsDelta, windowViewModel?.carbs,    effectiveDays, gramGoals?.carbsG ?? null).status;
     const fatStatus   = Goals.macroVisuals(totals.fats  + fatsDelta,  windowViewModel?.fat,      effectiveDays, gramGoals?.fatG ?? null).status;
@@ -423,18 +423,18 @@ export function setupMeals(){
       };
     }
     const gramGoals = Goals.derivedGrams(currentGoals);
-    /** @param {number} consumed @param {number} target @returns {MacroVM} */
-    const macro = (consumed, target) => ({
+    /** @param {number} consumed @param {number} target @param {import('../data-goals.js').StatusFn} [statusFn] @returns {MacroVM} */
+    const macro = (consumed, target, statusFn) => ({
       consumed,
       target,
       remaining: target - consumed,
-      status:    Goals.macroVisuals(consumed, null, 1, target).status,
+      status:    Goals.macroVisuals(consumed, null, 1, target, statusFn).status,
     });
     return {
-      calories: macro(totals.kcal, currentGoals.kcal),
-      protein:  macro(totals.prot, gramGoals.protG),
-      carbs:    macro(totals.carbs, gramGoals.carbsG),
-      fat:      macro(totals.fats, gramGoals.fatG),
+      calories: macro(totals.kcal,   currentGoals.kcal,    Goals.computeKcalDayStatus),
+      protein:  macro(totals.prot,   gramGoals.protG),
+      carbs:    macro(totals.carbs,  gramGoals.carbsG),
+      fat:      macro(totals.fats,   gramGoals.fatG),
     };
   }
 
@@ -544,7 +544,7 @@ export function setupMeals(){
     const buildHero = () => {
       if (avgMode && windowViewModel && currentGoals) {
         const avgKcal = (windowViewModel.calories.prevSum + totalsViewModel.calories.consumed) / avgDivisor;
-        const visuals = Goals.macroVisuals(avgKcal, null, 1, currentGoals.kcal);
+        const visuals = Goals.macroVisuals(avgKcal, null, 1, currentGoals.kcal, Goals.computeKcalDayStatus);
         return {
           value:   avgKcal,
           status:  visuals.status,
@@ -553,7 +553,7 @@ export function setupMeals(){
         };
       }
       if (windowViewModel) {
-        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, windowViewModel.calories, effectiveDays);
+        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, windowViewModel.calories, effectiveDays, null, Goals.computeKcalDayStatus);
         return {
           value:   totalsViewModel.calories.consumed,
           status:  visuals.status,
@@ -562,7 +562,7 @@ export function setupMeals(){
         };
       }
       if (currentGoals) {
-        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, null, effectiveDays, totalsViewModel.calories.target);
+        const visuals = Goals.macroVisuals(totalsViewModel.calories.consumed, null, effectiveDays, totalsViewModel.calories.target, Goals.computeKcalDayStatus);
         return {
           value:   totalsViewModel.calories.consumed,
           status:  visuals.status,

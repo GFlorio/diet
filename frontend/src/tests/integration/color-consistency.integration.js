@@ -34,7 +34,7 @@ async function mealPageCalStatus(todayISO) {
   const todayMeals = await Meals.listByDate(todayISO);
   let consumed = 0;
   for (const m of todayMeals) { consumed += m.foodSnapshot.kcal * m.multiplier; }
-  return Goals.macroVisuals(consumed, wvm.calories, wvm.effectiveDays).status;
+  return Goals.macroVisuals(consumed, wvm.calories, wvm.effectiveDays, null, Goals.computeKcalDayStatus).status;
 }
 
 /**
@@ -68,7 +68,7 @@ async function quickAddCalStatus(todayISO, addedKcal) {
   for (const m of todayMeals) { consumed += m.foodSnapshot.kcal * m.multiplier; }
   const prospective = consumed + addedKcal;
   const ed = wvm?.effectiveDays ?? 1;
-  return Goals.macroVisuals(prospective, wvm?.calories ?? null, ed, goal.kcal).status;
+  return Goals.macroVisuals(prospective, wvm?.calories ?? null, ed, goal.kcal, Goals.computeKcalDayStatus).status;
 }
 
 // ---------------------------------------------------------------------------

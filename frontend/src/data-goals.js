@@ -167,6 +167,8 @@ const LONG_CONFIDENCE_FULL_DAYS = 21;
  *   adjustment: number,
  *   gramAdj?:   number,
  * }} MacroWindow
+ *
+ * @typedef {(consumed: number, goal: number | null, idealToday: number, adjustment: number) => 'none'|'low'|'ok'|'warn'|'bad'} StatusFn
  */
 
 /**
@@ -508,7 +510,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
  * @param {number} adjustment    — signed kcal adjustment from the controller
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
-export function computeDayStatus(consumed, goal, idealToday, adjustment) {
+export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct = STATUS_OK_PCT, warnPct = STATUS_WARN_PCT) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
@@ -519,12 +521,15 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
   const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
   const effectiveAdjustment = Math.abs(adjustment) >= adjustmentDeadband ? adjustment : 0;
 
+  // In clamped mode the band is one-sided, so double it to keep the same visual footprint.
+  const safetyNetPct = 2 * okPct;
+
   if (effectiveAdjustment < 0) {
     // Clamped below: idealToday is a ceiling — green only extends downward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
-    if (ratio < 1 - 2 * SAFETY_NET_PCT) { return 'low'; }
-    if (ratio <= 1)                      { return 'ok'; }
+    if (ratio < 1 - 2 * safetyNetPct) { return 'low'; }
+    if (ratio <= 1)                    { return 'ok'; }
     return 'bad';
   }
 
@@ -532,20 +537,30 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment) {
     // Clamped above: idealToday is a floor — green only extends upward.
     if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
     const ratio = consumed / idealToday;
-    if (ratio < 1)                                                           { return 'low'; }
-    if (ratio <= 1 + 2 * SAFETY_NET_PCT)                                     { return 'ok'; }
-    if (ratio <= 1 + 2 * SAFETY_NET_PCT + (STATUS_WARN_PCT - STATUS_OK_PCT)) { return 'warn'; }
+    if (ratio < 1)                                        { return 'low'; }
+    if (ratio <= 1 + 2 * safetyNetPct)                    { return 'ok'; }
+    if (ratio <= 1 + 2 * safetyNetPct + (warnPct - okPct)) { return 'warn'; }
     return 'bad';
   }
 
   // Unclamped: compare consumed vs idealToday with standard bands.
   if (idealToday <= 0) { return consumed === 0 ? 'ok' : 'bad'; }
   const ratio = consumed / idealToday;
-  if (ratio < 1 - STATUS_OK_PCT)    { return 'low'; }
-  if (ratio <= 1 + STATUS_OK_PCT)   { return 'ok'; }
-  if (ratio <= 1 + STATUS_WARN_PCT) { return 'warn'; }
+  if (ratio < 1 - okPct)   { return 'low'; }
+  if (ratio <= 1 + okPct)  { return 'ok'; }
+  if (ratio <= 1 + warnPct) { return 'warn'; }
   return 'bad';
 }
+
+/** Status for a calorie value against its goal (±5 % ok, ±10 % warn).
+ * @type {StatusFn} */
+export const computeKcalDayStatus = (consumed, goal, idealToday, adjustment) =>
+  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT, STATUS_WARN_PCT);
+
+/** Status for a gram-macro value against its goal (±10 % ok, ±20 % warn — double kcal bands).
+ * @type {StatusFn} */
+export const computeMacroDayStatus = (consumed, goal, idealToday, adjustment) =>
+  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT * 2, STATUS_WARN_PCT * 2);
 
 /**
  * Compute the adjusted daily kcal target for a given day.
@@ -573,9 +588,9 @@ export function idealForDay(kcalByDay, dateISO, goalKcal) {
  */
 export function statusForDay(kcalByDay, dateISO, goalKcal) {
   const consumed = kcalByDay[dateISO] ?? 0;
-  if (goalKcal <= 0) { return computeDayStatus(consumed, goalKcal, goalKcal, 0); }
+  if (goalKcal <= 0) { return computeKcalDayStatus(consumed, goalKcal, goalKcal, 0); }
   const { adjustedGoalKcal, adjustment } = computeKcalAdjustment(kcalByDay, dateISO, goalKcal, 'maintenance');
-  return computeDayStatus(consumed, goalKcal, adjustedGoalKcal, adjustment);
+  return computeKcalDayStatus(consumed, goalKcal, adjustedGoalKcal, adjustment);
 }
 
 /**
@@ -651,9 +666,10 @@ export function barSegments(consumed, target, status, skipWarnZone = false) {
  * @param {MacroWindow | null | undefined} macroWin - from computeWindowVM; null/undefined = fallback
  * @param {number} _effectiveDays - from WindowVM; kept for isGoalClamped/recoveryDays callers
  * @param {number | null} [fallbackGoal] - raw daily target when macroWin is unavailable
+ * @param {StatusFn} [statusFn] - defaults to computeMacroDayStatus (wider gram-macro bands)
  * @returns {MacroVisuals}
  */
-export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = null) {
+export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = null, statusFn = computeMacroDayStatus) {
   /** @type {'none'|'low'|'ok'|'warn'|'bad'} */
   let status;
   let barTarget;
@@ -661,14 +677,14 @@ export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = 
 
   if (macroWin) {
     const adjustment = macroWin.adjustment ?? 0;
-    status       = computeDayStatus(consumed, macroWin.target, macroWin.idealToday, adjustment);
+    status       = statusFn(consumed, macroWin.target, macroWin.idealToday, adjustment);
     barTarget    = macroWin.idealToday;
     // Only suppress the warn zone when the adjustment is large enough to be
     // meaningful (same threshold as computeDayStatus uses for ceiling mode).
     const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
     skipWarnZone = adjustment < -adjustmentDeadband; // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
-    status    = computeDayStatus(consumed, fallbackGoal, fallbackGoal, 0);
+    status    = statusFn(consumed, fallbackGoal, fallbackGoal, 0);
     barTarget = fallbackGoal;
   } else {
     return { status: 'none', bar: { basePct: 0, warnPct: 0, badPct: 0 } };
@@ -1060,16 +1076,17 @@ export async function computeWindowVM(todayISO, goals) {
   });
 
   /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
-  const statusFn = (consumed, goalVal, ideal) =>
-    computeDayStatus(consumed, goalVal, ideal, adjustment);
+  const kcalStatus  = (consumed, goalVal, ideal) => computeKcalDayStatus(consumed, goalVal, ideal, adjustment);
+  /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
+  const macroStatus = (consumed, goalVal, ideal) => computeMacroDayStatus(consumed, goalVal, ideal, adjustment);
 
   return {
     windowDays,
     effectiveDays,
-    calories: { target: goals.kcal,          status: statusFn(todayMacros.kcal,  goals.kcal,          calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
-    protein:  { target: baseGramGoals.protG,  status: statusFn(todayMacros.prot,  baseGramGoals.protG,  protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment, gramAdj: gated ? 0 : adjProtG  - baseGramGoals.protG  },
-    carbs:    { target: baseGramGoals.carbsG, status: statusFn(todayMacros.carbs, baseGramGoals.carbsG, carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment, gramAdj: gated ? 0 : adjCarbsG - baseGramGoals.carbsG },
-    fat:      { target: baseGramGoals.fatG,   status: statusFn(todayMacros.fats,  baseGramGoals.fatG,   fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment, gramAdj: gated ? 0 : adjFatG   - baseGramGoals.fatG   },
+    calories: { target: goals.kcal,          status: kcalStatus(todayMacros.kcal,   goals.kcal,          calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
+    protein:  { target: baseGramGoals.protG,  status: macroStatus(todayMacros.prot,  baseGramGoals.protG,  protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment, gramAdj: gated ? 0 : adjProtG  - baseGramGoals.protG  },
+    carbs:    { target: baseGramGoals.carbsG, status: macroStatus(todayMacros.carbs, baseGramGoals.carbsG, carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment, gramAdj: gated ? 0 : adjCarbsG - baseGramGoals.carbsG },
+    fat:      { target: baseGramGoals.fatG,   status: macroStatus(todayMacros.fats,  baseGramGoals.fatG,   fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment, gramAdj: gated ? 0 : adjFatG   - baseGramGoals.fatG   },
     controllerDebug: {
       ...controllerDebug, gated: !!gated, mode: calMode,
       macroControllers: {

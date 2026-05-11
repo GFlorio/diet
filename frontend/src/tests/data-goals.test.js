@@ -522,10 +522,11 @@ describe('macroVisuals', () => {
 
   test('clamped above: bar and status always agree — warn status never produces bad bar', () => {
     // adjustment > 0 → clamped above → idealToday is floor
-    // consumed=2806, idealToday=2300 → ratio≈1.22 > 1.20, ≤ 1.25 → 'warn'
+    // macro bands: ok boundary at 1.40×ideal, warn boundary at 1.50×ideal
+    // consumed=2900, idealToday=2000 → ratio=1.45 → 'warn' (1.40 < 1.45 ≤ 1.50)
     /** @type {import('../data-goals.js').MacroWindow} */
-    const mw = { target: 2000, status: 'warn', idealToday: 2300, prevSum: 2400, adjustment: 300 };
-    const v = macroVisuals(2806, mw, 4);
+    const mw = { target: 2000, status: 'warn', idealToday: 2000, prevSum: 2400, adjustment: 300 };
+    const v = macroVisuals(2900, mw, 4);
     expect(v.status).toBe('warn');
     expect(v.bar.badPct).toBe(0);
   });
