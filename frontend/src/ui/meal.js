@@ -324,6 +324,31 @@ export function setupMeals(){
   // quick list. Without this, Chrome closes and reopens the keyboard on every
   // button tap. HTMLInputElement targets (qty fields) are excluded so they can
   // still receive focus normally.
+  //
+  // mousedown.preventDefault() handles Chrome/desktop. iOS Safari (and mobile
+  // Chrome) fire blur at touchstart time — before the synthetic mousedown —
+  // dismissing the keyboard and jumping the scroll. Preventing touchstart on
+  // the action buttons fixes this. Scroll is preserved because users never
+  // initiate a drag gesture on a small action button; card body and food name
+  // remain untouched. Since touchstart.preventDefault() suppresses native click
+  // synthesis, touchend dispatches it manually.
+  /** @type {EventTarget|null} */
+  let quickListTouchTarget = null;
+  quickList.addEventListener('touchstart', (e) => {
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (!(e.target instanceof HTMLInputElement) && target.closest('.actions') && !target.classList.contains('add')) {
+      e.preventDefault();
+      quickListTouchTarget = e.target;
+    }
+  }, { passive: false });
+  quickList.addEventListener('touchend', (e) => {
+    if (quickListTouchTarget !== null && e.target === quickListTouchTarget) {
+      /** @type {HTMLElement} */ (e.target).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+    }
+    quickListTouchTarget = null;
+  });
   quickList.addEventListener('mousedown', (e) => {
     if (!(e.target instanceof HTMLInputElement)) {
       e.preventDefault();
