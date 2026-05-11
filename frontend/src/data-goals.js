@@ -39,7 +39,7 @@ export const HALF_LIFE_DAYS = 9;
 /** Clamp factor for idealToday: ±15% of the daily target. */
 const IDEAL_CLAMP = 0.15;
 /** Fraction of IDEAL_CLAMP at which the recovery tooltip becomes visible. */
-const CLAMP_TOOLTIP_THRESHOLD = IDEAL_CLAMP * 0.80;
+const CLAMP_TOOLTIP_THRESHOLD = IDEAL_CLAMP * 0.70;
 
 /**
  * Deadband at zero persistence intensity (floors to this many kcal or 2.5% of
@@ -721,7 +721,7 @@ export function isGoalClamped(macroWin, effectiveDays) {
     // so gramAdj alone doesn't reflect what the user actually sees.
     if (macroWin.target === null || macroWin.target <= 0) { return false; }
     const deviation = (macroWin.idealToday - macroWin.target) / macroWin.target;
-    const threshold = CLAMP_TOOLTIP_THRESHOLD; // show when idealToday is >7.5% from base
+    const threshold = CLAMP_TOOLTIP_THRESHOLD;
     if (deviation < -threshold) { return 'below'; }
     if (deviation >  threshold) { return 'above'; }
     return false;
