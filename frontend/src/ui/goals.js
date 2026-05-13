@@ -1,7 +1,7 @@
 import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
-import * as $ from '../utils.js';
 import { historyIcon } from '../icons.js';
+import * as $ from '../utils.js';
 
 const NUM_WEEKS = 16;
 

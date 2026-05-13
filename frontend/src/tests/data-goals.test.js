@@ -210,15 +210,15 @@ describe('controllerConfidence', () => {
 
 describe('combineErrors', () => {
   test('same sign, full long confidence → equal blend', () => {
-    expect(combineErrors(100, 200)).toBeCloseTo(150);
+    expect(combineErrors(100, 200, 1)).toBeCloseTo(150);
   });
   test('sign disagreement, full long confidence → trust long signal (75% weight)', () => {
     // short=-100, long=+200, longConfidence=1 > 0.5 → 0.25×(-100) + 0.75×200 = 125
-    expect(combineErrors(-100, 200)).toBeCloseTo(125);
+    expect(combineErrors(-100, 200, 1)).toBeCloseTo(125);
   });
   test('either is 0, full long confidence → no sign disagreement', () => {
-    expect(combineErrors(0, 200)).toBeCloseTo(100);
-    expect(combineErrors(100, 0)).toBeCloseTo(50);
+    expect(combineErrors(0, 200, 1)).toBeCloseTo(100);
+    expect(combineErrors(100, 0, 1)).toBeCloseTo(50);
   });
   test('longConfidence=0 → short signal only (long weight = 0)', () => {
     expect(combineErrors(100, 200, 0)).toBeCloseTo(100);
@@ -361,9 +361,9 @@ describe('computeDayStatus', () => {
     expect(computeDayStatus(0, 2000, 1700, -300)).toBe('low');
   });
 
-  test('clamped below: bottom of ok window is at idealToday × 0.80', () => {
-    expect(computeDayStatus(1360, 2000, 1700, -300)).toBe('ok');   // ratio 0.80
-    expect(computeDayStatus(1359, 2000, 1700, -300)).toBe('low');  // just below
+  test('clamped below: bottom of ok window is at idealToday × 0.90', () => {
+    expect(computeDayStatus(1530, 2000, 1700, -300)).toBe('ok');   // ratio 0.90
+    expect(computeDayStatus(1529, 2000, 1700, -300)).toBe('low');  // just below
   });
 
   test('clamped below: consuming idealToday exactly shows ok', () => {
@@ -375,7 +375,7 @@ describe('computeDayStatus', () => {
     expect(computeDayStatus(2500, 2000, 1700, -300)).toBe('bad');
   });
 
-  // Clamped above (adjustment > 0): idealToday is a floor, ok window 20% wide above ideal
+  // Clamped above (adjustment > 0): idealToday is a floor, ok window 10% wide above ideal
 
   test('clamped above: consuming below idealToday shows low', () => {
     expect(computeDayStatus(2200, 2000, 2300, 300)).toBe('low');
@@ -385,17 +385,17 @@ describe('computeDayStatus', () => {
     expect(computeDayStatus(2300, 2000, 2300, 300)).toBe('ok');
   });
 
-  test('clamped above: top of ok window is at idealToday × 1.20', () => {
-    expect(computeDayStatus(2760, 2000, 2300, 300)).toBe('ok');    // ratio 1.20
-    expect(computeDayStatus(2761, 2000, 2300, 300)).toBe('warn');  // just above
+  test('clamped above: top of ok window is at idealToday × 1.10', () => {
+    expect(computeDayStatus(2530, 2000, 2300, 300)).toBe('ok');    // ratio 1.10
+    expect(computeDayStatus(2531, 2000, 2300, 300)).toBe('warn');  // just above
   });
 
   test('clamped above: warn zone above ok band', () => {
-    expect(computeDayStatus(2806, 2000, 2300, 300)).toBe('warn');  // ratio ≈ 1.22
+    expect(computeDayStatus(2600, 2000, 2300, 300)).toBe('warn');  // ratio ≈ 1.13
   });
 
   test('clamped above: bad beyond warn zone', () => {
-    expect(computeDayStatus(2900, 2000, 2300, 300)).toBe('bad');   // ratio ≈ 1.26
+    expect(computeDayStatus(2700, 2000, 2300, 300)).toBe('bad');   // ratio ≈ 1.17
   });
 });
 
@@ -522,11 +522,11 @@ describe('macroVisuals', () => {
 
   test('clamped above: bar and status always agree — warn status never produces bad bar', () => {
     // adjustment > 0 → clamped above → idealToday is floor
-    // macro bands: ok boundary at 1.40×ideal, warn boundary at 1.50×ideal
-    // consumed=2900, idealToday=2000 → ratio=1.45 → 'warn' (1.40 < 1.45 ≤ 1.50)
+    // macro bands (okPct=0.10): ok boundary at 1.20×ideal, warn boundary at 1.30×ideal
+    // consumed=2500, idealToday=2000 → ratio=1.25 → 'warn' (1.20 < 1.25 ≤ 1.30)
     /** @type {import('../data-goals.js').MacroWindow} */
     const mw = { target: 2000, status: 'warn', idealToday: 2000, prevSum: 2400, adjustment: 300 };
-    const v = macroVisuals(2900, mw, 4);
+    const v = macroVisuals(2500, mw, 4);
     expect(v.status).toBe('warn');
     expect(v.bar.badPct).toBe(0);
   });

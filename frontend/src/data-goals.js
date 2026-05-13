@@ -329,9 +329,9 @@ export function weightedAverageError(days, windowDays, halfLife) {
  * the long signal gets 75% weight to suppress transient spikes.
  * @param {number} shortErr
  * @param {number} longErr
- * @param {number} [longConfidence] 0-1; defaults to 1 (full weight, backward-compatible)
+ * @param {number} longConfidence 0-1;
  */
-export function combineErrors(shortErr, longErr, longConfidence = 1) {
+export function combineErrors(shortErr, longErr, longConfidence) {
   const signDisagree = shortErr !== 0 && longErr !== 0 && Math.sign(shortErr) !== Math.sign(longErr);
   if (longConfidence > 0.5 && signDisagree) {
     return 0.25 * shortErr + 0.75 * longErr;
@@ -521,8 +521,10 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct =
   const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
   const effectiveAdjustment = Math.abs(adjustment) >= adjustmentDeadband ? adjustment : 0;
 
-  // In clamped mode the band is one-sided, so double it to keep the same visual footprint.
-  const safetyNetPct = 2 * okPct;
+  // In clamped mode the band is one-sided. The boundary is `1 ± 2*safetyNetPct`,
+  // so setting safetyNetPct = okPct keeps the ok zone the same total width as the
+  // normal two-sided ±okPct band.
+  const safetyNetPct = okPct;
 
   if (effectiveAdjustment < 0) {
     // Clamped below: idealToday is a ceiling — green only extends downward.
