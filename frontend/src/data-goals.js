@@ -510,7 +510,7 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
  * @param {number} adjustment    — signed kcal adjustment from the controller
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
-export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct = STATUS_OK_PCT, warnPct = STATUS_WARN_PCT) {
+export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct = STATUS_OK_PCT, warnPct = STATUS_WARN_PCT, deadbandFloor = BASE_DEADBAND_KCAL) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
@@ -518,7 +518,7 @@ export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct =
   // meaningful. Small confidence-ramped adjustments (below the base deadband)
   // should not suppress the warn zone — the user's eating is still within normal
   // noise. This threshold matches isGoalClamped so both agree on "is it clamped".
-  const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * goal);
+  const adjustmentDeadband = Math.max(deadbandFloor, BASE_DEADBAND_PCT * goal);
   const effectiveAdjustment = Math.abs(adjustment) >= adjustmentDeadband ? adjustment : 0;
 
   // In clamped mode the band is one-sided. The boundary is `1 ± 2*safetyNetPct`,
@@ -560,9 +560,10 @@ export const computeKcalDayStatus = (consumed, goal, idealToday, adjustment) =>
   computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT, STATUS_WARN_PCT);
 
 /** Status for a gram-macro value against its goal (±10 % ok, ±20 % warn — double kcal bands).
+ * Uses a percentage-only deadband (no kcal absolute floor) since the adjustment is in grams.
  * @type {StatusFn} */
 export const computeMacroDayStatus = (consumed, goal, idealToday, adjustment) =>
-  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT * 2, STATUS_WARN_PCT * 2);
+  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT * 2, STATUS_WARN_PCT * 2, 0);
 
 /**
  * Compute the adjusted daily kcal target for a given day.
@@ -678,12 +679,19 @@ export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = 
   let skipWarnZone = false;
 
   if (macroWin) {
-    const adjustment = macroWin.adjustment ?? 0;
+    // Gram-macro windows carry a gramAdj (per-macro controller adjustment in grams).
+    // Use it with a percentage-only deadband so a negative calorie adjustment doesn't
+    // mistakenly put every macro into ceiling mode. Kcal windows (no gramAdj) fall back
+    // to the calorie adjustment with the standard kcal deadband floor.
+    const useGramAdj = macroWin.gramAdj !== undefined;
+    const adjustment = useGramAdj ? (macroWin.gramAdj ?? 0) : (macroWin.adjustment ?? 0);
     status       = statusFn(consumed, macroWin.target, macroWin.idealToday, adjustment);
     barTarget    = macroWin.idealToday;
     // Only suppress the warn zone when the adjustment is large enough to be
     // meaningful (same threshold as computeDayStatus uses for ceiling mode).
-    const adjustmentDeadband = Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
+    const adjustmentDeadband = useGramAdj
+      ? BASE_DEADBAND_PCT * (macroWin.target ?? 0)
+      : Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
     skipWarnZone = adjustment < -adjustmentDeadband; // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
     status    = statusFn(consumed, fallbackGoal, fallbackGoal, 0);
@@ -1079,16 +1087,18 @@ export async function computeWindowVM(todayISO, goals) {
 
   /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
   const kcalStatus  = (consumed, goalVal, ideal) => computeKcalDayStatus(consumed, goalVal, ideal, adjustment);
-  /** @param {number} consumed @param {number | null} goalVal @param {number} ideal */
-  const macroStatus = (consumed, goalVal, ideal) => computeMacroDayStatus(consumed, goalVal, ideal, adjustment);
+
+  const protGramAdj  = gated ? 0 : adjProtG  - baseGramGoals.protG;
+  const carbsGramAdj = gated ? 0 : adjCarbsG - baseGramGoals.carbsG;
+  const fatGramAdj   = gated ? 0 : adjFatG   - baseGramGoals.fatG;
 
   return {
     windowDays,
     effectiveDays,
-    calories: { target: goals.kcal,          status: kcalStatus(todayMacros.kcal,   goals.kcal,          calIdeal),  idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
-    protein:  { target: baseGramGoals.protG,  status: macroStatus(todayMacros.prot,  baseGramGoals.protG,  protIdeal), idealToday: protIdeal, prevSum: prevSum.prot,  adjustment, gramAdj: gated ? 0 : adjProtG  - baseGramGoals.protG  },
-    carbs:    { target: baseGramGoals.carbsG, status: macroStatus(todayMacros.carbs, baseGramGoals.carbsG, carbIdeal), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment, gramAdj: gated ? 0 : adjCarbsG - baseGramGoals.carbsG },
-    fat:      { target: baseGramGoals.fatG,   status: macroStatus(todayMacros.fats,  baseGramGoals.fatG,   fatIdeal),  idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment, gramAdj: gated ? 0 : adjFatG   - baseGramGoals.fatG   },
+    calories: { target: goals.kcal,          status: kcalStatus(todayMacros.kcal, goals.kcal, calIdeal), idealToday: calIdeal,  prevSum: prevSum.kcal,  adjustment },
+    protein:  { target: baseGramGoals.protG,  status: computeMacroDayStatus(todayMacros.prot,  baseGramGoals.protG,  protIdeal,  protGramAdj),  idealToday: protIdeal, prevSum: prevSum.prot,  adjustment, gramAdj: protGramAdj  },
+    carbs:    { target: baseGramGoals.carbsG, status: computeMacroDayStatus(todayMacros.carbs, baseGramGoals.carbsG, carbIdeal,  carbsGramAdj), idealToday: carbIdeal, prevSum: prevSum.carbs, adjustment, gramAdj: carbsGramAdj },
+    fat:      { target: baseGramGoals.fatG,   status: computeMacroDayStatus(todayMacros.fats,  baseGramGoals.fatG,   fatIdeal,   fatGramAdj),   idealToday: fatIdeal,  prevSum: prevSum.fats,  adjustment, gramAdj: fatGramAdj   },
     controllerDebug: {
       ...controllerDebug, gated: !!gated, mode: calMode,
       macroControllers: {
