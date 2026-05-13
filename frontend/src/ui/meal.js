@@ -751,7 +751,7 @@ export function setupMeals(){
 
   dayTotals.addEventListener('pointerdown', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
-    const row = target.closest('.macro-row');
+    const row = target.closest('.macro-row') ?? target.closest('.summary-hero');
     if (!row) { return; }
     /** @type {'calories'|'protein'|'carbs'|'fat'} */
     let macroKey;
