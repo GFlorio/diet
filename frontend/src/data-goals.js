@@ -507,19 +507,16 @@ export function computeKcalAdjustment(kcalByDay, dateISO, baseGoalKcal, mode = '
  * @param {number} consumed
  * @param {number | null} goal   — raw daily target
  * @param {number} idealToday    — adjusted daily target (goal + adjustment)
- * @param {number} adjustment    — signed kcal adjustment from the controller
+ * @param {number} adjustment    — signed kcal (or gram) adjustment from the controller
  * @returns {'none'|'low'|'ok'|'warn'|'bad'}
  */
-export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct = STATUS_OK_PCT, warnPct = STATUS_WARN_PCT, deadbandFloor = BASE_DEADBAND_KCAL) {
+export function computeDayStatus(consumed, goal, idealToday, adjustment, okPct = STATUS_OK_PCT, warnPct = STATUS_WARN_PCT) {
   if (goal === null) { return 'none'; }
   if (goal === 0) { return consumed === 0 ? 'ok' : 'bad'; }
 
-  // Only enter ceiling/floor mode when the adjustment is large enough to be
-  // meaningful. Small confidence-ramped adjustments (below the base deadband)
-  // should not suppress the warn zone — the user's eating is still within normal
-  // noise. This threshold matches isGoalClamped so both agree on "is it clamped".
-  const adjustmentDeadband = Math.max(deadbandFloor, BASE_DEADBAND_PCT * goal);
-  const effectiveAdjustment = Math.abs(adjustment) >= adjustmentDeadband ? adjustment : 0;
+  // Only enter ceiling/floor mode when the adjustment has hit the ±15% clamp.
+  // Smaller controller adjustments use the normal symmetric ok/warn/bad bands.
+  const effectiveAdjustment = Math.abs(adjustment) >= IDEAL_CLAMP * goal ? adjustment : 0;
 
   // In clamped mode the band is one-sided. The boundary is `1 ± 2*safetyNetPct`,
   // so setting safetyNetPct = okPct keeps the ok zone the same total width as the
@@ -563,7 +560,7 @@ export const computeKcalDayStatus = (consumed, goal, idealToday, adjustment) =>
  * Uses a percentage-only deadband (no kcal absolute floor) since the adjustment is in grams.
  * @type {StatusFn} */
 export const computeMacroDayStatus = (consumed, goal, idealToday, adjustment) =>
-  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT * 2, STATUS_WARN_PCT * 2, 0);
+  computeDayStatus(consumed, goal, idealToday, adjustment, STATUS_OK_PCT * 2, STATUS_WARN_PCT * 2);
 
 /**
  * Compute the adjusted daily kcal target for a given day.
@@ -689,10 +686,7 @@ export function macroVisuals(consumed, macroWin, _effectiveDays, fallbackGoal = 
     barTarget    = macroWin.idealToday;
     // Only suppress the warn zone when the adjustment is large enough to be
     // meaningful (same threshold as computeDayStatus uses for ceiling mode).
-    const adjustmentDeadband = useGramAdj
-      ? BASE_DEADBAND_PCT * (macroWin.target ?? 0)
-      : Math.max(BASE_DEADBAND_KCAL, BASE_DEADBAND_PCT * (macroWin.target ?? 0));
-    skipWarnZone = adjustment < -adjustmentDeadband; // clamped below → ceiling → no warn zone above ideal
+    skipWarnZone = adjustment <= -(IDEAL_CLAMP * (macroWin.target ?? 0)); // clamped below → ceiling → no warn zone above ideal
   } else if (fallbackGoal !== null) {
     status    = statusFn(consumed, fallbackGoal, fallbackGoal, 0);
     barTarget = fallbackGoal;
