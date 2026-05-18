@@ -184,6 +184,48 @@ describe('Foods.list — fuzzy search', () => {
   });
 });
 
+describe('Foods.list — exact name match', () => {
+  test('ranks exact name match above direct substring match', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      // food:1 contains "apple" as a substring but is not an exact name match
+      makeFood({ id: 'food:1', name: 'Apple Juice', archived: false }),
+      // food:2 is an exact name match
+      makeFood({ id: 'food:2', name: 'Apple', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'apple', status: 'active' });
+    expect(result[0].id).toBe('food:2');
+    expect(result[1].id).toBe('food:1');
+  });
+
+  test('exact name match wins over substring match even with lower frecency', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Apple Juice', archived: false }),
+      makeFood({ id: 'food:2', name: 'Apple', archived: false }),
+    ]);
+    const scores = new Map([['food:1', 100.0], ['food:2', 1.0]]);
+    const result = await Foods.list({ search: 'apple', status: 'active', scores });
+    expect(result[0].id).toBe('food:2');
+  });
+
+  test('exact name match is case-insensitive', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Apple Juice', archived: false }),
+      makeFood({ id: 'food:2', name: 'Apple', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'APPLE', status: 'active' });
+    expect(result[0].id).toBe('food:2');
+  });
+
+  test('exact name match is accent-insensitive', async () => {
+    vi.mocked(db.getAll).mockResolvedValue([
+      makeFood({ id: 'food:1', name: 'Café com Leite', archived: false }),
+      makeFood({ id: 'food:2', name: 'Café', archived: false }),
+    ]);
+    const result = await Foods.list({ search: 'cafe', status: 'active' });
+    expect(result[0].id).toBe('food:2');
+  });
+});
+
 describe('Foods.byId', () => {
   test('returns undefined when food does not exist', async () => {
     vi.mocked(db.get).mockResolvedValue(undefined);

@@ -113,11 +113,14 @@ export const Foods = {
       const normalizedSearch = stripAccents(search.trim().toLowerCase());
       const queryWords = normalizedSearch.split(/\s+/).filter(Boolean);
       const withTiers = foods.map(food => {
+        const normalizedName = stripAccents(food.name.trim().toLowerCase());
         const haystack = stripAccents(`${food.name} ${food.refLabel}`.toLowerCase());
         const haystackWords = haystack.split(/\W+/).filter(Boolean);
-        return { food, tier: foodMatchScore(queryWords, haystack, haystackWords) };
+        const baseScore = foodMatchScore(queryWords, haystack, haystackWords);
+        const tier = baseScore > 0 && normalizedName === normalizedSearch ? 3 : baseScore;
+        return { food, tier };
       }).filter(({ tier }) => tier > 0);
-      // Stable sort: tier-2 (direct) before tier-1 (fuzzy); frecency order preserved within each tier.
+      // Stable sort: tier-3 (exact name) > tier-2 (direct substring) > tier-1 (fuzzy); frecency order preserved within each tier.
       withTiers.sort((a, b) => b.tier - a.tier);
       foods = withTiers.map(({ food }) => food);
     }
