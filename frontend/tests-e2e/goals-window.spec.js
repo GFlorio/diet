@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { insertMeals, loadPouchDB, resetDB } from './playwright-helpers.js';
+import { insertGoals, insertMeals, loadPouchDB, resetDB } from './playwright-helpers.js';
 
 // --- shared fixtures --------------------------------------------------------
 
@@ -132,7 +132,13 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
   test('window is recomputed relative to the currently viewed date, not real today', async ({ page }) => {
     // T−7 is outside today's window but inside yesterday's window [T−7, T−1].
-    await setGoals(page, GOALS);
+    // Use insertGoals so effectiveFrom predates T−7; setGoals would set effectiveFrom=today,
+    // making getActive(yesterday) return null and hiding the summary.
+    await insertGoals(page, [{
+      id: 'goal:nav-test', effectiveFrom: isoOffset(-30), createdAt: Date.now() - 30 * 86400000,
+      kcal: 2000, maintenanceKcal: 2000, calMode: 'surplus', calMagnitude: 0,
+      protPct: 30, carbsPct: 45, fatPct: 25,
+    }]);
     await insertMeals(page, [
       { date: isoOffset(-7), ...AT_GOAL },
       { date: isoOffset(-1), ...AT_GOAL },
@@ -140,6 +146,8 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
 
     // Viewing today: window is [T−6, T] → only T−1 in range (1 prev day)
     // idealToday = 2×2000 − 2000 = 2000 → 2000 kcal left
+    // Navigate away first so clicking Meals fires the meals-activate event.
+    await page.locator('.tab', { hasText: 'Goals' }).click();
     await page.locator('.tab', { hasText: 'Meals' }).click();
     await expect(page.locator('.summary-hero-subtext').first()).toContainText('2000 kcal left');
 

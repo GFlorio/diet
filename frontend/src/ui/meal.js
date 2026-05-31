@@ -848,7 +848,7 @@ export function setupMeals(){
   async function renderMeals(animateFirst = false){
     [currentMeals, currentGoals] = await Promise.all([
       /** @type {Promise<Meal[]>} */ (Meals.listByDate(currentDate)),
-      Goals.getActive(),
+      Goals.getActive(currentDate),
     ]);
     currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
     mealsUiState.goalsEnabled = currentGoals !== null;
