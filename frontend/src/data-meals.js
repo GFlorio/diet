@@ -30,7 +30,7 @@ function snapshotFromFood(food) {
  * @type {{
  *   listByDate: (dateISO: string) => Promise<Meal[]>,
  *   listRange: (fromISO: string, toISO: string) => Promise<Meal[]>,
- *   frecencyScores: (sinceISO: string, todayISO: string) => Promise<Map<string, number>>,
+ *   frecencyScores: (sinceISO: string, todayISO: string, currentDateISO?: string|null) => Promise<Map<string, number>>,
  *   create: (opts: {food: Food, multiplier: number, date: string}) => Promise<Meal>,
  *   remove: (id: string) => Promise<void>,
  *   restore: (meal: Meal) => Promise<void>,
@@ -63,21 +63,41 @@ export const Meals = {
   },
   /**
    * Computes frecency scores for foods based on meal history in [sinceISO, todayISO].
-   * Score for each meal = 1 / (daysDiff + 1); scores are summed per food.
+   * Score per (food, day) = 1 / (daysDiff + 1); each food is counted once per day.
+   * If currentDateISO is given, its meals are excluded from scoring and any food
+   * already eaten on that date has its score multiplied by CURRENT_DAY_PENALTY.
    * @param {string} sinceISO
    * @param {string} todayISO
+   * @param {string|null} [currentDateISO]
    * @returns {Promise<Map<string, number>>}
    */
-  async frecencyScores(sinceISO, todayISO) {
+  async frecencyScores(sinceISO, todayISO, currentDateISO = null) {
     const meals = await db.getAll('meals', { from: sinceISO, to: todayISO });
     const MS_PER_DAY = 86400000;
+    const CURRENT_DAY_PENALTY = 0.25;
     const todayMs = Date.parse(todayISO);
     /** @type {Map<string, number>} */
     const scores = new Map();
+    /** @type {Set<string>} */
+    const seen = new Set();
+    /** @type {Set<string>} */
+    const currentDateFoods = new Set();
     for (const meal of meals) {
+      if (meal.date === currentDateISO) {
+        currentDateFoods.add(meal.foodId);
+        continue;
+      }
+      const key = `${meal.foodId}:${meal.date}`;
+      if (seen.has(key)) { continue };
+      seen.add(key);
       const daysDiff = Math.round((todayMs - Date.parse(meal.date)) / MS_PER_DAY);
       const score = 1 / (daysDiff + 1);
       scores.set(meal.foodId, (scores.get(meal.foodId) ?? 0) + score);
+    }
+    if (currentDateISO !== null) {
+      for (const foodId of currentDateFoods) {
+        scores.set(foodId, (scores.get(foodId) ?? 0) * CURRENT_DAY_PENALTY);
+      }
     }
     return scores;
   },

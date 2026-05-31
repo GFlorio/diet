@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { getAllFromStore, loadPouchDB, resetDB } from './playwright-helpers.js';
+import { getAllFromStore, insertMeals, loadPouchDB, localIsoToday, resetDB } from './playwright-helpers.js';
 
 async function createFood(page, f){
   await page.locator('.tab', { hasText: 'Foods' }).click();
@@ -226,16 +226,19 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await createFood(page, { name: 'Banana', refLabel: '100 g', kcal: 89, prot: 1.1, carbs: 23, fats: 0.3 });
     await createFood(page, { name: 'Zucchini', refLabel: '100 g', kcal: 17, prot: 1.2, carbs: 3.1, fats: 0.3 });
 
-    // Act: add Zucchini as a meal twice (more frequent than Banana which has 0 meals)
+    // Act: seed past-day meals for Zucchini directly in DB.
+    // Today's meals are penalised by frecency scoring, so history must be on a prior date.
     await page.locator('.tab', { hasText: 'Meals' }).click();
-    await page.fill('#quickSearch', 'zuc');
-    await expect(page.locator('#quickList .item')).toHaveCount(1);
-    await page.click('#quickList .item .add');
-    // Wait for first meal to be committed before adding second
-    await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
-    await page.fill('#quickSearch', 'zuc');
-    await page.click('#quickList .item .add');
-    await expect(page.locator('#mealsList .meal-row')).toHaveCount(2);
+    const foods = await getAllFromStore(page, 'foods');
+    const zucchini = foods.find((f) => f.name === 'Zucchini');
+    const today = localIsoToday();
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    const yesterday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await insertMeals(page, [
+      { date: yesterday, foodId: zucchini.id, kcal: zucchini.kcal, prot: zucchini.prot, carbs: zucchini.carbs, fats: zucchini.fats },
+      { date: yesterday, foodId: zucchini.id, kcal: zucchini.kcal, prot: zucchini.prot, carbs: zucchini.carbs, fats: zucchini.fats },
+    ]);
 
     // Navigate away and back to trigger a fresh frecency render via meals-activate
     await page.locator('.tab', { hasText: 'Foods' }).click();

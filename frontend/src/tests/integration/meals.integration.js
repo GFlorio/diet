@@ -174,9 +174,10 @@ describe('Frecency scoring', () => {
     const a = await createFood({ name: 'A' });
     const b = await createFood({ name: 'B' });
     await createMeal(a, '2024-06-10');
-    await createMeal(a, '2024-06-10');
+    await createMeal(a, '2024-06-10');  // duplicate on same day — counts once
     await createMeal(b, '2024-06-05');
 
+    // Arrange: a = 1/(0+1) = 1; b = 1/(5+1) ≈ 0.167 — a still wins
     const scores = await Meals.frecencyScores('2024-03-12', '2024-06-10');
     expect((scores.get(a.id) ?? 0)).toBeGreaterThan((scores.get(b.id) ?? 0));
   });
@@ -187,6 +188,53 @@ describe('Frecency scoring', () => {
 
     const scores = await Meals.frecencyScores('2024-06-01', '2024-06-10');
     expect(scores.get(food.id)).toBeUndefined();
+  });
+
+  test('same food eaten multiple times on the same day counts once', async () => {
+    const food = await createFood({ name: 'Rice' });
+    await createMeal(food, '2024-06-09');
+    await createMeal(food, '2024-06-09');
+    await createMeal(food, '2024-06-09');
+
+    const scores = await Meals.frecencyScores('2024-03-12', '2024-06-10');
+    // Only one occurrence on 2024-06-09: daysDiff=1, score = 1/2
+    expect(scores.get(food.id)).toBeCloseTo(1 / 2, 3);
+  });
+
+  test('current date meals are excluded from scoring', async () => {
+    const food = await createFood({ name: 'Bread' });
+    await createMeal(food, '2024-06-10');  // current date
+    await createMeal(food, '2024-06-09');  // previous day
+
+    // Without currentDateISO: score = 1/(0+1) + 1/(1+1) = 1.5
+    // With currentDateISO='2024-06-10': 2024-06-10 is excluded from scoring but still
+    // marks the food as "eaten today", so history (0.5) gets × 0.25 penalty → 0.125
+    const scores = await Meals.frecencyScores('2024-03-12', '2024-06-10', '2024-06-10');
+    expect(scores.get(food.id)).toBeCloseTo(1 / 2 * 0.25, 3);
+  });
+
+  test('food already eaten on current date gets penalty', async () => {
+    const eaten = await createFood({ name: 'Oats' });
+    const other = await createFood({ name: 'Eggs' });
+    // eaten: history score = 1/(1+1) = 0.5, then × 0.25 penalty = 0.125
+    await createMeal(eaten, '2024-06-10');  // current date
+    await createMeal(eaten, '2024-06-09');
+    // other: history score = 1/(2+1) ≈ 0.333 — no penalty
+    await createMeal(other, '2024-06-08');
+
+    const scores = await Meals.frecencyScores('2024-03-12', '2024-06-10', '2024-06-10');
+    // eaten: 0.5 * 0.25 = 0.125; other: 1/3 ≈ 0.333 — other wins despite lower raw score
+    expect((scores.get(eaten.id) ?? 0)).toBeLessThan((scores.get(other.id) ?? 0));
+    expect(scores.get(eaten.id)).toBeCloseTo(1 / 2 * 0.25, 3);
+  });
+
+  test('food only on current date with no history gets score 0 after penalty', async () => {
+    const food = await createFood({ name: 'NewFood' });
+    await createMeal(food, '2024-06-10');  // current date only, no prior history
+
+    const scores = await Meals.frecencyScores('2024-03-12', '2024-06-10', '2024-06-10');
+    // no history → base score 0; penalty: 0 × 0.25 = 0
+    expect(scores.get(food.id) ?? 0).toBeCloseTo(0, 3);
   });
 });
 

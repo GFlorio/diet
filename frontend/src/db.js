@@ -239,13 +239,15 @@ export const importDB = async (data) => {
   getAll: (/** @type {keyof StoreMap} */ store) => getAll(store),
   /**
    * Insert synthetic meal records directly, bypassing the UI.
-   * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number}>} meals
+   * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number, foodId?:string}>} meals
    */
   insertMeals: async (meals) => {
     for (const meal of meals) {
+      const foodId = meal.foodId ?? 'food:0';
+      const foodName = meal.foodId ? (await get('foods', foodId))?.name ?? 'Test Food' : 'Test Food';
       await put('meals', {
-        foodId: 'food:0',
-        foodSnapshot: { id: 'food:0', name: 'Test Food', refLabel: '100g',
+        foodId,
+        foodSnapshot: { id: foodId, name: foodName, refLabel: '100g',
           kcal: meal.kcal, prot: meal.prot, carbs: meal.carbs, fats: meal.fats, updatedAt: 0 },
         multiplier: meal.multiplier ?? 1,
         date: meal.date,

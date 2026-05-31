@@ -184,7 +184,7 @@ export function setupMeals(){
     const sinceDate = $.localDate(todayISO);
     sinceDate.setDate(sinceDate.getDate() - FRECENCY_DAYS);
     const sinceISO = $.toISO(sinceDate);
-    const scores   = await Meals.frecencyScores(sinceISO, todayISO);
+    const scores   = await Meals.frecencyScores(sinceISO, todayISO, currentDate);
     const foods    = await Foods.list({ search: query, status: 'active', scores });
     const totals   = computeTotals(currentMeals);
 

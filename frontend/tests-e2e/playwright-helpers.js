@@ -36,7 +36,7 @@ export function getAllFromStore(page, store) {
 /**
  * Insert synthetic meal records, bypassing the UI. Requires the app to be loaded.
  * @param {import('@playwright/test').Page} page
- * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number}>} meals
+ * @param {Array<{date:string, kcal:number, prot:number, carbs:number, fats:number, multiplier?:number, foodId?:string}>} meals
  */
 export async function insertMeals(page, meals) {
   await page.evaluate((m) => window.__testDB.insertMeals(m), meals);
