@@ -3,6 +3,19 @@
 This file provides guidance to Coding Agents when working with code
 in this repository.
 
+## General Guidelines
+
+- Be brief.
+- Strongly bias towards simplicity.
+- Strongly bias towards asking for clarification.
+- Less code is better code.
+- Be concrete, then refactor if necessary.
+- Flat is better than nested.
+- Look for root causes.
+- Descriptive names.
+- Assert assumptions.
+- Aggressively remove dead code, no "just in case" compatibility.
+
 ## Commands
 
 Prefer `mise` tasks over raw npm scripts:
