@@ -159,7 +159,6 @@ test.describe('Recipes and editable meal quantities', () => {
     );
 
     await row.locator('.meal-plus').click();
-    await expect(row.locator('.meal-save-status')).toContainText('Saved');
     await expect(row).toContainText('1100 kcal');
     const [updatedMeal] = await getAllFromStore(page, 'meals');
     expect(updatedMeal.multiplier).toBe(2);
@@ -177,7 +176,6 @@ test.describe('Recipes and editable meal quantities', () => {
     await expect(row).not.toContainText('Effective quantity');
     await ingredientQuantity.fill('2');
     await ingredientQuantity.press('Enter');
-    await expect(row.locator('.meal-ingredient-save-status').first()).toContainText('Saved');
     await expect(row).toContainText('1200 kcal');
 
     await row.locator('.meal-ingredient-delete').first().click();

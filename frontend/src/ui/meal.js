@@ -954,7 +954,6 @@ export function setupMeals(){
     }
     input.classList.remove('error');
     status.classList.remove('error');
-    status.textContent = 'Saving…';
     try {
       const saved = await Meals.updateMultiplier(meal.id, multiplier);
       if (!saved) { throw new Error('Meal no longer exists.'); }
@@ -964,9 +963,6 @@ export function setupMeals(){
       currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
       renderDayInfo(computeTotals(currentMeals));
       renderMealsList(currentMeals);
-      const savedRow = mealsList.querySelector(`[data-id="${CSS.escape(meal.id)}"]`);
-      const savedStatus = savedRow?.querySelector('.meal-save-status');
-      if (savedStatus) { savedStatus.textContent = 'Saved'; }
     } catch (error) {
       status.textContent = /** @type {Error} */ (error).message;
       status.classList.add('error');
@@ -1001,7 +997,6 @@ export function setupMeals(){
     }
     input.classList.remove('error');
     status.classList.remove('error');
-    status.textContent = 'Saving…';
     try {
       const saved = await Meals.updateRecipeIngredientMultiplier(meal.id, ingredientIndex, multiplier);
       if (!saved) { throw new Error('Meal no longer exists.'); }
@@ -1011,11 +1006,6 @@ export function setupMeals(){
       currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
       renderDayInfo(computeTotals(currentMeals));
       renderMealsList(currentMeals);
-      const savedRow = mealsList.querySelector(`[data-id="${CSS.escape(meal.id)}"]`);
-      const savedStatus = savedRow?.querySelector(
-        `.meal-ingredient[data-index="${ingredientIndex}"] .meal-ingredient-save-status`
-      );
-      if (savedStatus) { savedStatus.textContent = 'Saved'; }
     } catch (error) {
       status.textContent = /** @type {Error} */ (error).message;
       status.classList.add('error');
