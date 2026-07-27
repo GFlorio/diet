@@ -182,15 +182,13 @@ describe('mealCreate validation', () => {
   });
 
   test('rejects zero multiplier boundary', () => {
-    // multiplier: 0 is valid (min: 0)
-    const result = v.mealCreate({
+    expect(() => v.mealCreate({
       food: {
         id: 'food:1', name: 'Test', refLabel: '100g',
         kcal: 100, prot: 1, carbs: 10, fats: 1, archived: false, updatedAt: 1,
       },
       multiplier: 0,
       date: '2024-06-01',
-    });
-    expect(result.multiplier).toBe(0);
+    })).toThrow();
   });
 });

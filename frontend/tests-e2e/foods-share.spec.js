@@ -16,6 +16,7 @@ test.describe('Food share feature', () => {
   test('share button copies a URL with compact base64-encoded food data to clipboard', async ({ page }) => {
     // Arrange: create a food via UI
     await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.click('#addFoodBtn');
     await page.fill('#foodName', SALMON.name);
     await page.fill('#foodRefLabel', SALMON.refLabel);
     await page.fill('#foodKcal', String(SALMON.kcal));
@@ -109,8 +110,9 @@ test.describe('Food share feature', () => {
     // Act: navigate with the bad param (DB is empty, so main.js shows Foods tab)
     await page.goto(`/?f=${badParam}`);
 
-    // Assert: app loaded and Foods form is visible but completely empty
-    await expect(page.locator('#foodFormTitle')).toHaveText('Add food');
+    // Assert: app loaded on the library without opening an editor
+    await expect(page.locator('#foodLibraryCard')).toBeVisible();
+    await expect(page.locator('#foodFormCard')).toBeHidden();
     await expect(page.locator('#foodName')).toHaveValue('');
     await expect(page.locator('#foodRefLabel')).toHaveValue('');
     await expect(page.locator('#foodKcal')).toHaveValue('');

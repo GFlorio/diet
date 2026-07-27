@@ -12,6 +12,7 @@ test.describe('Foods: create, edit, search, archive, batch update', () => {
 
   test('create valid items (decimal and comma), search, archive/unarchive', async ({ page }) => {
     // Create Rice
+    await page.click('#addFoodBtn');
     await page.fill('#foodName', 'Rice');
     await page.fill('#foodRefLabel', '100 g');
     await page.fill('#foodKcal', '130');
@@ -22,6 +23,7 @@ test.describe('Foods: create, edit, search, archive, batch update', () => {
     await expect(page.locator('#foodsList')).toContainText('Rice');
 
     // Create Apple
+    await page.click('#addFoodBtn');
     await page.fill('#foodName', 'Apple');
     await page.fill('#foodRefLabel', '100 g');
     await page.fill('#foodKcal', '52');

@@ -42,7 +42,7 @@ test.describe('Export / Import database', () => {
     for await (const chunk of stream) { chunks.push(chunk); }
     const json = JSON.parse(Buffer.concat(chunks).toString());
 
-    expect(json.version).toBe(1);
+    expect(json.version).toBe(2);
     expect(typeof json.exportedAt).toBe('string');
     expect(json.foods).toHaveLength(1);
     expect(json.foods[0]).toMatchObject({ id: 'food:1', name: 'Chicken' });
@@ -66,7 +66,7 @@ test.describe('Export / Import database', () => {
     for await (const chunk of stream) { chunks.push(chunk); }
     const json = JSON.parse(Buffer.concat(chunks).toString());
 
-    expect(json.version).toBe(1);
+    expect(json.version).toBe(2);
     expect(json.foods).toEqual([]);
     expect(json.meals).toEqual([]);
     expect(json.goals).toEqual([]);

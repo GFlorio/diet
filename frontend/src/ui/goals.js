@@ -1,5 +1,6 @@
 import { Meals } from '../data.js';
 import * as Goals from '../data-goals.js';
+import { resolveMealMacros } from '../macro-resolution.js';
 import { historyIcon } from '../icons.js';
 import * as $ from '../utils.js';
 
@@ -444,7 +445,7 @@ export function setupGoals() {
     /** @type {Record<string, number>} */
     const kcalByDay = {};
     for (const meal of meals) {
-      kcalByDay[meal.date] = (kcalByDay[meal.date] ?? 0) + meal.foodSnapshot.kcal * meal.multiplier;
+      kcalByDay[meal.date] = (kcalByDay[meal.date] ?? 0) + resolveMealMacros(meal).kcal;
     }
 
     /** @type {Array<Array<{iso:string, status:string, kcal:number|null, cellGoal: import('../data-goals.js').GoalRecord|null, idealKcal: number|null}>>} */

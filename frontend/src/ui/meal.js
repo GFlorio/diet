@@ -1,4 +1,4 @@
-import { Foods, Meals } from '../data.js';
+import { Foods, Meals, resolveMealMacros, resolveSnapshotMacros } from '../data.js';
 import * as Goals from '../data-goals.js';
 import { calendarIcon, recoveryIcon, trendIcon } from '../icons.js';
 import * as $ from '../utils.js';
@@ -55,6 +55,10 @@ export function setupMeals(){
   let currentGoals = null;
   /** @type {WindowVM | null} */
   let currentWindowVM = null;
+  /** @type {string|null} */
+  let expandedMealId = null;
+  /** @type {number|null} */
+  let expandedIngredientIndex = null;
 
   /**
    * Format ISO date (YYYY-MM-DD) to human-friendly short form (e.g., "Oct 30").
@@ -90,6 +94,8 @@ export function setupMeals(){
     const date = $.localDate(currentDate);
     date.setDate(date.getDate() + delta);
     currentDate = $.toISO(date);
+    expandedMealId = null;
+    expandedIngredientIndex = null;
     updateHeader();
     void renderMeals();
     updateTodayBtn();
@@ -125,6 +131,8 @@ export function setupMeals(){
     const today = $.isoToday();
     const animationClass = currentDate < today ? 'dateSlideLeft' : 'dateSlideRight';
     currentDate = today;
+    expandedMealId = null;
+    expandedIngredientIndex = null;
     updateHeader();
     void renderMeals();
     updateTodayBtn();
@@ -192,6 +200,7 @@ export function setupMeals(){
       <div class="item food-card" data-id="${f.id}">
         <div class="food-card-header">
           <button class="btn ghost food-link" tabindex="-1">${$.esc(f.name)}</button>
+          ${f.type === 'recipe' ? '<span class="chip recipe-chip">Recipe</span>' : ''}
           <span class="food-card-portion">${$.esc(f.refLabel)}</span>
         </div>
         <div class="actions">
@@ -427,7 +436,7 @@ export function setupMeals(){
    */
   function computeTotals(meals){
     const total = $.zeroMacros();
-    for (const meal of meals) { $.addScaledMacros(total, meal.foodSnapshot, meal.multiplier); }
+    for (const meal of meals) { $.addScaledMacros(total, resolveMealMacros(meal), 1); }
     return total;
   }
 
@@ -819,17 +828,83 @@ export function setupMeals(){
    */
   function renderMealsList(meals, animateFirst = false){
     mealsList.innerHTML = [...meals].reverse().map(/** @param {Meal} meal */ meal => {
-      const foodSnapshot = meal.foodSnapshot;
-      const multiplier = meal.multiplier;
-      const mealMeta = $.nutrMeta(foodSnapshot.kcal*multiplier, foodSnapshot.prot*multiplier, foodSnapshot.carbs*multiplier, foodSnapshot.fats*multiplier);
+      const snapshot = meal.foodSnapshot;
+      const macros = resolveMealMacros(meal);
+      const expanded = meal.id === expandedMealId;
+      const panelId = `meal-panel-${meal.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+      const ingredients = snapshot.type === 'recipe'
+        ? `<div class="meal-recipe-ingredients">
+            <div class="meal-panel-label">Ingredients</div>
+            ${snapshot.ingredients.map((ingredient, index) => {
+              const ingredientMacros = resolveSnapshotMacros(ingredient.foodSnapshot);
+              const contribution = {
+                kcal: ingredientMacros.kcal * ingredient.multiplier,
+                prot: ingredientMacros.prot * ingredient.multiplier,
+                carbs: ingredientMacros.carbs * ingredient.multiplier,
+                fats: ingredientMacros.fats * ingredient.multiplier,
+              };
+              const ingredientExpanded = expanded && expandedIngredientIndex === index;
+              const ingredientId = `${panelId}-ingredient-${index}`;
+              return `
+                <div class="meal-ingredient" data-index="${index}">
+                  <button type="button" class="meal-ingredient-header" data-index="${index}"
+                    aria-expanded="${ingredientExpanded}" aria-controls="${ingredientId}">
+                    <span>
+                      <strong>${$.esc(ingredient.foodSnapshot.name)}</strong>
+                      <small>${$.esc(ingredient.foodSnapshot.refLabel)} ×${$.fmtNum(ingredient.multiplier)} · ${$.nutrMeta(
+                        contribution.kcal,
+                        contribution.prot,
+                        contribution.carbs,
+                        contribution.fats,
+                      )}</small>
+                    </span>
+                    <span class="meal-chevron" aria-hidden="true">⌄</span>
+                  </button>
+                  <div id="${ingredientId}" class="meal-ingredient-detail${ingredientExpanded ? '' : ' hidden'}">
+                    <label>
+                      <span>Quantity</span>
+                      <input class="meal-ingredient-quantity-input" type="number" min="0.1" max="100" step="0.1"
+                        value="${ingredient.multiplier}" inputmode="decimal"
+                        aria-label="Quantity for ${$.esc(ingredient.foodSnapshot.name)}" />
+                    </label>
+                    <button type="button" class="btn small ghost meal-ingredient-step meal-ingredient-minus"
+                      ${ingredient.multiplier - 0.5 <= 0 ? 'disabled' : ''}>−0.5</button>
+                    <button type="button" class="btn small ghost meal-ingredient-step meal-ingredient-plus">+1</button>
+                    <span class="meal-ingredient-save-status" aria-live="polite"></span>
+                    <button type="button" class="btn small ghost meal-ingredient-delete"
+                      aria-label="Remove ${$.esc(ingredient.foodSnapshot.name)}" title="Remove ingredient"
+                      ${snapshot.ingredients.length === 1 ? 'disabled' : ''}>🗑️</button>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`
+        : '';
       return `
-      <div class="meal-row" data-id="${meal.id}">
-        <div class="meal-row-body">
-          <span class="meal-name">${$.esc(foodSnapshot.name)}</span>
-          <span class="meal-row-qty">${$.esc(foodSnapshot.refLabel)} <span class="meal-row-mul">×${$.fmtNum(multiplier)}</span></span>
-          <span class="meal-row-meta">${mealMeta}</span>
+      <div class="meal-row${expanded ? ' open' : ''}" data-id="${meal.id}">
+        <button type="button" class="meal-disclosure-header" aria-expanded="${expanded}" aria-controls="${panelId}">
+          <span class="meal-row-body">
+            <span class="meal-name">${$.esc(snapshot.name)}</span>
+            <span class="meal-row-qty">${$.esc(snapshot.refLabel)} <span class="meal-row-mul">×${$.fmtNum(meal.multiplier)}</span></span>
+            <span class="meal-row-meta">${$.nutrMeta(macros.kcal, macros.prot, macros.carbs, macros.fats)}</span>
+          </span>
+          <span class="meal-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id="${panelId}" class="meal-panel${expanded ? '' : ' hidden'}">
+          <div class="meal-quantity-editor">
+            <label>
+              <span>Quantity</span>
+              <input class="meal-quantity-input" type="number" min="0.1" max="100" step="0.1"
+                value="${meal.multiplier}" inputmode="decimal" />
+            </label>
+            <button type="button" class="btn small ghost meal-minus"
+              ${meal.multiplier - 0.5 <= 0 ? 'disabled' : ''}>−0.5</button>
+            <button type="button" class="btn small ghost meal-plus">+1</button>
+            <span class="meal-save-status" aria-live="polite"></span>
+            <button type="button" class="btn small ghost danger-text del"
+              aria-label="Delete ${$.esc(snapshot.name)}" title="Delete meal">🗑️</button>
+          </div>
+          ${ingredients}
         </div>
-        <button class="btn small ghost del" title="Delete">🗑️</button>
       </div>`;
     }).join('');
     if (animateFirst) {
@@ -858,6 +933,95 @@ export function setupMeals(){
     await renderQuickList();
   }
 
+  /**
+   * @param {Meal} meal
+   * @param {number} multiplier
+   * @param {HTMLElement} row
+   */
+  async function saveMealQuantity(meal, multiplier, row) {
+    const status = /** @type {HTMLElement|null} */ (row.querySelector('.meal-save-status'));
+    const input = /** @type {HTMLInputElement|null} */ (row.querySelector('.meal-quantity-input'));
+    if (!status || !input) { return; }
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 100) {
+      input.classList.add('error');
+      status.textContent = 'Invalid quantity';
+      status.classList.add('error');
+      return;
+    }
+    if (multiplier === meal.multiplier) {
+      input.value = String(meal.multiplier);
+      return;
+    }
+    input.classList.remove('error');
+    status.classList.remove('error');
+    status.textContent = 'Saving…';
+    try {
+      const saved = await Meals.updateMultiplier(meal.id, multiplier);
+      if (!saved) { throw new Error('Meal no longer exists.'); }
+      const index = currentMeals.findIndex(currentMeal => currentMeal.id === meal.id);
+      if (index < 0) { throw new Error('Meal is not loaded.'); }
+      currentMeals[index] = saved;
+      currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
+      renderDayInfo(computeTotals(currentMeals));
+      renderMealsList(currentMeals);
+      const savedRow = mealsList.querySelector(`[data-id="${CSS.escape(meal.id)}"]`);
+      const savedStatus = savedRow?.querySelector('.meal-save-status');
+      if (savedStatus) { savedStatus.textContent = 'Saved'; }
+    } catch (error) {
+      status.textContent = /** @type {Error} */ (error).message;
+      status.classList.add('error');
+    }
+  }
+
+  /**
+   * @param {Meal} meal
+   * @param {number} ingredientIndex
+   * @param {number} multiplier
+   * @param {HTMLElement} row
+   */
+  async function saveIngredientQuantity(meal, ingredientIndex, multiplier, row) {
+    if (meal.foodSnapshot.type !== 'recipe') { return; }
+    const ingredient = meal.foodSnapshot.ingredients[ingredientIndex];
+    const status = /** @type {HTMLElement|null} */ (
+      row.querySelector(`.meal-ingredient[data-index="${ingredientIndex}"] .meal-ingredient-save-status`)
+    );
+    const input = /** @type {HTMLInputElement|null} */ (
+      row.querySelector(`.meal-ingredient[data-index="${ingredientIndex}"] .meal-ingredient-quantity-input`)
+    );
+    if (!ingredient || !status || !input) { return; }
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 100) {
+      input.classList.add('error');
+      status.textContent = 'Invalid quantity';
+      status.classList.add('error');
+      return;
+    }
+    if (multiplier === ingredient.multiplier) {
+      input.value = String(ingredient.multiplier);
+      return;
+    }
+    input.classList.remove('error');
+    status.classList.remove('error');
+    status.textContent = 'Saving…';
+    try {
+      const saved = await Meals.updateRecipeIngredientMultiplier(meal.id, ingredientIndex, multiplier);
+      if (!saved) { throw new Error('Meal no longer exists.'); }
+      const index = currentMeals.findIndex(currentMeal => currentMeal.id === meal.id);
+      if (index < 0) { throw new Error('Meal is not loaded.'); }
+      currentMeals[index] = saved;
+      currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
+      renderDayInfo(computeTotals(currentMeals));
+      renderMealsList(currentMeals);
+      const savedRow = mealsList.querySelector(`[data-id="${CSS.escape(meal.id)}"]`);
+      const savedStatus = savedRow?.querySelector(
+        `.meal-ingredient[data-index="${ingredientIndex}"] .meal-ingredient-save-status`
+      );
+      if (savedStatus) { savedStatus.textContent = 'Saved'; }
+    } catch (error) {
+      status.textContent = /** @type {Error} */ (error).message;
+      status.classList.add('error');
+    }
+  }
+
   mealsList.addEventListener('click', async (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     const row    = target.closest('.meal-row');
@@ -866,10 +1030,68 @@ export function setupMeals(){
     const id     = rowEl.dataset.id;
     const meal   = currentMeals.find(currentMeal => currentMeal.id === id);
     if (!meal) { return; }
-    if (target.classList.contains('del')) {
+    const disclosure = target.closest('.meal-disclosure-header');
+    if (disclosure) {
+      expandedMealId = expandedMealId === meal.id ? null : meal.id;
+      expandedIngredientIndex = null;
+      renderMealsList(currentMeals);
+      return;
+    }
+    const ingredientHeader = target.closest('.meal-ingredient-header');
+    if (ingredientHeader) {
+      const index = Number(/** @type {HTMLElement} */ (ingredientHeader).dataset.index);
+      expandedIngredientIndex = expandedIngredientIndex === index ? null : index;
+      renderMealsList(currentMeals);
+      return;
+    }
+    const ingredientDelete = target.closest('.meal-ingredient-delete');
+    if (ingredientDelete) {
+      const ingredientRow = /** @type {HTMLElement|null} */ (ingredientDelete.closest('.meal-ingredient'));
+      const ingredientIndex = Number(ingredientRow?.dataset.index);
+      const saved = await Meals.removeRecipeIngredient(meal.id, ingredientIndex);
+      if (!saved) { return; }
+      const index = currentMeals.findIndex(currentMeal => currentMeal.id === meal.id);
+      if (index < 0) { throw new Error('Meal is not loaded.'); }
+      currentMeals[index] = saved;
+      expandedIngredientIndex = null;
+      currentWindowVM = await Goals.computeWindowVM(currentDate, currentGoals);
+      renderDayInfo(computeTotals(currentMeals));
+      renderMealsList(currentMeals);
+      return;
+    }
+    const ingredientStep = target.closest('.meal-ingredient-step');
+    if (ingredientStep) {
+      const ingredientRow = /** @type {HTMLElement|null} */ (ingredientStep.closest('.meal-ingredient'));
+      const ingredientIndex = Number(ingredientRow?.dataset.index);
+      const input = /** @type {HTMLInputElement|null} */ (
+        ingredientRow?.querySelector('.meal-ingredient-quantity-input') ?? null
+      );
+      if (!input) { return; }
+      const delta = ingredientStep.classList.contains('meal-ingredient-minus') ? -0.5 : 1;
+      await saveIngredientQuantity(
+        meal,
+        ingredientIndex,
+        Number(input.value) + delta,
+        $.html(row),
+      );
+      return;
+    }
+    if (target.closest('.meal-minus')) {
+      await saveMealQuantity(meal, meal.multiplier - 0.5, $.html(row));
+      return;
+    }
+    if (target.closest('.meal-plus')) {
+      await saveMealQuantity(meal, meal.multiplier + 1, $.html(row));
+      return;
+    }
+    if (target.closest('.del')) {
       await Meals.remove(meal.id);
+      if (expandedMealId === meal.id) {
+        expandedMealId = null;
+        expandedIngredientIndex = null;
+      }
       await renderMeals();
-      $.toast(`"${$.esc(meal.foodSnapshot.name)}" removed`, {
+      $.toast(`"${meal.foodSnapshot.name}" removed`, {
         duration: 5000,
         action: {
           label: 'Undo',
@@ -878,6 +1100,63 @@ export function setupMeals(){
       });
       return;
     }
+  });
+
+  mealsList.addEventListener('keydown', event => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)
+      || (!input.classList.contains('meal-quantity-input')
+        && !input.classList.contains('meal-ingredient-quantity-input'))) { return; }
+    const row = input.closest('.meal-row');
+    const meal = currentMeals.find(currentMeal =>
+      currentMeal.id === /** @type {HTMLElement} */ (row).dataset.id
+    );
+    if (!meal) { return; }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      input.dataset.restored = 'true';
+      if (input.classList.contains('meal-quantity-input')) {
+        input.value = String(meal.multiplier);
+      } else if (meal.foodSnapshot.type === 'recipe') {
+        const ingredientRow = /** @type {HTMLElement|null} */ (input.closest('.meal-ingredient'));
+        const ingredient = meal.foodSnapshot.ingredients[Number(ingredientRow?.dataset.index)];
+        if (ingredient) { input.value = String(ingredient.multiplier); }
+      }
+      input.classList.remove('error');
+      input.blur();
+    }
+  });
+
+  mealsList.addEventListener('focusout', event => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)
+      || (!input.classList.contains('meal-quantity-input')
+        && !input.classList.contains('meal-ingredient-quantity-input'))) { return; }
+    if (input.dataset.restored === 'true') {
+      delete input.dataset.restored;
+      return;
+    }
+    const row = input.closest('.meal-row');
+    const meal = currentMeals.find(currentMeal =>
+      currentMeal.id === /** @type {HTMLElement} */ (row).dataset.id
+    );
+    if (!meal || !row) { return; }
+    if (input.classList.contains('meal-quantity-input')) {
+      void saveMealQuantity(meal, Number(input.value), $.html(row));
+      return;
+    }
+    if (event.relatedTarget instanceof Element
+      && event.relatedTarget.closest('.meal-ingredient-delete, .meal-ingredient-step')) { return; }
+    const ingredientRow = /** @type {HTMLElement|null} */ (input.closest('.meal-ingredient'));
+    void saveIngredientQuantity(
+      meal,
+      Number(ingredientRow?.dataset.index),
+      Number(input.value),
+      $.html(row),
+    );
   });
 
   /** @param {string=} name */
@@ -895,7 +1174,11 @@ export function setupMeals(){
 
   // Re-render meals (and quick list) when the user navigates back to this tab,
   // ensuring goals changes made on the goals page are reflected immediately.
-  window.addEventListener('meals-activate', () => renderMeals());
+  window.addEventListener('meals-activate', () => {
+    expandedMealId = null;
+    expandedIngredientIndex = null;
+    void renderMeals();
+  });
 
   void renderMeals();
 }

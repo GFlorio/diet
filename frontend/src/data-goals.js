@@ -1,5 +1,6 @@
 import { Meals } from './data-meals.js';
 import * as db from './db.js';
+import { resolveMealMacros } from './macro-resolution.js';
 import * as $ from './utils.js';
 
 /** % deviation at which the 7-day average transitions from ok → warn. */
@@ -1002,7 +1003,7 @@ export async function computeWindowVM(todayISO, goals) {
   const macrosByDay28 = {};
   for (const meal of meals) {
     if (!macrosByDay28[meal.date]) { macrosByDay28[meal.date] = $.zeroMacros(); }
-    $.addScaledMacros(macrosByDay28[meal.date], meal.foodSnapshot, meal.multiplier);
+    $.addScaledMacros(macrosByDay28[meal.date], resolveMealMacros(meal), 1);
   }
 
   // The 7-day window drives windowDays, effectiveDays, prevSum, and the UI display.

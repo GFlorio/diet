@@ -1,7 +1,7 @@
 /**
  * Shared helpers for integration tests.
  */
-import { Meals } from '../../data-meals.js';
+import { Meals, resolveMealMacros } from '../../data-meals.js';
 import * as db from '../../db.js';
 
 let _seq = 0;
@@ -79,7 +79,7 @@ export async function buildKcalByDay(fromISO, toISO) {
   /** @type {Record<string, number>} */
   const kcalByDay = {};
   for (const m of meals) {
-    kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + m.foodSnapshot.kcal * m.multiplier;
+    kcalByDay[m.date] = (kcalByDay[m.date] ?? 0) + resolveMealMacros(m).kcal;
   }
   return kcalByDay;
 }
@@ -96,10 +96,11 @@ export async function buildMacrosByDay(fromISO, toISO) {
   const byDay = {};
   for (const m of meals) {
     if (!byDay[m.date]) { byDay[m.date] = { kcal: 0, prot: 0, carbs: 0, fats: 0 }; }
-    byDay[m.date].kcal  += m.foodSnapshot.kcal  * m.multiplier;
-    byDay[m.date].prot  += m.foodSnapshot.prot  * m.multiplier;
-    byDay[m.date].carbs += m.foodSnapshot.carbs * m.multiplier;
-    byDay[m.date].fats  += m.foodSnapshot.fats  * m.multiplier;
+    const macros = resolveMealMacros(m);
+    byDay[m.date].kcal += macros.kcal;
+    byDay[m.date].prot += macros.prot;
+    byDay[m.date].carbs += macros.carbs;
+    byDay[m.date].fats += macros.fats;
   }
   return byDay;
 }

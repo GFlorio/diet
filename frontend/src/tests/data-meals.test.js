@@ -12,7 +12,7 @@ vi.mock('../utils.js', () => ({
   now: vi.fn(() => 999),
 }));
 
-import { Meals } from '../data-meals.js';
+import { Meals, resolveSnapshotMacros } from '../data-meals.js';
 import * as db from '../db.js';
 
 /** @returns {import('../db.js').Food} */
@@ -50,41 +50,39 @@ beforeEach(() => {
 
 describe('Meals.syncAllForFood', () => {
   test('returns 0 when the food does not exist', async () => {
-    vi.mocked(db.get).mockResolvedValue(undefined);
+    vi.mocked(db.getAll).mockResolvedValue([]);
     const result = await Meals.syncAllForFood('food:999');
-    expect(result).toBe(0);
-    expect(db.getWhere).not.toHaveBeenCalled();
+    expect(result.totalCount).toBe(0);
   });
 
   test('returns 0 when the food exists but has no associated meals', async () => {
-    vi.mocked(db.get).mockResolvedValue(makeFood());
-    vi.mocked(db.getWhere).mockResolvedValue([]);
+    vi.mocked(db.getAll).mockImplementation(async store => store === 'foods' ? [makeFood()] : []);
     const result = await Meals.syncAllForFood('food:1');
-    expect(result).toBe(0);
+    expect(result.totalCount).toBe(0);
     expect(db.put).not.toHaveBeenCalled();
   });
 
   test('syncs each meal and returns the count', async () => {
-    vi.mocked(db.get).mockResolvedValue(makeFood({ name: 'Brown Rice' }));
-    vi.mocked(db.getWhere).mockResolvedValue([
+    const food = makeFood({ name: 'Brown Rice' });
+    const meals = [
       makeMeal({ id: 'meal:2024-02-01:0000000000001' }),
       makeMeal({ id: 'meal:2024-02-01:0000000000002' }),
-    ]);
+    ];
+    vi.mocked(db.getAll).mockImplementation(async store => store === 'foods' ? [food] : meals);
     vi.mocked(db.put).mockResolvedValue('meal:2024-02-01:0000000000001');
     const result = await Meals.syncAllForFood('food:1');
-    expect(result).toBe(2);
+    expect(result.totalCount).toBe(2);
     expect(db.put).toHaveBeenCalledTimes(2);
   });
 
   test('updates each meal snapshot to the current food state', async () => {
     const updatedFood = makeFood({ name: 'Brown Rice', kcal: 216 });
-    vi.mocked(db.get).mockResolvedValue(updatedFood);
-    vi.mocked(db.getWhere).mockResolvedValue([makeMeal({ id: 'meal:2024-02-01:0000000000001' })]);
+    const meals = [makeMeal({ id: 'meal:2024-02-01:0000000000001' })];
+    vi.mocked(db.getAll).mockImplementation(async store => store === 'foods' ? [updatedFood] : meals);
     vi.mocked(db.put).mockResolvedValue('meal:2024-02-01:0000000000001');
     await Meals.syncAllForFood('food:1');
     const savedMeal = /** @type {import('../db.js').Meal} */ (vi.mocked(db.put).mock.calls[0][1]);
     expect(savedMeal.foodSnapshot.name).toBe('Brown Rice');
-    expect(savedMeal.foodSnapshot.kcal).toBe(216);
+    expect(resolveSnapshotMacros(savedMeal.foodSnapshot).kcal).toBe(216);
   });
 });
-

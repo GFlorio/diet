@@ -15,6 +15,7 @@ test.describe('PWA and offline persistence', () => {
 
     // Create a food and a meal while online
     await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.click('#addFoodBtn');
     await page.fill('#foodName', 'Banana');
     await page.fill('#foodRefLabel', '100 g');
     await page.fill('#foodKcal', '89');

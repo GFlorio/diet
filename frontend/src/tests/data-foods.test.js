@@ -228,14 +228,14 @@ describe('Foods.list — exact name match', () => {
 
 describe('Foods.byId', () => {
   test('returns undefined when food does not exist', async () => {
-    vi.mocked(db.get).mockResolvedValue(undefined);
+    vi.mocked(db.getAll).mockResolvedValue([]);
     const result = await Foods.byId('food:999');
     expect(result).toBeUndefined();
   });
 
   test('returns the food when found', async () => {
     const food = makeFood({ id: 'food:5' });
-    vi.mocked(db.get).mockResolvedValue(food);
+    vi.mocked(db.getAll).mockResolvedValue([food]);
     const result = await Foods.byId('food:5');
     expect(result).toEqual(food);
   });

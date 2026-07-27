@@ -96,9 +96,38 @@ function validateFoodLike(value, typeName, typeFields) {
  * @throws {ValidationError}
  */
 function foodSnapshot(value){
+    if (isObject(value) && value.type === 'recipe') {
+        const fields = /** @type {Record<string, unknown>} */ (value);
+        const base = validateAndCollect({
+            id: () => nonEmptyString(fields.id),
+            type: () => 'recipe',
+            name: () => validateName(fields.name),
+            refLabel: () => validateRefLabel(fields.refLabel),
+            updatedAt: () => number(fields.updatedAt, { min: 0, integer: true }),
+        });
+        if (!Array.isArray(fields.ingredients) || fields.ingredients.length === 0) {
+            throw new ValidationError('Invalid recipe snapshot', ['ingredients']);
+        }
+        const ingredients = fields.ingredients.map((ingredient) => {
+            if (!isObject(ingredient)) {
+                throw new ValidationError('Invalid recipe ingredient snapshot', ['ingredients']);
+            }
+            return {
+                multiplier: number(ingredient.multiplier, { min: Number.MIN_VALUE, max: MULTIPLIER_MAX }),
+                foodSnapshot: /** @type {import('./db.js').BasicMealSnapshot} */ (foodSnapshot(ingredient.foodSnapshot)),
+            };
+        });
+        if (ingredients.some(ingredient => /** @type {any} */ (ingredient.foodSnapshot).type === 'recipe')) {
+            throw new ValidationError('Nested recipe snapshots are not allowed', ['ingredients']);
+        }
+        return /** @type {FoodSnapshot} */ ({ ...base, ingredients });
+    }
     const fields = ['id','name','refLabel','kcal','prot','carbs','fats','updatedAt'];
     const { base, macros: macroFields } = validateFoodLike(value, 'FoodSnapshot', fields);
-    return /** @type {FoodSnapshot} */({ ...base, ...macroFields });
+    const basicType = /** @type {Record<string, unknown>} */ (value).type === 'basic'
+        ? { type: /** @type {const} */ ('basic') }
+        : {};
+    return /** @type {FoodSnapshot} */({ ...base, ...macroFields, ...basicType });
 }
 
 /**
@@ -108,9 +137,34 @@ function foodSnapshot(value){
  * @throws {ValidationError}
  */
 function food(value){
+    if (isObject(value) && value.type === 'recipe') {
+        const fields = /** @type {Record<string, unknown>} */ (value);
+        const base = validateAndCollect({
+            id: () => nonEmptyString(fields.id),
+            type: () => 'recipe',
+            name: () => validateName(fields.name),
+            refLabel: () => validateRefLabel(fields.refLabel),
+            archived: () => Boolean(fields.archived),
+            updatedAt: () => number(fields.updatedAt, { min: 0, integer: true }),
+        });
+        const macroFields = macros(fields);
+        if (!Array.isArray(fields.ingredients) || !Array.isArray(fields.resolvedIngredients)
+            || fields.ingredients.length === 0) {
+            throw new ValidationError('Invalid resolved recipe', ['ingredients']);
+        }
+        return /** @type {Food} */ ({
+            ...base,
+            ...macroFields,
+            ingredients: fields.ingredients,
+            resolvedIngredients: fields.resolvedIngredients,
+        });
+    }
     const fields = ['id','name','refLabel','kcal','prot','carbs','fats','archived','updatedAt'];
     const { fields: foodFields, base, macros: macroFields } = validateFoodLike(value, 'Food', fields);
-    return /** @type {Food} */({ ...base, ...macroFields, archived: Boolean(foodFields.archived) });
+    const basicType = /** @type {Record<string, unknown>} */ (value).type === 'basic'
+        ? { type: /** @type {const} */ ('basic') }
+        : {};
+    return /** @type {Food} */({ ...base, ...macroFields, ...basicType, archived: Boolean(foodFields.archived) });
 }
 
 /**
@@ -168,7 +222,7 @@ function meal(value){
     try { validatedMeal.foodSnapshot = foodSnapshot(fields.foodSnapshot); }
     catch (e) { collectFieldsFromError(e, invalidFields, 'foodSnapshot'); }
 
-    try { validatedMeal.multiplier = number(fields.multiplier, { min: 0, max: MULTIPLIER_MAX }); }
+    try { validatedMeal.multiplier = number(fields.multiplier, { min: Number.MIN_VALUE, max: MULTIPLIER_MAX }); }
     catch (e) { collectFieldsFromError(e, invalidFields, 'multiplier'); }
 
     try { validatedMeal.date = isoDate(fields.date); }
@@ -199,7 +253,7 @@ function mealCreate(value){
     try { mealInput.food = food(fields.food); }
     catch (e) { collectFieldsFromError(e, invalidFields, 'food'); }
 
-    try { mealInput.multiplier = number(fields.multiplier, { min: 0, max: MULTIPLIER_MAX }); }
+    try { mealInput.multiplier = number(fields.multiplier, { min: Number.MIN_VALUE, max: MULTIPLIER_MAX }); }
     catch (e) { collectFieldsFromError(e, invalidFields, 'multiplier'); }
 
     try { mealInput.date = isoDate(fields.date); }
@@ -248,7 +302,7 @@ function mealPatch(patch){
     const fields = /** @type {Record<string, unknown>} */ (patch);
     const validators = /** @type {Record<string, () => any>} */({});
     if ('multiplier' in fields) {
-        validators.multiplier = () => number(fields.multiplier, { min: 0, max: 100 });
+        validators.multiplier = () => number(fields.multiplier, { min: Number.MIN_VALUE, max: 100 });
     }
     if ('date' in fields) {validators.date = () => isoDate(fields.date);}
     if ('foodSnapshot' in fields) {validators.foodSnapshot = () => foodSnapshot(fields.foodSnapshot);}

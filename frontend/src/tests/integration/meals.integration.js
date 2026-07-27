@@ -5,7 +5,7 @@
 import './setup.js';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { Foods } from '../../data-foods.js';
-import { Meals } from '../../data-meals.js';
+import { Meals, resolveSnapshotMacros } from '../../data-meals.js';
 import { resetTestDB, createFood, createMeal } from './helpers.js';
 
 beforeEach(resetTestDB);
@@ -24,7 +24,7 @@ describe('Snapshot immutability', () => {
     // Meal snapshot unchanged
     const meals = await Meals.listByDate('2024-06-01');
     expect(meals[0].foodSnapshot.name).toBe('Rice');
-    expect(meals[0].foodSnapshot.kcal).toBe(130);
+    expect(resolveSnapshotMacros(meals[0].foodSnapshot).kcal).toBe(130);
   });
 
   test('multiple meals created from same food have independent snapshots', async () => {
@@ -37,8 +37,8 @@ describe('Snapshot immutability', () => {
 
     const day1 = await Meals.listByDate('2024-06-01');
     const day2 = await Meals.listByDate('2024-06-02');
-    expect(day1[0].foodSnapshot.kcal).toBe(150);
-    expect(day2[0].foodSnapshot.kcal).toBe(180);
+    expect(resolveSnapshotMacros(day1[0].foodSnapshot).kcal).toBe(150);
+    expect(resolveSnapshotMacros(day2[0].foodSnapshot).kcal).toBe(180);
   });
 });
 
@@ -53,13 +53,13 @@ describe('syncAllForFood', () => {
     await createMeal(food, '2024-06-03');
 
     await Foods.update(food.id, { name: 'Grilled Chicken', kcal: 250 });
-    const count = await Meals.syncAllForFood(food.id);
-    expect(count).toBe(3);
+    const result = await Meals.syncAllForFood(food.id);
+    expect(result.totalCount).toBe(3);
 
     for (const date of ['2024-06-01', '2024-06-02', '2024-06-03']) {
       const meals = await Meals.listByDate(date);
       expect(meals[0].foodSnapshot.name).toBe('Grilled Chicken');
-      expect(meals[0].foodSnapshot.kcal).toBe(250);
+      expect(resolveSnapshotMacros(meals[0].foodSnapshot).kcal).toBe(250);
     }
   });
 
@@ -74,11 +74,11 @@ describe('syncAllForFood', () => {
 
     const meals = await Meals.listByDate('2024-06-01');
     const riceMeal = meals.find(m => m.foodId === rice.id);
-    expect(riceMeal?.foodSnapshot.kcal).toBe(130); // untouched
+    expect(riceMeal && resolveSnapshotMacros(riceMeal.foodSnapshot).kcal).toBe(130); // untouched
   });
 
   test('returns 0 for non-existent food', async () => {
-    expect(await Meals.syncAllForFood('food:nonexistent')).toBe(0);
+    expect((await Meals.syncAllForFood('food:nonexistent')).totalCount).toBe(0);
   });
 });
 

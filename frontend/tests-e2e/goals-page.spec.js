@@ -3,6 +3,7 @@ import { insertGoals, insertMeals, loadPouchDB, localIsoToday, resetDB } from '.
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
+  await page.click('#addFoodBtn');
   await page.fill('#foodName', f.name);
   await page.fill('#foodRefLabel', f.refLabel);
   await page.fill('#foodKcal', String(f.kcal));

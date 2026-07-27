@@ -3,6 +3,7 @@ import { getAllFromStore, insertMeals, loadPouchDB, localIsoToday, resetDB } fro
 
 async function createFood(page, f){
   await page.locator('.tab', { hasText: 'Foods' }).click();
+  await page.click('#addFoodBtn');
   await page.fill('#foodName', f.name);
   await page.fill('#foodRefLabel', f.refLabel);
   await page.fill('#foodKcal', String(f.kcal));
@@ -33,6 +34,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     // Assert: meal list shows one
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
     await expect(page.locator('#mealsList')).toContainText('Chicken');
+    await page.locator('#mealsList .meal-disclosure-header').click();
     await page.locator('#mealsList .meal-row .del').click();
 
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
@@ -204,6 +206,7 @@ test.describe('Meals: quick add, edit qty, snapshots', () => {
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(1);
 
     // Act: delete the meal
+    await page.locator('#mealsList .meal-disclosure-header').click();
     await page.locator('#mealsList .meal-row .del').click();
 
     // Assert: meal removed from list and "removed" toast appears

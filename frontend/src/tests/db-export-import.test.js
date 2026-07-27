@@ -49,9 +49,9 @@ beforeEach(() => {
 // exportDB
 // ---------------------------------------------------------------------------
 describe('exportDB', () => {
-	test('returns version 1 and exportedAt timestamp', async () => {
+	test('returns version 2 and exportedAt timestamp', async () => {
 		const result = await exportDB();
-		expect(result.version).toBe(1);
+		expect(result.version).toBe(2);
 		expect(typeof result.exportedAt).toBe('string');
 		expect(new Date(result.exportedAt).toISOString()).toBe(result.exportedAt);
 	});
@@ -91,7 +91,7 @@ describe('importDB — invalid input', () => {
 	});
 
 	test('throws for wrong version', async () => {
-		await expect(importDB(/** @type {any} */ ({ version: 2, foods: [], meals: [], goals: [] }))).rejects.toThrow('Invalid backup file format.');
+		await expect(importDB(/** @type {any} */ ({ version: 3, foods: [], meals: [], goals: [] }))).rejects.toThrow('Invalid backup file format.');
 	});
 
 	test('throws when foods is not an array', async () => {

@@ -80,3 +80,49 @@ export function decodeFoodCode(code){
     return null;
   }
 }
+
+/**
+ * Recipe codes are versioned JSON bundles. They contain portable basic-food
+ * fields only; local IDs and computed recipe totals are intentionally omitted.
+ * @param {import('./db.js').ResolvedRecipeFood} recipe
+ */
+export function encodeRecipeCode(recipe) {
+  const bundle = {
+    version: 1,
+    type: 'recipe',
+    name: recipe.name,
+    refLabel: recipe.refLabel,
+    ingredients: recipe.resolvedIngredients.map(ingredient => ({
+      multiplier: ingredient.multiplier,
+      food: {
+        name: ingredient.food.name,
+        refLabel: ingredient.food.refLabel,
+        kcal: ingredient.food.kcal,
+        prot: ingredient.food.prot,
+        carbs: ingredient.food.carbs,
+        fats: ingredient.food.fats,
+      },
+    })),
+  };
+  return `r1.${toBase64Url(new TextEncoder().encode(JSON.stringify(bundle)))}`;
+}
+
+/**
+ * @param {string} code
+ * @returns {import('./data-foods.js').PortableRecipe|null}
+ */
+export function decodeRecipeCode(code) {
+  try {
+    if (!code.startsWith('r1.')) { return null; }
+    const json = new TextDecoder().decode(fromBase64Url(code.slice(3)));
+    const bundle = JSON.parse(json);
+    if (bundle?.version !== 1 || bundle?.type !== 'recipe'
+      || typeof bundle.name !== 'string' || typeof bundle.refLabel !== 'string'
+      || !Array.isArray(bundle.ingredients)) {
+      return null;
+    }
+    return bundle;
+  } catch {
+    return null;
+  }
+}

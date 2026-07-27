@@ -5,7 +5,7 @@ import './setup.js';
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as db from '../../db.js';
 import { Foods } from '../../data-foods.js';
-import { Meals } from '../../data-meals.js';
+import { Meals, resolveSnapshotMacros } from '../../data-meals.js';
 import * as Goals from '../../data-goals.js';
 import { resetTestDB, createFood, createMeal, insertGoal } from './helpers.js';
 
@@ -27,7 +27,7 @@ describe('Export/Import round-trip', () => {
     const backup = await db.exportDB();
 
     // Verify export structure
-    expect(backup.version).toBe(1);
+    expect(backup.version).toBe(2);
     expect(typeof backup.exportedAt).toBe('string');
     expect(backup.foods).toHaveLength(2);
     expect(backup.meals).toHaveLength(3);
@@ -75,7 +75,7 @@ describe('Export/Import round-trip', () => {
 
   test('import rejects invalid format', async () => {
     await expect(db.importDB(/** @type {any} */ (null))).rejects.toThrow('Invalid backup');
-    await expect(db.importDB(/** @type {any} */ ({ version: 2, foods: [], meals: [], goals: [] }))).rejects.toThrow('Invalid backup');
+    await expect(db.importDB(/** @type {any} */ ({ version: 3, foods: [], meals: [], goals: [] }))).rejects.toThrow('Invalid backup');
     await expect(db.importDB(/** @type {any} */ ({ version: 1, foods: 'bad', meals: [], goals: [] }))).rejects.toThrow('Invalid backup');
   });
 
@@ -91,8 +91,8 @@ describe('Export/Import round-trip', () => {
 
     const meals = await Meals.listByDate('2024-06-01');
     // Snapshot should still have original values
-    expect(meals[0].foodSnapshot.kcal).toBe(200);
-    expect(meals[0].foodSnapshot.prot).toBe(30);
+    expect(resolveSnapshotMacros(meals[0].foodSnapshot).kcal).toBe(200);
+    expect(resolveSnapshotMacros(meals[0].foodSnapshot).prot).toBe(30);
   });
 
   test('archived food status survives round-trip', async () => {

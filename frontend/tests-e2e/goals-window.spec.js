@@ -22,6 +22,7 @@ function isoOffset(n) {
 /** @param {import('@playwright/test').Page} page */
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
+  await page.click('#addFoodBtn');
   await page.fill('#foodName', f.name);
   await page.fill('#foodRefLabel', f.refLabel);
   await page.fill('#foodKcal', String(f.kcal));
@@ -229,6 +230,7 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await expect(deltaLine).toContainText('1835 kcal left');
 
     // Delete today's meal
+    await page.locator('#mealsList .meal-disclosure-header').click();
     await page.locator('#mealsList .meal-row .del').click();
 
     // After deletion: effectiveDays = 1+1 = 2, prevSum = 2000, idealToday = 2000; consumed = 0
@@ -245,6 +247,7 @@ test.describe('Goals: 7-day window — date navigation and meal history', () => 
     await page.click('#quickList .item .add');
 
     // Delete, then undo
+    await page.locator('#mealsList .meal-disclosure-header').click();
     await page.locator('#mealsList .meal-row .del').click();
     await expect(page.locator('#mealsList .meal-row')).toHaveCount(0);
     await page.getByRole('button', { name: 'Undo' }).click();

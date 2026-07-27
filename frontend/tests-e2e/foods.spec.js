@@ -3,6 +3,7 @@ import { getAllFromStore, loadPouchDB, resetDB } from './playwright-helpers.js';
 
 async function createFood(page, f) {
   await page.locator('.tab', { hasText: 'Foods' }).click();
+  await page.click('#addFoodBtn');
   await page.fill('#foodName', f.name);
   await page.fill('#foodRefLabel', f.refLabel);
   await page.fill('#foodKcal', String(f.kcal));
@@ -21,9 +22,34 @@ test.describe('Foods page', () => {
     await page.reload();
   });
 
+  test('opens focused food and recipe editors from the library', async ({ page }) => {
+    await page.locator('.tab', { hasText: 'Foods' }).click();
+
+    await expect(page.locator('#foodLibraryCard')).toBeVisible();
+    await expect(page.locator('#foodFormCard')).toBeHidden();
+    await expect(page.getByText('Basic food', { exact: true })).toHaveCount(0);
+
+    await page.click('#createRecipeBtn');
+    await expect(page.locator('#foodLibraryCard')).toBeHidden();
+    await expect(page.locator('#foodsListCard')).toBeHidden();
+    await expect(page.locator('#foodFormTitle')).toHaveText('Create recipe');
+    await expect(page.locator('#foodRefLabelText')).toHaveText('Recipe portion');
+    await expect(page.locator('#saveFoodBtn')).toHaveText('Save recipe');
+
+    await page.click('#resetFoodBtn');
+    await expect(page.locator('#foodLibraryCard')).toBeVisible();
+    await expect(page.locator('#foodsListCard')).toBeVisible();
+
+    await page.click('#addFoodBtn');
+    await expect(page.locator('#foodFormTitle')).toHaveText('Add food');
+    await expect(page.locator('#foodRefLabelText')).toHaveText('Reference portion');
+    await expect(page.locator('#saveFoodBtn')).toHaveText('Save food');
+  });
+
   test('create a food and verify UI and IndexedDB state', async ({ page }) => {
     // Navigate to Foods tab
     await page.locator('.tab', { hasText: 'Foods' }).click();
+    await page.click('#addFoodBtn');
 
     // Fill form
     await page.locator('#foodName').fill('Chicken breast');

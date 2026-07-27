@@ -12,7 +12,7 @@
 import './setup.js';
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as Goals from '../../data-goals.js';
-import { Meals } from '../../data-meals.js';
+import { Meals, resolveMealMacros } from '../../data-meals.js';
 import { resetTestDB, createFood, createMeal, insertGoal, buildKcalByDay } from './helpers.js';
 
 beforeEach(resetTestDB);
@@ -33,7 +33,7 @@ async function mealPageCalStatus(todayISO) {
   if (!wvm) { return 'none'; }
   const todayMeals = await Meals.listByDate(todayISO);
   let consumed = 0;
-  for (const m of todayMeals) { consumed += m.foodSnapshot.kcal * m.multiplier; }
+  for (const m of todayMeals) { consumed += resolveMealMacros(m).kcal; }
   return Goals.macroVisuals(consumed, wvm.calories, wvm.effectiveDays, null, Goals.computeKcalDayStatus).status;
 }
 
@@ -65,7 +65,7 @@ async function quickAddCalStatus(todayISO, addedKcal) {
   const wvm = await Goals.computeWindowVM(todayISO, goal);
   const todayMeals = await Meals.listByDate(todayISO);
   let consumed = 0;
-  for (const m of todayMeals) { consumed += m.foodSnapshot.kcal * m.multiplier; }
+  for (const m of todayMeals) { consumed += resolveMealMacros(m).kcal; }
   const prospective = consumed + addedKcal;
   const ed = wvm?.effectiveDays ?? 1;
   return Goals.macroVisuals(prospective, wvm?.calories ?? null, ed, goal.kcal, Goals.computeKcalDayStatus).status;

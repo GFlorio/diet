@@ -17,6 +17,7 @@ test.describe('Foods: combined search + status filter', () => {
    * @param {number} kcal
    */
   async function createFood(page, name, kcal) {
+    await page.click('#addFoodBtn');
     await page.fill('#foodName', name);
     await page.fill('#foodRefLabel', '100 g');
     await page.fill('#foodKcal', String(kcal));

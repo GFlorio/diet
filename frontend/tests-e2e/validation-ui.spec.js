@@ -10,6 +10,7 @@ test.describe('Food form validation UI', () => {
 		await resetDB(page);
 		await page.reload();
 		await page.locator('.tab', { hasText: 'Foods' }).click();
+		await page.click('#addFoodBtn');
 	});
 
 		/**
