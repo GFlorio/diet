@@ -5,7 +5,13 @@ import {
   encodeFoodCode,
   encodeRecipeCode,
 } from '../food-share-code.js';
-import { archiveIcon, editIcon, importCodeIcon, shareIcon } from '../icons.js';
+import {
+  archiveIcon,
+  editIcon,
+  importCodeIcon,
+  removeIcon,
+  shareIcon,
+} from '../icons.js';
 import { normalizeMacros } from '../macro-resolution.js';
 import * as $ from '../utils.js';
 import * as v from '../validation.js';
@@ -159,20 +165,24 @@ export function setupFoods() {
   }
 
   function updateRecipeSummary() {
+    const empty = selectedIngredients.length === 0;
+    recipeSummary.classList.toggle('hidden', empty);
+    if (empty) {
+      recipeSummary.innerHTML = '';
+      return;
+    }
     const totals = recipeTotals();
     recipeSummary.innerHTML = `
-      <strong>${$.fmtNum(totals.kcal, 0)} kcal</strong>
-      <span>${$.nutrMeta(totals.kcal, totals.prot, totals.carbs, totals.fats).replace(/^[^·]+ · /, '')}</span>`;
+      <div class="recipe-summary-copy">
+        <span class="recipe-summary-label">Recipe total</span>
+        <span class="recipe-summary-macros">P ${$.fmtNum(totals.prot)}g · C ${$.fmtNum(totals.carbs)}g · F ${$.fmtNum(totals.fats)}g</span>
+      </div>
+      <strong class="recipe-summary-kcal">${$.fmtNum(totals.kcal, 0)} kcal</strong>`;
   }
 
   function renderSelectedIngredients() {
     recipeIngredients.innerHTML = selectedIngredients.map((ingredient, index) => {
-      const contribution = {
-        kcal: ingredient.food.kcal * ingredient.multiplier,
-        prot: ingredient.food.prot * ingredient.multiplier,
-        carbs: ingredient.food.carbs * ingredient.multiplier,
-        fats: ingredient.food.fats * ingredient.multiplier,
-      };
+      const kcal = ingredient.food.kcal * ingredient.multiplier;
       const archived = ingredient.food.archived ? '<span class="chip">Archived</span>' : '';
       const match = portableDraft
         ? `<span class="chip">${ingredient.localMatch ? 'Local match' : 'New food'}</span>`
@@ -181,22 +191,18 @@ export function setupFoods() {
         <div class="recipe-ingredient-row" data-index="${index}">
           <div class="recipe-ingredient-main">
             <strong>${$.esc(ingredient.food.name)}</strong> ${archived} ${match}
-            <span class="meta">${$.esc(ingredient.food.refLabel)} · ${$.nutrMeta(
-              contribution.kcal,
-              contribution.prot,
-              contribution.carbs,
-              contribution.fats,
-            )}</span>
+            <span class="meta">${$.esc(ingredient.food.refLabel)} · ${$.fmtNum(kcal, 0)} kcal</span>
           </div>
           <label class="recipe-ingredient-qty">
-            <span>Qty</span>
+            <span aria-hidden="true">×</span>
             <input class="ingredient-multiplier" type="number" min="0.1" max="100" step="0.1"
-              value="${ingredient.multiplier}" aria-label="Quantity for ${$.esc(ingredient.food.name)}" />
+              inputmode="decimal" value="${ingredient.multiplier}"
+              aria-label="Quantity for ${$.esc(ingredient.food.name)}" />
           </label>
           <button type="button" class="btn small ghost remove-ingredient"
-            aria-label="Remove ${$.esc(ingredient.food.name)}">Remove</button>
+            aria-label="Remove ${$.esc(ingredient.food.name)}">${removeIcon}</button>
         </div>`;
-    }).join('') || '<div class="muted">Add at least one ingredient.</div>';
+    }).join('') || '<div class="recipe-ingredients-empty muted">Search above to add your first ingredient.</div>';
     updateRecipeSummary();
   }
 

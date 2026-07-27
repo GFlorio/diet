@@ -150,14 +150,12 @@
           <div class="field"><label for="foodCarb">Carbs (g)</label><input id="foodCarb" type="number" min="0" step="0.1" required/></div>
           <div class="field"><label for="foodFat">Fat (g)</label><input id="foodFat" type="number" min="0" step="0.1" required/></div>
         </div>
-        <div id="recipeEditor" class="grid hidden">
-          <div class="field">
-            <label for="recipeIngredientSearch">Ingredients</label>
-            <input id="recipeIngredientSearch" placeholder="Search your foods" autocomplete="off" />
-          </div>
+        <div id="recipeEditor" class="recipe-editor hidden">
+          <div class="recipe-section-label">Ingredients</div>
+          <input id="recipeIngredientSearch" placeholder="Search your foods to add" aria-label="Search foods to add as ingredients" autocomplete="off" />
           <div id="recipeIngredientResults" class="recipe-search-results"></div>
           <div id="recipeIngredients" class="recipe-ingredients"></div>
-          <div id="recipeSummary" class="recipe-summary" aria-live="polite"></div>
+          <div id="recipeSummary" class="recipe-summary hidden" aria-live="polite"></div>
         </div>
         <div class="row">
           <button class="btn primary" id="saveFoodBtn" type="submit" disabled>Save food</button>
