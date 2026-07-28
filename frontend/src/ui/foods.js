@@ -5,13 +5,7 @@ import {
   encodeFoodCode,
   encodeRecipeCode,
 } from '../food-share-code.js';
-import {
-  archiveIcon,
-  editIcon,
-  importCodeIcon,
-  removeIcon,
-  shareIcon,
-} from '../icons.js';
+import { archiveIcon, editIcon, importCodeIcon, shareIcon } from '../icons.js';
 import { normalizeMacros } from '../macro-resolution.js';
 import * as $ from '../utils.js';
 import * as v from '../validation.js';
@@ -74,6 +68,7 @@ export function setupFoods() {
   /** @type {SelectedIngredient[]} */
   let selectedIngredients = [];
   let portableDraft = false;
+  let ingredientSearchActive = false;
 
   const fieldToInput = new Map([
     ['name', foodName],
@@ -175,7 +170,7 @@ export function setupFoods() {
     recipeSummary.innerHTML = `
       <div class="recipe-summary-copy">
         <span class="recipe-summary-label">Recipe total</span>
-        <span class="recipe-summary-macros">P ${$.fmtNum(totals.prot)}g · C ${$.fmtNum(totals.carbs)}g · F ${$.fmtNum(totals.fats)}g</span>
+        <span class="recipe-summary-macros">Protein ${$.fmtNum(totals.prot)}g · Carbs ${$.fmtNum(totals.carbs)}g · Fat ${$.fmtNum(totals.fats)}g</span>
       </div>
       <strong class="recipe-summary-kcal">${$.fmtNum(totals.kcal, 0)} kcal</strong>`;
   }
@@ -199,8 +194,8 @@ export function setupFoods() {
               inputmode="decimal" value="${ingredient.multiplier}"
               aria-label="Quantity for ${$.esc(ingredient.food.name)}" />
           </label>
-          <button type="button" class="btn small ghost remove-ingredient"
-            aria-label="Remove ${$.esc(ingredient.food.name)}">${removeIcon}</button>
+          <button type="button" class="btn small ghost remove-ingredient" title="Remove"
+            aria-label="Remove ${$.esc(ingredient.food.name)}">🗑</button>
         </div>`;
     }).join('') || '<div class="recipe-ingredients-empty muted">Search above to add your first ingredient.</div>';
     updateRecipeSummary();
@@ -223,6 +218,20 @@ export function setupFoods() {
           <span>${$.fmtNum(food.kcal, 0)} kcal</span>
         </button>`)
       .join('');
+  }
+
+  // Scroll the running recipe total (or the search itself, when empty) to the
+  // top of the viewport, waiting for the on-screen keyboard on touch devices.
+  function scrollRecipeTotalsIntoView() {
+    const target = recipeSummary.classList.contains('hidden') ? recipeIngredientSearch : recipeSummary;
+    const touchDevice = window.matchMedia($.MEDIA_COARSE_POINTER).matches;
+    if (touchDevice && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, { once: true });
+    } else {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   function updateSaveState() {
@@ -257,6 +266,7 @@ export function setupFoods() {
     formType = type;
     selectedIngredients = [];
     portableDraft = false;
+    ingredientSearchActive = false;
     clearFieldErrors();
     updateTypeUi();
     renderSelectedIngredients();
@@ -425,6 +435,57 @@ export function setupFoods() {
   createRecipeBtn.addEventListener('click', () => startFoodForm('recipe'));
 
   recipeIngredientSearch.addEventListener('input', () => void renderIngredientResults());
+  recipeIngredientSearch.addEventListener('focus', () => {
+    const firstFocus = !ingredientSearchActive;
+    ingredientSearchActive = true;
+    void renderIngredientResults();
+    if (firstFocus) { scrollRecipeTotalsIntoView(); }
+  });
+
+  // On mobile, tapping a result doesn't shift focus to it, so the blur→collapse
+  // timer fires before recipeIngredientSearch.focus() is restored by the click
+  // handler. Track pointerdown on the results to suppress that spurious collapse.
+  let ingredientBlurSuppressed = false;
+  recipeIngredientResults.addEventListener('pointerdown', () => {
+    ingredientBlurSuppressed = true;
+    setTimeout(() => { ingredientBlurSuppressed = false; }, 400);
+  });
+
+  recipeIngredientSearch.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      if (ingredientBlurSuppressed
+        || document.activeElement === recipeIngredientSearch
+        || recipeIngredientResults.contains(document.activeElement)) { return; }
+      ingredientSearchActive = false;
+      recipeIngredientResults.innerHTML = '';
+    }, 120);
+  });
+
+  // Prevent focus from leaving recipeIngredientSearch when tapping a result.
+  // Without this, Chrome closes and reopens the keyboard on every tap.
+  //
+  // mousedown.preventDefault() handles Chrome/desktop. iOS Safari (and mobile
+  // Chrome) fire blur at touchstart time — before the synthetic mousedown —
+  // dismissing the keyboard and jumping the scroll. Preventing touchstart on the
+  // result buttons fixes this. Since touchstart.preventDefault() suppresses
+  // native click synthesis, touchend dispatches it manually.
+  /** @type {EventTarget|null} */
+  let ingredientTouchTarget = null;
+  recipeIngredientResults.addEventListener('touchstart', event => {
+    if (/** @type {HTMLElement} */ (event.target).closest('.recipe-search-result')) {
+      event.preventDefault();
+      ingredientTouchTarget = event.target;
+    }
+  }, { passive: false });
+  recipeIngredientResults.addEventListener('touchend', event => {
+    if (ingredientTouchTarget !== null && event.target === ingredientTouchTarget) {
+      /** @type {HTMLElement} */ (event.target).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      );
+    }
+    ingredientTouchTarget = null;
+  });
+  recipeIngredientResults.addEventListener('mousedown', event => event.preventDefault());
 
   recipeIngredientResults.addEventListener('click', async event => {
     const button = /** @type {HTMLElement} */ (event.target).closest('.recipe-search-result');
@@ -437,6 +498,7 @@ export function setupFoods() {
     renderSelectedIngredients();
     await renderIngredientResults();
     updateSaveState();
+    recipeIngredientSearch.focus();
   });
 
   recipeIngredients.addEventListener('input', event => {
