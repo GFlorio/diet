@@ -138,7 +138,7 @@ export function setupFoods() {
     if (editing) { title = isRecipe ? 'Edit recipe' : 'Edit food'; }
     foodFormTitle.textContent = title;
     foodFormDescription.textContent = isRecipe
-      ? 'Combine foods from your library. Nutrition is calculated automatically.'
+      ? ''
       : 'Enter nutrition for one reference portion.';
     foodNameLabel.textContent = isRecipe ? 'Recipe name' : 'Name';
     foodRefLabelText.textContent = isRecipe ? 'Recipe portion' : 'Reference portion';
@@ -203,6 +203,12 @@ export function setupFoods() {
 
   async function renderIngredientResults() {
     if (formType !== 'recipe') { return; }
+    const hasQuery = recipeIngredientSearch.value.trim().length > 0;
+    recipeIngredientResults.classList.toggle('hidden', !hasQuery);
+    if (!hasQuery) {
+      recipeIngredientResults.innerHTML = '';
+      return;
+    }
     const selectedIds = new Set(selectedIngredients.map(ingredient => ingredient.foodId));
     const foods = await Foods.list({
       search: recipeIngredientSearch.value,
